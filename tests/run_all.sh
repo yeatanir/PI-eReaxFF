@@ -10,5 +10,22 @@ mkdir -p build/test_summaries
 ./build/test_00_build | tee build/test_summaries/test_00_build.summary
 ./build/test_01_normal_modes | tee build/test_summaries/test_01_normal_modes.summary
 ./build/test_02_free_ring_polymer | tee build/test_summaries/test_02_free_ring_polymer.summary
+./build/test_04_thermostat_ou_statistics | tee build/test_summaries/test_04_thermostat_ou_statistics.summary
+./build/test_05_pile_mode_temperatures | tee build/test_summaries/test_05_pile_mode_temperatures.summary
+
+set +e
+./build/test_05_pile_g_stub > build/test_summaries/test_05_pile_g_stub.summary 2>&1
+stub_status=$?
+set -e
+if [[ "$stub_status" -eq 0 ]]; then
+  echo "test_05_pile_g_stub: FAIL - PILE-G stub unexpectedly succeeded"
+  exit 1
+fi
+if ! grep -q "PILE-G requested but not implemented" build/test_summaries/test_05_pile_g_stub.summary; then
+  echo "test_05_pile_g_stub: FAIL - expected PILE-G error message not found"
+  cat build/test_summaries/test_05_pile_g_stub.summary
+  exit 1
+fi
+echo "test_05_pile_g_stub: PASS"
 
 echo "All implemented tests passed."

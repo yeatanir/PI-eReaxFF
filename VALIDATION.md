@@ -39,6 +39,10 @@ test.
 - invalid names fail cleanly;
 - PILE-G fails with a clear message until implemented.
 
+Current status: implemented for `none`, Cartesian Langevin, PILE-L, registry
+name checks, heat accounting, and a PILE-G negative test.  PILE-G remains a
+stub by design.
+
 ## Phase 5: Harmonic Quantum Benchmarks
 
 For harmonic oscillator tests, compare against:

@@ -38,7 +38,15 @@ Generated: 2026-04-30
 - [x] Add normal-mode regression test.
 - [x] Add free ring-polymer energy conservation regression test.
 - [ ] Add system state and particle-group modules.
-- [ ] Add thermostat interface and PILE-L.
+- [x] Add thermostat base helpers.
+- [x] Add `none` thermostat.
+- [x] Add Cartesian Langevin thermostat with heat accounting.
+- [x] Add PILE-L thermostat with mode-dependent damping.
+- [x] Add PILE-G stub that fails clearly.
+- [x] Add thermostat registry name checks.
+- [x] Add Langevin OU variance/heat regression test.
+- [x] Add PILE-L mode-temperature/heat regression test.
+- [x] Add PILE-G negative regression test.
 - [ ] Add force provider interface.
 - [ ] Add eReaxFF oracle adapter.
 
@@ -57,8 +65,15 @@ Last local run:
 test_00_build: PASS
 test_01_normal_modes: PASS
 test_02_free_ring_polymer: PASS
+test_04_thermostat_ou_statistics: PASS
+test_05_pile_mode_temperatures: PASS
+test_05_pile_g_stub: PASS
 All implemented tests passed.
 ```
 
 The free ring-polymer regression ran 20,000 exact propagation steps and reported
 absolute free-energy drift of about `8.9e-13 eV`.
+
+The Langevin OU test sampled velocity variance within about `0.7%` of the
+Maxwell target.  The PILE-L internal mode test reported maximum internal mode
+temperature relative error of about `2.3%`.

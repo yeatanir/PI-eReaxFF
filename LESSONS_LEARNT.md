@@ -64,3 +64,38 @@ Resolution:
 - Kept the explicit CODATA AMU value in the unit module and updated the test
   reference to match that exact constant set.  This keeps the test strict while
   avoiding a false failure from mixed reference constants.
+
+## 2026-04-30: Thermostat Layer
+
+Problem:
+
+- Thermostats need to be first-class modules, but adding a full polymorphic
+  hierarchy before an integrator exists would create unnecessary surface area.
+- PILE-L and PILE-G must not be conflated.  PILE-G requires global stochastic
+  velocity rescaling on the centroid, which is not implemented yet.
+- The first `none` thermostat implementation produced compiler warnings because
+  no-op velocity arguments were not referenced.
+
+Resolution:
+
+- Implemented concrete thermostat modules with a minimal shared convention:
+  `init`, `step`, and accumulated `heat_eV`.
+- Added `thermostat_base.f90` for kinetic-energy and Maxwell velocity-scale
+  helpers so heat accounting and OU variance use one unit convention.
+- Implemented Cartesian Langevin with exact OU velocity updates.
+- Implemented PILE-L with centroid friction from input and internal mode
+  friction `gamma_k = 2*lambda*omega_k`.
+- Added a PILE-G stub that stops with:
+  `PILE-G requested but not implemented; use PILE-L or implement global centroid SVR.`
+- Added a negative test that confirms PILE-G fails with that message.
+- Removed no-op warnings by explicitly referencing the velocity arrays in the
+  `none` thermostat without changing values or heat.
+
+Validation:
+
+- `test_04_thermostat_ou_statistics` checks Langevin velocity variance against
+  `kBT/m`, verifies nonzero heat exchange, verifies the `none` thermostat, and
+  checks registry behavior.
+- `test_05_pile_mode_temperatures` checks PILE-L internal mode temperatures and
+  heat accounting.
+- `test_05_pile_g_stub` confirms PILE-G does not silently run as PILE-L.
