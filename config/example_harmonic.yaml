@@ -1,0 +1,35 @@
+simulation:
+  dt_fs: 0.1
+  steps: 1000
+  seed: 12345
+  integrator: baoab
+  output_stride: 10
+  restart_stride: 100
+
+force_provider:
+  type: harmonic
+  k_eV_per_A2: 1.0
+
+ring_polymer:
+  convention: standard_ipi
+  default_beads: 16
+  propagator: exact
+
+charge_coupling:
+  mode: no_charge_coupling
+
+groups:
+  - name: oscillator
+    selector: "all"
+    dynamics: pimd
+    beads: 16
+    thermostat: pile_l
+    temperature_K: 300.0
+    centroid_gamma_fs_inv: 0.001
+
+output:
+  centroid_xyz: true
+  beads_xyz: true
+  reaxff_compat: false
+  diagnostics: true
+

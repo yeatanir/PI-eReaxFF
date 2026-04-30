@@ -1,0 +1,31 @@
+# Build outputs
+build/
+*.o
+*.mod
+*.smod
+*.a
+*.so
+*.dylib
+*.exe
+
+# Test/runtime outputs
+*.out
+*.log
+fort.*
+xmolout
+molfra.out
+beads.xyz
+centroid.xyz
+restart*
+
+# Python helper artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# macOS/editor files
+.DS_Store
+*~
+
