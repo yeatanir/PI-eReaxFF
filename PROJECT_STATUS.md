@@ -27,10 +27,17 @@ Generated: 2026-04-30
 - [x] Add docs/LEGACY_AUDIT.md.
 - [x] Implement `core/kinds.f90`.
 - [x] Implement `core/constants.f90`.
+- [x] Implement `core/units.f90`.
+- [x] Implement `core/errors.f90`.
+- [x] Implement `core/rng.f90`.
 - [x] Implement `pimd/normal_modes.f90`.
+- [x] Implement `pimd/ring_polymer.f90`.
+- [x] Implement `pimd/spring_energy.f90`.
+- [x] Implement `pimd/free_ring_propagator.f90`.
+- [x] Add constants/unit/RNG regression test.
 - [x] Add normal-mode regression test.
-- [ ] Add full core units/errors/RNG/state modules.
-- [ ] Add free ring-polymer propagator.
+- [x] Add free ring-polymer energy conservation regression test.
+- [ ] Add system state and particle-group modules.
 - [ ] Add thermostat interface and PILE-L.
 - [ ] Add force provider interface.
 - [ ] Add eReaxFF oracle adapter.
@@ -42,3 +49,16 @@ cd /Users/yeatanir/PhD/eReaxFF\ PIMD/ereaxff_pimd_modular
 make test
 ```
 
+## Current Test Summary
+
+Last local run:
+
+```text
+test_00_build: PASS
+test_01_normal_modes: PASS
+test_02_free_ring_polymer: PASS
+All implemented tests passed.
+```
+
+The free ring-polymer regression ran 20,000 exact propagation steps and reported
+absolute free-energy drift of about `8.9e-13 eV`.

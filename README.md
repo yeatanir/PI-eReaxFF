@@ -105,10 +105,9 @@ tests/run_all.sh
 Expected current summary:
 
 ```text
+test_00_build: PASS
 test_01_normal_modes: PASS
-  max_orthogonality_error =   8.8818E-16
-  max_roundtrip_error     =   2.6978E-14
-  omega_P_fs_inv          =   6.2842E-01
+test_02_free_ring_polymer: PASS
 All implemented tests passed.
 ```
 
@@ -124,17 +123,16 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Complete core utilities: units, errors, RNG, system state, particle groups.
-2. Add ring-polymer state, spring energy, and exact free-ring propagation.
-3. Add thermostat interface, Langevin, PILE-L, and a clear PILE-G stub.
-4. Add harmonic/dummy force providers and bead force manager.
-5. Validate harmonic quantum variance versus analytic reference.
-6. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
-7. Add mixed classical/PIMD group selection and charge-coupling policies.
-8. Add PIMD-native outputs, restart, and ReaxFF compatibility projections.
+1. Complete system-state and particle-group modules.
+2. Add thermostat interface, Langevin, PILE-L, and a clear PILE-G stub.
+3. Add harmonic/dummy force providers and bead force manager.
+4. Validate harmonic quantum variance versus analytic reference.
+5. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
+6. Add mixed classical/PIMD group selection and charge-coupling policies.
+7. Add PIMD-native outputs, restart, and ReaxFF compatibility projections.
 
 ## Status
 
-This repository is pre-production research software.  The normal-mode
-foundation is tested; production eReaxFF coupling is intentionally still behind
-the validation gates described above.
+This repository is pre-production research software.  The normal-mode and exact
+free-ring propagation foundation is tested; production eReaxFF coupling is
+intentionally still behind the validation gates described above.

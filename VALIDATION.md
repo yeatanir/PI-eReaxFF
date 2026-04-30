@@ -8,6 +8,9 @@ Validation proceeds from algorithmic invariants to coupled eReaxFF behavior.
 - verify selected unit conversions;
 - keep constants in one module.
 
+Current status: implemented for core constants, unit conversion, and
+deterministic RNG smoke testing.
+
 ## Phase 2: Normal Modes And Ring Polymer
 
 Required gates:
@@ -24,6 +27,9 @@ Required gates:
 - exact free ring-polymer propagation conserves free ring-polymer energy in
   NVE;
 - centroid drifts freely and internal modes rotate exactly.
+
+Current status: implemented with a 20,000-step exact propagation conservation
+test.
 
 ## Phase 4: Thermostats
 
@@ -74,4 +80,3 @@ variance, total variance, analytic quantum variance, and percent error.
 - restart can continue a run;
 - diagnostics include spring energy, thermostat heat, mode temperatures, bead
   spread, charge by bead, charge centroid, and localization metrics.
-
