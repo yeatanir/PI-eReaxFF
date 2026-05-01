@@ -161,3 +161,39 @@ Validation:
   mobile classical carbons, one 16-bead PIMD electron, and frozen background
   electrons using selector strings.
 - The test also checks invalid selector rejection and `id in [...]` behavior.
+
+## 2026-04-30: Harmonic Quantum Variance And BAOAB Path
+
+Problem:
+
+- The harmonic quantum variance test is the first assembled PIMD dynamics gate,
+  so it must catch convention errors, not merely run.
+- Reinitializing one `ring_polymer_state` for several bead counts failed because
+  `init_ring_polymer` did not deallocate already allocated arrays.
+- The first finite-P variance formula mixed bead-averaged force scaling with the
+  wrong canonical temperature/spring convention, which made the convergence
+  trend fail.
+
+Resolution:
+
+- Fixed `init_ring_polymer` so it can be safely reused for scans over bead
+  count.
+- Added `harmonic_quantum_variance.f90` for analytic quantum and finite-P
+  oscillator variance checks.
+- Added a minimal harmonic BAOAB step that uses the existing normal-mode free
+  propagator and PILE-L thermostat module.
+- For the harmonic validation path, used the standard finite-P canonical
+  representation: standard `omega_P`, physical harmonic force scale of `1`, and
+  effective bead temperature `P*T`.
+- Documented that force scaling, spring convention, and thermostat effective
+  temperature are coupled and must not be mixed silently in future production
+  drivers.
+
+Validation:
+
+- `test_03_harmonic_quantum_variance` checks finite-P convergence for
+  `P = 1, 2, 4, 8, 16, 32`.
+- The same test verifies that the legacy `sqrt(P)` prefactor is farther from
+  the analytic quantum variance than the standard convention at `P=16`.
+- A stochastic `P=16` BAOAB+PILE-L harmonic run sampled the finite-P variance
+  within about `2.1%`.

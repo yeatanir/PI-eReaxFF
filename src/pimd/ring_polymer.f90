@@ -36,6 +36,8 @@ contains
     rp%temperature_K = temperature_K
     rp%convention = selected
 
+    if (allocated(rp%cmat)) deallocate(rp%cmat)
+    if (allocated(rp%omega_k)) deallocate(rp%omega_k)
     allocate(rp%cmat(beads, beads))
     allocate(rp%omega_k(beads))
     call build_cmat(beads, rp%cmat)
@@ -43,4 +45,3 @@ contains
   end subroutine init_ring_polymer
 
 end module ereaxff_ring_polymer
-

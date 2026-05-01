@@ -108,6 +108,7 @@ Expected current summary:
 test_00_build: PASS
 test_01_normal_modes: PASS
 test_02_free_ring_polymer: PASS
+test_03_harmonic_quantum_variance: PASS
 test_04_thermostat_ou_statistics: PASS
 test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
@@ -129,8 +130,8 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Validate harmonic quantum variance versus analytic reference.
-2. Add a thin harmonic PIMD driver/integrator path using the validated modules.
+1. Add a thin harmonic PIMD driver executable using the validated modules.
+2. Add output/restart scaffolding for harmonic runs.
 3. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
 4. Add PIMD-native outputs, restart, and ReaxFF compatibility projections.
 

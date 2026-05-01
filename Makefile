@@ -5,12 +5,14 @@ BUILD_DIR := build
 MOD_DIR := $(BUILD_DIR)/mod
 
 CORE_SRCS := src/core/kinds.f90 src/core/constants.f90 src/core/units.f90 src/core/errors.f90 src/core/rng.f90 src/core/system_state.f90 src/core/selectors.f90 src/core/particle_groups.f90
-PIMD_SRCS := src/pimd/normal_modes.f90 src/pimd/ring_polymer.f90 src/pimd/spring_energy.f90 src/pimd/free_ring_propagator.f90
+PIMD_SRCS := src/pimd/normal_modes.f90 src/pimd/ring_polymer.f90 src/pimd/spring_energy.f90 src/pimd/free_ring_propagator.f90 src/pimd/harmonic_quantum_variance.f90
 THERMOSTAT_SRCS := src/thermostat/thermostat_base.f90 src/thermostat/thermostat_none.f90 src/thermostat/thermostat_langevin.f90 src/thermostat/thermostat_pile_l.f90 src/thermostat/thermostat_pile_g.f90 src/thermostat/thermostat_registry.f90
 FORCE_SRCS := src/force/force_provider_base.f90 src/force/dummy_force_provider.f90 src/force/harmonic_force_provider.f90 src/force/charge_coupling_policy.f90 src/force/bead_force_manager.f90 src/force/ereaxff_oracle_adapter.f90
+INTEGRATOR_SRCS := src/integrator/baoab_integrator.f90
 TEST00_SRCS := tests/test_00_build/test_constants_units.f90
 TEST01_SRCS := tests/test_01_normal_modes/test_normal_modes.f90
 TEST02_SRCS := tests/test_02_free_ring_polymer/test_free_ring_polymer.f90
+TEST03_SRCS := tests/test_03_harmonic_quantum_variance/test_harmonic_quantum_variance.f90
 TEST04_SRCS := tests/test_04_thermostat_ou_statistics/test_thermostat_ou_statistics.f90
 TEST05_SRCS := tests/test_05_pile_mode_temperatures/test_pile_mode_temperatures.f90
 TEST05_STUB_SRCS := tests/test_05_pile_mode_temperatures/test_pile_g_stub.f90
@@ -18,7 +20,7 @@ TEST06_SRCS := tests/test_06_force_scaling/test_force_scaling.f90
 TEST07_SRCS := tests/test_07_charge_memory/test_charge_memory.f90
 TEST09_SRCS := tests/test_09_mixed_classical_pimd_config/test_mixed_classical_pimd_config.f90
 
-.PHONY: all test build_tests test_00_build test_01_normal_modes test_02_free_ring_polymer test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config clean
+.PHONY: all test build_tests test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config clean
 
 all: build_tests
 
@@ -33,6 +35,9 @@ test_01_normal_modes: $(BUILD_DIR) $(MOD_DIR)
 
 test_02_free_ring_polymer: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(PIMD_SRCS) $(TEST02_SRCS) -o $(BUILD_DIR)/test_02_free_ring_polymer
+
+test_03_harmonic_quantum_variance: $(BUILD_DIR) $(MOD_DIR)
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(PIMD_SRCS) $(THERMOSTAT_SRCS) $(INTEGRATOR_SRCS) $(TEST03_SRCS) -o $(BUILD_DIR)/test_03_harmonic_quantum_variance
 
 test_04_thermostat_ou_statistics: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(THERMOSTAT_SRCS) $(TEST04_SRCS) -o $(BUILD_DIR)/test_04_thermostat_ou_statistics
@@ -52,7 +57,7 @@ test_07_charge_memory: $(BUILD_DIR) $(MOD_DIR)
 test_09_mixed_classical_pimd_config: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST09_SRCS) -o $(BUILD_DIR)/test_09_mixed_classical_pimd_config
 
-build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config
+build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config
 
 test:
 	./tests/run_all.sh

@@ -59,6 +59,10 @@ Generated: 2026-04-30
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
 - [x] Add mixed classical/PIMD/frozen group regression test.
+- [x] Add harmonic finite-P quantum variance utility.
+- [x] Add minimal harmonic BAOAB PIMD step.
+- [x] Add harmonic quantum variance regression for `P = 1, 2, 4, 8, 16, 32`.
+- [x] Add stochastic BAOAB+PILE-L harmonic variance smoke test.
 - [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
@@ -76,6 +80,7 @@ Last local run:
 test_00_build: PASS
 test_01_normal_modes: PASS
 test_02_free_ring_polymer: PASS
+test_03_harmonic_quantum_variance: PASS
 test_04_thermostat_ou_statistics: PASS
 test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
@@ -100,3 +105,8 @@ storage.
 The mixed group test verifies config-style selection of classical carbons, one
 PIMD electron with 16 beads, and frozen background electrons without source-code
 special cases.
+
+The harmonic quantum variance test verifies finite-P convergence toward the
+analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`
+prefactor is much worse at `P=16`, and samples a `P=16` BAOAB+PILE-L trajectory
+within about `2.1%` of the finite-P reference.

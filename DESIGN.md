@@ -45,6 +45,13 @@ The legacy `sqrt(P)` prefactor is not supported as a production convention.  If
 a future nonstandard Hamiltonian is added, it must have an explicit name,
 derivation, unit tests, and diagnostics.
 
+For assembled harmonic PIMD validation, the canonical finite-P representation is
+sampled with the standard ring-polymer frequencies and effective bead
+temperature `P*T`, matching the usual discretized partition-function form.  Any
+future production driver that uses bead-averaged force scaling must document the
+corresponding thermostat temperature and spring Hamiltonian convention, because
+these choices are coupled.
+
 ## Normal-Mode Transform
 
 The initial transform is the real orthonormal closed-ring DFT matrix:
@@ -80,4 +87,3 @@ The default production-like full PIMD path will be `bead_local_acks2`.
 PIMD-native outputs will be separate from ReaxFF compatibility outputs.
 Compatibility files such as `fort.7`, `fort.8`, `molfra.out`, and `xmolout`
 are centroid-projected classical views unless explicitly configured otherwise.
-

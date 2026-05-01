@@ -10,6 +10,7 @@ mkdir -p build/test_summaries
 ./build/test_00_build | tee build/test_summaries/test_00_build.summary
 ./build/test_01_normal_modes | tee build/test_summaries/test_01_normal_modes.summary
 ./build/test_02_free_ring_polymer | tee build/test_summaries/test_02_free_ring_polymer.summary
+./build/test_03_harmonic_quantum_variance | tee build/test_summaries/test_03_harmonic_quantum_variance.summary
 ./build/test_04_thermostat_ou_statistics | tee build/test_summaries/test_04_thermostat_ou_statistics.summary
 ./build/test_05_pile_mode_temperatures | tee build/test_summaries/test_05_pile_mode_temperatures.summary
 

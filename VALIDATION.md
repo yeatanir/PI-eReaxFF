@@ -54,6 +54,11 @@ For harmonic oscillator tests, compare against:
 Run `P = 1, 2, 4, 8, 16, 32` and report sampled centroid variance, bead
 variance, total variance, analytic quantum variance, and percent error.
 
+Current status: implemented finite-P bead variance convergence checks for
+`P = 1, 2, 4, 8, 16, 32` and a stochastic `P=16` BAOAB+PILE-L harmonic
+variance check.  The test also verifies that the legacy `sqrt(P)` prefactor is
+farther from the analytic quantum variance than the standard convention.
+
 ## Phase 6: Force And Charge Coupling
 
 - harmonic and dummy providers return known forces;
