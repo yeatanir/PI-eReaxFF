@@ -63,6 +63,9 @@ Generated: 2026-04-30
 - [x] Add minimal harmonic BAOAB PIMD step.
 - [x] Add harmonic quantum variance regression for `P = 1, 2, 4, 8, 16, 32`.
 - [x] Add stochastic BAOAB+PILE-L harmonic variance smoke test.
+- [x] Add PIMD-native output helpers.
+- [x] Add thin `harmonic_pimd_main` driver.
+- [x] Add harmonic driver output smoke test.
 - [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
@@ -87,6 +90,7 @@ test_05_pile_g_stub: PASS
 test_06_force_scaling: PASS
 test_07_charge_memory: PASS
 test_09_mixed_classical_pimd_config: PASS
+test_10_harmonic_driver_outputs: PASS
 All implemented tests passed.
 ```
 
@@ -110,3 +114,7 @@ The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`
 prefactor is much worse at `P=16`, and samples a `P=16` BAOAB+PILE-L trajectory
 within about `2.1%` of the finite-P reference.
+
+The harmonic driver smoke test builds `harmonic_pimd_main`, runs it in a path
+containing spaces, and verifies PIMD-native outputs:
+`pimd_energy.out`, `bead_spread.out`, `thermostat_heat.out`, and `centroid.xyz`.

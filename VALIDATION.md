@@ -99,3 +99,7 @@ electrons.
 - restart can continue a run;
 - diagnostics include spring energy, thermostat heat, mode temperatures, bead
   spread, charge by bead, charge centroid, and localization metrics.
+
+Current status: implemented first PIMD-native harmonic outputs for
+`pimd_energy.out`, `bead_spread.out`, `thermostat_heat.out`, and `centroid.xyz`.
+Restart and ReaxFF compatibility outputs remain future work.

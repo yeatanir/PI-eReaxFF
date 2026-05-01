@@ -197,3 +197,32 @@ Validation:
   the analytic quantum variance than the standard convention at `P=16`.
 - A stochastic `P=16` BAOAB+PILE-L harmonic run sampled the finite-P variance
   within about `2.1%`.
+
+## 2026-04-30: Harmonic Driver And PIMD-Native Outputs
+
+Problem:
+
+- The project needed its first executable assembly path, but it should not jump
+  to eReaxFF before harmonic validation is exercised end-to-end.
+- The first driver build failed because a long Fortran string exceeded the
+  compiler line-length limit.
+- The first driver smoke run exposed an output-path bug: `mkdir -p` was called
+  without quoting, and this repository path contains a space.
+
+Resolution:
+
+- Added `harmonic_pimd_main.f90` as a thin executable that uses the existing
+  ring-polymer, BAOAB, PILE-L, and output modules.
+- Added PIMD-native outputs: `pimd_energy.out`, `bead_spread.out`,
+  `thermostat_heat.out`, and `centroid.xyz`.
+- Split the long header string and quoted the output directory in the
+  `execute_command_line` call.
+- Added a shell smoke test that runs the driver in a path with spaces and
+  verifies expected output files and frame counts.
+
+Validation:
+
+- `test_10_harmonic_driver_outputs` builds and runs `harmonic_pimd_main`,
+  verifies output files are nonempty, checks the standard ring-polymer
+  convention diagnostic, checks 21 energy frames, and verifies thermostat heat
+  changes.

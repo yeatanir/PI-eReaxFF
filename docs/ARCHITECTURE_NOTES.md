@@ -35,3 +35,17 @@ Implemented core pieces:
 Group assignment rejects unsupported selectors, invalid dynamics modes, invalid
 bead counts, particles that match multiple groups, and particles that match no
 group.
+
+## Current Driver/Output Layer
+
+Implemented pieces:
+
+- `harmonic_pimd_main.f90`: thin harmonic PIMD executable using the validated
+  normal-mode, BAOAB, and PILE-L modules.
+- `pimd_output.f90`: centroid XYZ and bead-spread helpers.
+- `diagnostics.f90`: conserved-like NVT diagnostic helper.
+- `output_manager.f90`: path joining.
+- `reaxff_compat_output.f90`: explicit not-implemented stub.
+
+The harmonic driver is intentionally not a production eReaxFF driver.  It is the
+first executable assembly test for the internal architecture.
