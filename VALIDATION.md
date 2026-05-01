@@ -102,4 +102,6 @@ electrons.
 
 Current status: implemented first PIMD-native harmonic outputs for
 `pimd_energy.out`, `bead_spread.out`, `thermostat_heat.out`, and `centroid.xyz`.
-Restart and ReaxFF compatibility outputs remain future work.
+The harmonic driver writes and reads restart state, including RNG state, and the
+test suite verifies continuous-vs-split restart equivalence.  ReaxFF
+compatibility outputs remain future work.

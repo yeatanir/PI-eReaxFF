@@ -46,6 +46,7 @@ Implemented pieces:
 - `diagnostics.f90`: conserved-like NVT diagnostic helper.
 - `output_manager.f90`: path joining.
 - `reaxff_compat_output.f90`: explicit not-implemented stub.
+- `restart.f90`: harmonic normal-mode restart read/write scaffold.
 
 The harmonic driver is intentionally not a production eReaxFF driver.  It is the
 first executable assembly test for the internal architecture.

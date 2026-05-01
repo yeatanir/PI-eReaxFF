@@ -226,3 +226,26 @@ Validation:
   verifies output files are nonempty, checks the standard ring-polymer
   convention diagnostic, checks 21 energy frames, and verifies thermostat heat
   changes.
+
+## 2026-04-30: Harmonic Restart
+
+Problem:
+
+- Restart must reproduce a stochastic trajectory when a run is split, so
+  positions and velocities alone are insufficient.
+- Langevin/PILE restart also needs thermostat heat and RNG state to continue
+  diagnostics and random streams consistently.
+
+Resolution:
+
+- Added `restart.f90` with a small harmonic normal-mode restart format.
+- Extended `harmonic_pimd_main` with positional arguments for total steps,
+  restart input, and restart output.
+- Stored normal-mode positions, normal-mode velocities, thermostat heat, bead
+  count, step, and RNG state.
+
+Validation:
+
+- The harmonic driver smoke test now compares a continuous 2000-step run against
+  a split 1000+1000-step run.  The final restart files match for step, bead
+  count, RNG state, thermostat heat, `q_nm`, and `v_nm`.

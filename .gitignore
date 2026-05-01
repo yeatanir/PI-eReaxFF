@@ -16,7 +16,8 @@ xmolout
 molfra.out
 beads.xyz
 centroid.xyz
-restart*
+restart.dat
+restart_*
 
 # Python helper artifacts
 __pycache__/
@@ -28,4 +29,3 @@ venv/
 # macOS/editor files
 .DS_Store
 *~
-

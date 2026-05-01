@@ -1,5 +1,6 @@
 program harmonic_pimd_main
   use ereaxff_kinds, only: dp, i8
+  use ereaxff_restart, only: harmonic_restart_state, write_harmonic_restart, read_harmonic_restart
   use ereaxff_rng, only: rng_state, rng_seed
   use ereaxff_ring_polymer, only: ring_polymer_state, init_ring_polymer
   use ereaxff_normal_modes, only: nm_to_bead
@@ -14,7 +15,7 @@ program harmonic_pimd_main
   implicit none
 
   integer, parameter :: p = 16
-  integer, parameter :: steps = 2000
+  integer, parameter :: default_steps = 2000
   integer, parameter :: output_stride = 100
   real(dp), parameter :: temperature_K = 300.0_dp
   real(dp), parameter :: mass_amu = 1.0_dp
@@ -26,15 +27,24 @@ program harmonic_pimd_main
   type(ring_polymer_state) :: rp
   type(pile_l_thermostat_state) :: thermostat
   type(rng_state) :: rng
+  type(harmonic_restart_state) :: restart
   real(dp) :: q_nm(p), v_nm(p), q_bead(p), q2d(1, p), v2d(1, p), masses(1)
   real(dp) :: centroid_A, spread_A, kinetic_eV, spring_eV, physical_potential_eV
   real(dp) :: conserved_like, finite_p_variance
-  character(len=512) :: output_dir
+  character(len=512) :: output_dir, restart_in, restart_out, steps_arg
   character(len=1100) :: mkdir_command
-  integer :: step, energy_unit, spread_unit, heat_unit, xyz_unit
+  integer :: step, start_step, steps, energy_unit, spread_unit, heat_unit, xyz_unit, ios
 
   call get_command_argument(1, output_dir)
   if (len_trim(output_dir) == 0) output_dir = "harmonic_pimd_output"
+  call get_command_argument(2, steps_arg)
+  steps = default_steps
+  if (len_trim(steps_arg) > 0) then
+    read(steps_arg, *, iostat=ios) steps
+    if (ios /= 0 .or. steps < 0) error stop "harmonic_pimd_main: invalid steps argument"
+  end if
+  call get_command_argument(3, restart_in)
+  call get_command_argument(4, restart_out)
 
   mkdir_command = 'mkdir -p "' // trim(output_dir) // '"'
   call execute_command_line(trim(mkdir_command))
@@ -55,8 +65,19 @@ program harmonic_pimd_main
 
   q_nm = 0.0_dp
   v_nm = 0.0_dp
+  start_step = 0
   masses = [mass_amu]
   finite_p_variance = harmonic_finite_p_bead_variance_A2(k_eV_per_A2, mass_amu, temperature_K, rp%omega_k)
+
+  if (len_trim(restart_in) > 0 .and. trim(restart_in) /= "none") then
+    call read_harmonic_restart(trim(restart_in), restart)
+    if (restart%beads /= p) error stop "harmonic_pimd_main: restart bead count mismatch"
+    q_nm = restart%q_nm
+    v_nm = restart%v_nm
+    thermostat%heat_eV = restart%thermostat_heat_eV
+    rng%state = restart%rng_state_i8
+    start_step = restart%step
+  end if
 
   open(newunit=energy_unit, file=join_path(output_dir, "pimd_energy.out"), status="replace", action="write")
   open(newunit=spread_unit, file=join_path(output_dir, "bead_spread.out"), status="replace", action="write")
@@ -68,7 +89,7 @@ program harmonic_pimd_main
   write(spread_unit,'(a)') "# step centroid_A bead_rms_spread_A"
   write(heat_unit,'(a)') "# step thermostat_heat_eV"
 
-  do step = 0, steps
+  do step = start_step, steps
     if (mod(step, output_stride) == 0) then
       call nm_to_bead(rp%cmat, q_nm, q_bead)
       centroid_A = compute_centroid_1d(q_bead)
@@ -97,4 +118,9 @@ program harmonic_pimd_main
   close(spread_unit)
   close(heat_unit)
   close(xyz_unit)
+
+  if (len_trim(restart_out) == 0) restart_out = join_path(output_dir, "restart.dat")
+  if (trim(restart_out) /= "none") then
+    call write_harmonic_restart(trim(restart_out), steps, q_nm, v_nm, thermostat%heat_eV, rng%state)
+  end if
 end program harmonic_pimd_main

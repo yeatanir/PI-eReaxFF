@@ -66,6 +66,8 @@ Generated: 2026-04-30
 - [x] Add PIMD-native output helpers.
 - [x] Add thin `harmonic_pimd_main` driver.
 - [x] Add harmonic driver output smoke test.
+- [x] Add harmonic restart read/write scaffold.
+- [x] Add split-run restart equivalence regression including RNG state.
 - [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
@@ -118,3 +120,4 @@ within about `2.1%` of the finite-P reference.
 The harmonic driver smoke test builds `harmonic_pimd_main`, runs it in a path
 containing spaces, and verifies PIMD-native outputs:
 `pimd_energy.out`, `bead_spread.out`, `thermostat_heat.out`, and `centroid.xyz`.
+It also verifies continuous-vs-split restart equivalence.

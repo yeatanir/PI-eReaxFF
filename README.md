@@ -131,14 +131,13 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Add restart scaffolding for harmonic runs.
-2. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
-3. Add ReaxFF compatibility projections.
+1. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
+2. Add ReaxFF compatibility projections.
 
 ## Status
 
 This repository is pre-production research software.  The normal-mode,
 free-ring propagation, thermostat, dummy/harmonic force, and mixed group
 assignment foundations are tested.  A thin harmonic PIMD driver now writes
-PIMD-native diagnostic outputs.  Production eReaxFF coupling is intentionally
-still behind the validation gates described above.
+PIMD-native diagnostic outputs and supports restart.  Production eReaxFF
+coupling is intentionally still behind the validation gates described above.
