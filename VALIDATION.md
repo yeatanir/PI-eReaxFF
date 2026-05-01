@@ -82,6 +82,11 @@ yet.
 - harmonic-only PIMD;
 - selection changes require only config edits.
 
+Current status: implemented the system-state, selector, and particle-group
+assignment layer needed for mixed classical/PIMD/frozen selection.  The current
+test covers mobile classical carbons, one PIMD electron, and frozen background
+electrons.
+
 ## Phase 9: Outputs And Restart
 
 - PIMD-native files are written at the configured stride;

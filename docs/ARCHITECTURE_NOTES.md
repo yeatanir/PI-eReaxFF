@@ -23,3 +23,15 @@ Implemented force-layer pieces:
 
 The force manager is where PIMD force scaling lives.  Drivers should not
 duplicate `1/P` scaling.
+
+## Current System/Group Layer
+
+Implemented core pieces:
+
+- `system_state.f90`: particle ids, elements, masses, positions, and velocities.
+- `selectors.f90`: first config-style selector subset.
+- `particle_groups.f90`: group specs and per-particle assignment.
+
+Group assignment rejects unsupported selectors, invalid dynamics modes, invalid
+bead counts, particles that match multiple groups, and particles that match no
+group.

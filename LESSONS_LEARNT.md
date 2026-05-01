@@ -132,3 +132,32 @@ Validation:
 - `test_07_charge_memory` checks policy validation, bead-local memory detection,
   per-bead charge sums, max charge difference across beads, and independence of
   bead-local charge storage.
+
+## 2026-04-30: System State And Particle Groups
+
+Problem:
+
+- The engine needs to support mixed classical/PIMD/frozen atoms and electrons
+  through input-like group definitions, not source edits.
+- A full YAML parser and expression language would be premature before the
+  integrator exists.
+- The first selector implementation used `.and.` with impure helper calls,
+  which triggered a compiler warning because Fortran may short-circuit
+  evaluation.
+
+Resolution:
+
+- Added `system_state.f90` for ids, elements, masses, positions, and velocities.
+- Added a deliberately small selector subset: `all`, `element == X`, `id == N`,
+  `id != N`, `id in [...]`, and one `and`.
+- Added `particle_groups.f90` to validate group specs and assign per-particle
+  dynamics, bead count, mobility, thermostat, and temperature.
+- Rewrote compound selector evaluation with explicit temporaries so compiler
+  output stays warning-free.
+
+Validation:
+
+- `test_09_mixed_classical_pimd_config` builds a C/El toy system and assigns
+  mobile classical carbons, one 16-bead PIMD electron, and frozen background
+  electrons using selector strings.
+- The test also checks invalid selector rejection and `id in [...]` behavior.

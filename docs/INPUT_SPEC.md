@@ -13,3 +13,19 @@ schema should retain these sections:
   bead count;
 - `output`: PIMD-native and compatibility output choices.
 
+## Current Selector Subset
+
+The current Fortran selector scaffold supports:
+
+- `all`
+- `element == C`
+- `element == El`
+- `id == 61`
+- `id != 61`
+- `id in [61,64]`
+- one `and` combining two supported clauses, for example
+  `element == El and id == 61`
+
+This is intentionally small but already covers the first target scenarios:
+classical carbons, one selected PIMD electron, and frozen background electrons.
+Unsupported selector syntax fails during group validation.

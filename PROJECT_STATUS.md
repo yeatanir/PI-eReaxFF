@@ -55,6 +55,10 @@ Generated: 2026-04-30
 - [x] Add force provider/scaling regression test.
 - [x] Add charge policy/memory regression test.
 - [x] Add eReaxFF oracle adapter failure stub.
+- [x] Add system state module.
+- [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
+- [x] Add particle group assignment module.
+- [x] Add mixed classical/PIMD/frozen group regression test.
 - [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
@@ -77,6 +81,7 @@ test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
 test_06_force_scaling: PASS
 test_07_charge_memory: PASS
+test_09_mixed_classical_pimd_config: PASS
 All implemented tests passed.
 ```
 
@@ -91,3 +96,7 @@ The force-scaling test verifies harmonic `F = -kx`, dummy zero forces,
 bead-averaged PIMD potential, and centralized `1/P` physical force scaling.  The
 charge-memory test verifies valid policy names and independent bead-local charge
 storage.
+
+The mixed group test verifies config-style selection of classical carbons, one
+PIMD electron with 16 beads, and frozen background electrons without source-code
+special cases.
