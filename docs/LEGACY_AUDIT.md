@@ -71,3 +71,16 @@ This matches the i-PI closed-ring convention described in
 6. Recreate legacy phase4/phase5/phase6 scenarios as configuration files and
    regression tests, not as new hard-coded drivers.
 
+## Current Oracle Smoke Gate
+
+The new test `tests/test_08_reaxff_oracle_smoke/run_v2_oracle_smoke.sh` uses
+the existing V2 `phase4_single_point_oracle` and `single_point_repeatability`
+executables as external validation tools.  It does not build or edit V1/V2.
+All copied fixtures, generated geometry, logs, and summaries are written under
+the new repo's `build/` directory.
+
+This is intentionally a validation gate before integration, not the final
+adapter.  The next implementation step is to link the V2
+`ereaxff_force_oracle.f` interface behind `force_provider_base.f90` while
+preserving bead-local charge memory and keeping MD propagation out of the
+oracle.

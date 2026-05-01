@@ -114,6 +114,7 @@ test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
 test_06_force_scaling: PASS
 test_07_charge_memory: PASS
+test_08_reaxff_oracle_smoke: PASS
 test_09_mixed_classical_pimd_config: PASS
 test_10_harmonic_driver_outputs: PASS
 test_11_structural_stress: PASS
@@ -133,13 +134,14 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
+1. Replace the external V2 oracle smoke with a linked force-provider adapter.
 2. Add ReaxFF compatibility projections.
 
 ## Status
 
 This repository is pre-production research software.  The normal-mode,
-free-ring propagation, thermostat, dummy/harmonic force, and mixed group
-assignment foundations are tested.  A thin harmonic PIMD driver now writes
-PIMD-native diagnostic outputs and supports restart.  Production eReaxFF
-coupling is intentionally still behind the validation gates described above.
+free-ring propagation, thermostat, dummy/harmonic force, mixed group assignment,
+and external V2 oracle smoke foundations are tested.  A thin harmonic PIMD
+driver now writes PIMD-native diagnostic outputs and supports restart.
+Production eReaxFF coupling is intentionally still behind the validation gates
+described above.

@@ -37,7 +37,7 @@ Generated: 2026-04-30
 - [x] Add constants/unit/RNG regression test.
 - [x] Add normal-mode regression test.
 - [x] Add free ring-polymer energy conservation regression test.
-- [ ] Add system state and particle-group modules.
+- [x] Add system state and particle-group modules.
 - [x] Add thermostat base helpers.
 - [x] Add `none` thermostat.
 - [x] Add Cartesian Langevin thermostat with heat accounting.
@@ -55,6 +55,7 @@ Generated: 2026-04-30
 - [x] Add force provider/scaling regression test.
 - [x] Add charge policy/memory regression test.
 - [x] Add eReaxFF oracle adapter failure stub.
+- [x] Add external V2 eReaxFF oracle smoke/repeatability gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -93,6 +94,7 @@ test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
 test_06_force_scaling: PASS
 test_07_charge_memory: PASS
+test_08_reaxff_oracle_smoke: PASS
 test_09_mixed_classical_pimd_config: PASS
 test_10_harmonic_driver_outputs: PASS
 test_11_structural_stress: PASS
@@ -115,6 +117,12 @@ storage.
 The mixed group test verifies config-style selection of classical carbons, one
 PIMD electron with 16 beads, and frozen background electrons without source-code
 special cases.
+
+The eReaxFF oracle smoke uses the existing V2 force-oracle executable as an
+external legacy boundary check without building or modifying V1/V2.  It runs a
+61-particle static graphene/electron fixture under timeout, verifies finite
+energy/force/charge/status fields, and runs the V2 repeatability executable for
+three evaluations with zero force and charge differences.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

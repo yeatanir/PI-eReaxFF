@@ -276,3 +276,34 @@ Validation:
 
 - `make test` now includes the structural stress suite and the overlapping-group
   negative test.  Both pass cleanly.
+
+## 2026-04-30: External V2 Oracle Smoke Gate
+
+Problem:
+
+- The next risk is eReaxFF coupling, but linking legacy V2 directly into the
+  new engine before a smoke gate would make failures hard to isolate.
+- Building V2 from this repo would write artifacts into the legacy tree, which
+  conflicts with the rule that V1/V2 should not be modified in place.
+- The first parser assumed key/value output, but the V2 single-point oracle
+  writes one header line followed by one compact data line.
+
+Resolution:
+
+- Added `test_08_reaxff_oracle_smoke` as an external validation gate using the
+  already-built V2 `phase4_single_point_oracle` and
+  `single_point_repeatability` executables.
+- Copied V1/V2 fixtures into `build/test_v2_oracle_smoke` and kept all
+  generated geometry, logs, and summaries inside the new repo.
+- Ran both V2 executables under the existing timeout wrapper and parsed the
+  real table format from `phase4_single_point_oracle.out`.
+- Kept `src/force/ereaxff_oracle_adapter.f90` as a clean failure stub until the
+  wrapped force-provider path is implemented deliberately.
+
+Validation:
+
+- `test_08_reaxff_oracle_smoke` checks a 61-particle static fixture for status
+  zero, finite energy, finite max force, finite charge sum, and three repeated
+  evaluations with zero reported force and charge differences.
+- `make test` now includes this oracle smoke gate and passes all implemented
+  regression tests.
