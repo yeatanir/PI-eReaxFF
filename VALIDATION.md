@@ -61,6 +61,11 @@ variance, total variance, analytic quantum variance, and percent error.
 - bead-local charge memory is independent per bead;
 - centroid charge contraction is explicit in diagnostics.
 
+Current status: implemented for dummy/harmonic force providers, bead-averaged
+potential, centralized `1/P` force scaling, policy-name validation, and
+bead-local charge memory diagnostics.  eReaxFF/ACKS2 coupling is not connected
+yet.
+
 ## Phase 7: eReaxFF Oracle
 
 - one static geometry smoke test;

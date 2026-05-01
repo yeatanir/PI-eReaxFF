@@ -27,5 +27,7 @@ if ! grep -q "PILE-G requested but not implemented" build/test_summaries/test_05
   exit 1
 fi
 echo "test_05_pile_g_stub: PASS"
+./build/test_06_force_scaling | tee build/test_summaries/test_06_force_scaling.summary
+./build/test_07_charge_memory | tee build/test_summaries/test_07_charge_memory.summary
 
 echo "All implemented tests passed."

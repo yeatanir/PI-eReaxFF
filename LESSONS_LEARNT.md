@@ -99,3 +99,36 @@ Validation:
 - `test_05_pile_mode_temperatures` checks PILE-L internal mode temperatures and
   heat accounting.
 - `test_05_pile_g_stub` confirms PILE-G does not silently run as PILE-L.
+
+## 2026-04-30: Force Provider And Bead Force Manager
+
+Problem:
+
+- Physical PIMD force scaling must not be scattered through future drivers.
+  The physical potential convention is `V_PIMD = (1/P) sum_s V(R_s)`, so
+  physical forces from each bead must be scaled by `1/P`.
+- eReaxFF/ACKS2 is not ready to connect yet, but the force-manager contract must
+  be testable before that coupling.
+- The first force-manager compile produced `gfortran` warnings around local
+  derived-type temporaries with allocatable components.
+
+Resolution:
+
+- Added a shared `force_result` container and concrete dummy/harmonic force
+  providers.
+- Added `bead_force_manager.f90` as the only current location that applies
+  physical bead-force scaling.
+- Added `charge_coupling_policy.f90` with explicit policy names and bead-local
+  charge memory helpers.
+- Kept `ereaxff_oracle_adapter.f90` as an explicit failure stub until the
+  harmonic/dummy path is validated.
+- Initialized local `force_result` temporaries before provider calls to avoid
+  compiler warnings with allocatable components.
+
+Validation:
+
+- `test_06_force_scaling` checks harmonic `F = -kx`, dummy zero force,
+  bead-averaged PIMD potential, and `1/P` scaled bead forces.
+- `test_07_charge_memory` checks policy validation, bead-local memory detection,
+  per-bead charge sums, max charge difference across beads, and independence of
+  bead-local charge storage.

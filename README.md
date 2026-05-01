@@ -111,6 +111,8 @@ test_02_free_ring_polymer: PASS
 test_04_thermostat_ou_statistics: PASS
 test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
+test_06_force_scaling: PASS
+test_07_charge_memory: PASS
 All implemented tests passed.
 ```
 
@@ -127,15 +129,14 @@ All implemented tests passed.
 ## Development Roadmap
 
 1. Complete system-state and particle-group modules.
-2. Add harmonic/dummy force providers and bead force manager.
-3. Validate harmonic quantum variance versus analytic reference.
-4. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
-5. Add mixed classical/PIMD group selection and charge-coupling policies.
-6. Add PIMD-native outputs, restart, and ReaxFF compatibility projections.
+2. Validate harmonic quantum variance versus analytic reference.
+3. Wrap the legacy V2 eReaxFF force oracle without editing legacy code in place.
+4. Add mixed classical/PIMD group selection and charge-coupling policies.
+5. Add PIMD-native outputs, restart, and ReaxFF compatibility projections.
 
 ## Status
 
 This repository is pre-production research software.  The normal-mode,
-free-ring propagation, and initial thermostat foundation is tested; production
-eReaxFF coupling is intentionally still behind the validation gates described
-above.
+free-ring propagation, thermostat, and dummy/harmonic force foundations are
+tested; production eReaxFF coupling is intentionally still behind the validation
+gates described above.

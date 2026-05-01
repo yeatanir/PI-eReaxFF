@@ -47,8 +47,15 @@ Generated: 2026-04-30
 - [x] Add Langevin OU variance/heat regression test.
 - [x] Add PILE-L mode-temperature/heat regression test.
 - [x] Add PILE-G negative regression test.
-- [ ] Add force provider interface.
-- [ ] Add eReaxFF oracle adapter.
+- [x] Add force provider result/interface scaffolding.
+- [x] Add dummy force provider.
+- [x] Add harmonic force provider.
+- [x] Add bead force manager with `1/P` physical force scaling.
+- [x] Add charge coupling policy names and bead-local charge memory helper.
+- [x] Add force provider/scaling regression test.
+- [x] Add charge policy/memory regression test.
+- [x] Add eReaxFF oracle adapter failure stub.
+- [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
 
@@ -68,6 +75,8 @@ test_02_free_ring_polymer: PASS
 test_04_thermostat_ou_statistics: PASS
 test_05_pile_mode_temperatures: PASS
 test_05_pile_g_stub: PASS
+test_06_force_scaling: PASS
+test_07_charge_memory: PASS
 All implemented tests passed.
 ```
 
@@ -77,3 +86,8 @@ absolute free-energy drift of about `8.9e-13 eV`.
 The Langevin OU test sampled velocity variance within about `0.7%` of the
 Maxwell target.  The PILE-L internal mode test reported maximum internal mode
 temperature relative error of about `2.3%`.
+
+The force-scaling test verifies harmonic `F = -kx`, dummy zero forces,
+bead-averaged PIMD potential, and centralized `1/P` physical force scaling.  The
+charge-memory test verifies valid policy names and independent bead-local charge
+storage.
