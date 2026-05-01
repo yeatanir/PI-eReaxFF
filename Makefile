@@ -21,8 +21,10 @@ TEST05_STUB_SRCS := tests/test_05_pile_mode_temperatures/test_pile_g_stub.f90
 TEST06_SRCS := tests/test_06_force_scaling/test_force_scaling.f90
 TEST07_SRCS := tests/test_07_charge_memory/test_charge_memory.f90
 TEST09_SRCS := tests/test_09_mixed_classical_pimd_config/test_mixed_classical_pimd_config.f90
+TEST11_SRCS := tests/test_11_structural_stress/test_structural_stress.f90
+TEST11_NEG_SRCS := tests/test_11_structural_stress/test_invalid_group_overlap.f90
 
-.PHONY: all test build_tests harmonic_pimd_main test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config test_10_driver_outputs clean
+.PHONY: all test build_tests harmonic_pimd_main test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress clean
 
 all: build_tests harmonic_pimd_main
 
@@ -65,7 +67,12 @@ harmonic_pimd_main: $(BUILD_DIR) $(MOD_DIR)
 test_10_driver_outputs: harmonic_pimd_main
 	tests/test_10_reaxff_compat_outputs/run_harmonic_driver_smoke.sh
 
-build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config test_10_driver_outputs
+test_11_structural_stress: $(BUILD_DIR) $(MOD_DIR)
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(PIMD_SRCS) $(FORCE_SRCS) $(TEST11_SRCS) -o $(BUILD_DIR)/test_11_structural_stress
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST11_NEG_SRCS) -o $(BUILD_DIR)/test_11_invalid_group_overlap
+	tests/test_11_structural_stress/run_structural_stress.sh
+
+build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress
 
 test:
 	./tests/run_all.sh

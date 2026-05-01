@@ -68,6 +68,8 @@ Generated: 2026-04-30
 - [x] Add harmonic driver output smoke test.
 - [x] Add harmonic restart read/write scaffold.
 - [x] Add split-run restart equivalence regression including RNG state.
+- [x] Add structural stress/edge-case test suite.
+- [x] Add negative overlapping-group failure test.
 - [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
@@ -93,6 +95,8 @@ test_06_force_scaling: PASS
 test_07_charge_memory: PASS
 test_09_mixed_classical_pimd_config: PASS
 test_10_harmonic_driver_outputs: PASS
+test_11_structural_stress: PASS
+test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
 
@@ -121,3 +125,8 @@ The harmonic driver smoke test builds `harmonic_pimd_main`, runs it in a path
 containing spaces, and verifies PIMD-native outputs:
 `pimd_energy.out`, `bead_spread.out`, `thermostat_heat.out`, and `centroid.xyz`.
 It also verifies continuous-vs-split restart equivalence.
+
+The structural stress suite covers normal-mode transforms through `P=128`,
+repeated ring-polymer reinitialization, a 1024-particle/32-bead force-manager
+case, 2048-particle/32-bead charge memory, 10,000-particle group assignment, and
+overlapping-group rejection.

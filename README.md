@@ -116,6 +116,8 @@ test_06_force_scaling: PASS
 test_07_charge_memory: PASS
 test_09_mixed_classical_pimd_config: PASS
 test_10_harmonic_driver_outputs: PASS
+test_11_structural_stress: PASS
+test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
 

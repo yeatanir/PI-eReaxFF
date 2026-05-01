@@ -32,5 +32,6 @@ echo "test_05_pile_g_stub: PASS"
 ./build/test_07_charge_memory | tee build/test_summaries/test_07_charge_memory.summary
 ./build/test_09_mixed_classical_pimd_config | tee build/test_summaries/test_09_mixed_classical_pimd_config.summary
 cat build/test_summaries/test_10_harmonic_driver_outputs.summary
+cat build/test_summaries/test_11_structural_stress.summary
 
 echo "All implemented tests passed."

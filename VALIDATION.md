@@ -105,3 +105,15 @@ Current status: implemented first PIMD-native harmonic outputs for
 The harmonic driver writes and reads restart state, including RNG state, and the
 test suite verifies continuous-vs-split restart equivalence.  ReaxFF
 compatibility outputs remain future work.
+
+## Structural Stress Gate
+
+Before eReaxFF coupling, the suite includes stress and negative tests for:
+
+- normal-mode orthogonality/roundtrip across odd, even, small, and larger bead
+  counts through `P=128`;
+- repeated ring-polymer reinitialization;
+- large bead force-manager arrays;
+- large bead-local charge memory;
+- 10,000-particle group assignment;
+- overlapping group rejection.

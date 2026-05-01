@@ -249,3 +249,30 @@ Validation:
 - The harmonic driver smoke test now compares a continuous 2000-step run against
   a split 1000+1000-step run.  The final restart files match for step, bead
   count, RNG state, thermostat heat, `q_nm`, and `v_nm`.
+
+## 2026-04-30: Structural Stress And Edge-Case Gate
+
+Problem:
+
+- Before coupling eReaxFF, we needed a broader vulnerability check for lifecycle
+  and scaling problems that the small tests might miss.
+- The first stress target produced a compiler warning around a reused
+  `ring_polymer_state`, even though runtime behavior was correct.
+
+Resolution:
+
+- Added `test_11_structural_stress` for:
+  - normal-mode orthogonality/roundtrip from `P=1` through `P=128`;
+  - repeated ring-polymer initialization;
+  - 1024-particle/32-bead harmonic force-manager scaling;
+  - 2048-particle/32-bead charge-memory diagnostics;
+  - 10,000-particle mixed group assignment.
+- Added `test_11_invalid_group_overlap`, a negative test that confirms
+  overlapping selectors fail instead of silently assigning a particle twice.
+- Reworked the repeated-initialization stress test to avoid the compiler warning
+  while still exercising reinitialization.
+
+Validation:
+
+- `make test` now includes the structural stress suite and the overlapping-group
+  negative test.  Both pass cleanly.
