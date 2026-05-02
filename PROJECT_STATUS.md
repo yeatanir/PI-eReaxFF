@@ -1,6 +1,6 @@
 # Project Status
 
-Generated: 2026-04-30
+Generated: 2026-05-02
 
 ## Inputs Provided
 
@@ -60,6 +60,7 @@ Generated: 2026-04-30
 - [x] Add mixed oracle-manager fixture regression gate.
 - [x] Add mixed oracle-manager bead-count matrix regression gate.
 - [x] Add mixed oracle-manager restart/output regression gate.
+- [x] Add eReaxFF mixed smoke driver regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -107,6 +108,7 @@ test_13_oracle_charge_policy_modes: PASS
 test_14_mixed_oracle_manager_fixture: PASS
 test_15_mixed_oracle_manager_matrix: PASS
 test_16_mixed_oracle_manager_restart_output: PASS
+test_17_ereaxff_mixed_driver_smoke: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -163,6 +165,11 @@ bead-local charges, and solver guesses, then reads it back and verifies exact
 roundtrip.  It also writes bead-wise and centroid charge summaries so the mixed
 manager path has a tested output/restart boundary, not just an in-memory
 fixture.
+
+The eReaxFF mixed smoke driver exercises that same mixed restart/output
+boundary through the executable path.  It calls the oracle adapter through the
+modular mixed driver, writes the same restart and charge summaries, and
+verifies split-run equivalence across a restart boundary.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

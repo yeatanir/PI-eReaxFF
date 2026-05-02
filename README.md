@@ -124,6 +124,7 @@ test_13_oracle_charge_policy_modes: PASS
 test_14_mixed_oracle_manager_fixture: PASS
 test_15_mixed_oracle_manager_matrix: PASS
 test_16_mixed_oracle_manager_restart_output: PASS
+test_17_ereaxff_mixed_driver_smoke: PASS
 All implemented tests passed.
 ```
 
@@ -139,8 +140,9 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Extend adapter-mediated mixed classical/PIMD and charge-policy coverage.
-2. Add ReaxFF compatibility projections.
+1. Extend the eReaxFF-backed mixed driver from smoke coverage into the modular
+   dynamics path.
+2. Add ReaxFF compatibility projections on top of the mixed driver.
 
 ## Status
 
@@ -151,5 +153,6 @@ integration, centroid charge-policy, and mixed oracle-manager fixture/matrix
 foundations are tested.  A thin harmonic PIMD driver now writes PIMD-native
 diagnostic outputs and supports restart, and the mixed manager path now has a
 tested restart/output format for bead positions, charges, and solver memory.
-Production eReaxFF coupling is intentionally still behind the validation gates
-described above.
+The mixed eReaxFF smoke driver now exercises that same restart/output boundary
+through the executable path.  Production eReaxFF coupling is intentionally
+still behind the validation gates described above.

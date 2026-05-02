@@ -18,6 +18,7 @@ module ereaxff_mixed_restart
   public :: read_mixed_restart
   public :: write_charge_by_bead_summary
   public :: write_charge_centroid_summary
+  public :: write_electron_localization_summary
 
 contains
 
@@ -133,6 +134,18 @@ contains
     end do
     close(unit)
   end subroutine write_charge_centroid_summary
+
+  subroutine write_electron_localization_summary(path, step, local_charge_diff, centroid_charge_diff, max_force, energy_eV)
+    character(len=*), intent(in) :: path
+    integer, intent(in) :: step
+    real(dp), intent(in) :: local_charge_diff, centroid_charge_diff, max_force, energy_eV
+    integer :: unit
+
+    open(newunit=unit, file=trim(path), status="replace", action="write")
+    write(unit,'(a)') "# step local_charge_diff centroid_charge_diff max_force_eV_per_A energy_eV"
+    write(unit,'(i8,4(1x,es24.16))') step, local_charge_diff, centroid_charge_diff, max_force, energy_eV
+    close(unit)
+  end subroutine write_electron_localization_summary
 
   subroutine allocate_state(state)
     type(mixed_restart_state), intent(inout) :: state

@@ -117,6 +117,12 @@ charges, and solver guesses.  The regression also writes bead-wise and
 centroid-charge summary files and verifies that the restart reload reproduces
 the stored mixed state exactly.
 
+Current status for the executable mixed eReaxFF path: `ereaxff_pimd_main`
+wraps the same mixed restart/output helpers and the V2 oracle adapter in a
+standalone smoke driver.  The smoke test runs the executable twice with a
+restart boundary, verifies the output files are identical across the split
+run, and confirms the driver prints the expected eReaxFF adapter diagnostic.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;
@@ -143,6 +149,12 @@ Current status: implemented first PIMD-native harmonic outputs for
 The harmonic driver writes and reads restart state, including RNG state, and the
 test suite verifies continuous-vs-split restart equivalence.  ReaxFF
 compatibility outputs remain future work.
+
+The mixed eReaxFF smoke driver now extends that restart/output boundary to the
+oracle-backed mixed path.  It writes `pimd_energy.out`,
+`charge_by_bead.out`, `charge_centroid.out`, `electron_localization.out`, and
+`restart.dat`, then checks split-run equivalence through the same executable
+path.
 
 ## Structural Stress Gate
 

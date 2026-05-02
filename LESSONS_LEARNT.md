@@ -471,3 +471,30 @@ Validation:
 
 - `test_16_mixed_oracle_manager_restart_output` passes.
 - `make test` passes the full suite after the restart/output addition.
+
+## 2026-05-02: eReaxFF Mixed Smoke Driver Boundary
+
+Problem:
+
+- The mixed restart/output helpers were validated in memory, but the project
+  needed an executable that exercises the eReaxFF adapter through the modular
+  mixed path.
+- The smoke driver had to keep the oracle force-only, reuse the restart/output
+  helpers, and remain restart-splittable without creating a second dynamics
+  path.
+
+Resolution:
+
+- Added `ereaxff_pimd_main.f90` as a thin mixed smoke executable that owns the
+  restart/output boundary and calls the eReaxFF oracle through the adapter.
+- Reused the mixed restart helpers for bead positions, charge summaries, and
+  solver memory.
+- Added a split-run smoke script that checks output equivalence across a
+  restart boundary and verifies the driver prints the expected adapter
+  diagnostic.
+
+Validation:
+
+- `test_17_ereaxff_mixed_driver_smoke` passes.
+- `make test` includes the executable gate once the runner summary list is
+  updated to print it.

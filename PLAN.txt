@@ -9,6 +9,8 @@ Current state
   rejection gates against the validated V2 oracle.
 - The force-manager layer now exercises the same adapter at `P=1`.
 - The manager layer now also accepts explicit `centroid_acks2` contraction.
+- A standalone mixed eReaxFF smoke driver now exercises the same adapter
+  through the modular restart/output helpers.
 - The next step is to extend that manager path from the current mixed fixture to
   broader mixed classical/PIMD charge policies, restart state, and bead counts
   without putting dynamics inside the oracle.
@@ -42,9 +44,11 @@ Execution plan
    - mixed oracle-manager bead-geometry fixture
    - mixed oracle-manager bead-count matrix
    - mixed restart/output roundtrip
-8. Expand output checks so PIMD-native diagnostics and ReaxFF compatibility
+8. Extend the mixed eReaxFF smoke driver toward modular dynamics while keeping
+   restart/output equivalence and adapter ownership clear.
+9. Expand output checks so PIMD-native diagnostics and ReaxFF compatibility
    outputs both remain stable.
-9. Keep `LESSONS_LEARNT.md`, `PROJECT_STATUS.md`, and `VALIDATION.md` updated
+10. Keep `LESSONS_LEARNT.md`, `PROJECT_STATUS.md`, and `VALIDATION.md` updated
     after each completed step.
 
 Test gates before proceeding
@@ -75,5 +79,7 @@ Definition of done for the next phase
 - Centroid ACKS2 is implemented only as an explicit opt-in policy.
 - A/B/A/B repeatability, NaN/Inf rejection, mixed group regression, and
   output/restart regression all pass.
+- The mixed eReaxFF smoke executable also passes split-run restart/output
+  regression and keeps the oracle outside the dynamics boundary.
 - Documentation explains the adapter boundary, charge policy, thermostat
   convention, ring-polymer prefactor, and compatibility-output policy.
