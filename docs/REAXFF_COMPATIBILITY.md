@@ -12,6 +12,6 @@ Compatibility outputs are preserved for downstream workflows:
 Unless configured otherwise, these files are centroid-projected classical views.
 PIMD-native bead distributions and estimators are written separately.
 
-Current status: ReaxFF compatibility output is still an explicit stub.  The
-harmonic driver currently writes only PIMD-native outputs, which keeps the
-scientific outputs separate from future centroid-projected compatibility files.
+Current status: centroid-projected compatibility snapshots are now written by
+the mixed BAOAB path at the end of a run.  They are intentionally separate from
+the PIMD-native bead outputs and remain classical views of the mixed state.

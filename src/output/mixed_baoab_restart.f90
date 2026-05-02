@@ -1,0 +1,161 @@
+module ereaxff_mixed_baoab_restart
+  use ereaxff_kinds, only: dp
+  implicit none
+  private
+
+  type, public :: mixed_baoab_restart_state
+    integer :: step = 0
+    integer :: ndim = 0
+    integer :: nparticles = 0
+    integer :: beads = 0
+    character(len=32) :: charge_policy = ""
+    real(dp), allocatable :: positions_A(:, :, :)
+    real(dp), allocatable :: q_nm(:, :)
+    real(dp), allocatable :: v_nm(:, :)
+    real(dp), allocatable :: charges_by_bead(:, :)
+    real(dp), allocatable :: solver_guess_by_bead(:, :)
+  end type mixed_baoab_restart_state
+
+  public :: write_mixed_baoab_restart
+  public :: read_mixed_baoab_restart
+
+contains
+
+  subroutine write_mixed_baoab_restart(path, state)
+    character(len=*), intent(in) :: path
+    type(mixed_baoab_restart_state), intent(in) :: state
+    integer :: unit, bead, i, coord
+
+    if (.not. allocated(state%positions_A)) error stop "write_mixed_baoab_restart: positions not allocated"
+    if (.not. allocated(state%q_nm)) error stop "write_mixed_baoab_restart: q_nm not allocated"
+    if (.not. allocated(state%v_nm)) error stop "write_mixed_baoab_restart: v_nm not allocated"
+    if (.not. allocated(state%charges_by_bead)) error stop "write_mixed_baoab_restart: charges not allocated"
+    if (.not. allocated(state%solver_guess_by_bead)) error stop "write_mixed_baoab_restart: solver memory not allocated"
+
+    open(newunit=unit, file=trim(path), status="replace", action="write")
+    write(unit,'(a)') "# PI-eReaxFF mixed BAOAB restart v1"
+    write(unit,'(a,1x,i0)') "step", state%step
+    write(unit,'(a,1x,i0)') "ndim", state%ndim
+    write(unit,'(a,1x,i0)') "nparticles", state%nparticles
+    write(unit,'(a,1x,i0)') "beads", state%beads
+    write(unit,'(a,1x,a)') "charge_policy", trim(state%charge_policy)
+    write(unit,'(a)') "positions_A"
+    do bead = 1, state%beads
+      write(unit,'(a,1x,i0)') "bead", bead
+      do i = 1, state%nparticles
+        write(unit,'(i8,3(1x,es24.16))') i, state%positions_A(:, i, bead)
+      end do
+    end do
+    write(unit,'(a)') "q_nm"
+    do coord = 1, state%ndim
+      write(unit,'(a,1x,i0)') "coord", coord
+      do bead = 1, state%beads
+        write(unit,'(i8,1x,es24.16)') bead, state%q_nm(coord, bead)
+      end do
+    end do
+    write(unit,'(a)') "v_nm"
+    do coord = 1, state%ndim
+      write(unit,'(a,1x,i0)') "coord", coord
+      do bead = 1, state%beads
+        write(unit,'(i8,1x,es24.16)') bead, state%v_nm(coord, bead)
+      end do
+    end do
+    write(unit,'(a)') "charges_by_bead"
+    do bead = 1, state%beads
+      write(unit,'(a,1x,i0)') "bead", bead
+      do i = 1, state%nparticles
+        write(unit,'(i8,2(1x,es24.16))') i, state%charges_by_bead(i, bead), state%solver_guess_by_bead(i, bead)
+      end do
+    end do
+    close(unit)
+  end subroutine write_mixed_baoab_restart
+
+  subroutine read_mixed_baoab_restart(path, state)
+    character(len=*), intent(in) :: path
+    type(mixed_baoab_restart_state), intent(inout) :: state
+    integer :: unit, i, bead, coord, index_value
+    character(len=64) :: key
+    character(len=32) :: charge_policy
+
+    open(newunit=unit, file=trim(path), status="old", action="read")
+    read(unit,*)
+    read(unit,*) key, state%step
+    if (trim(key) /= "step") error stop "read_mixed_baoab_restart: expected step"
+    read(unit,*) key, state%ndim
+    if (trim(key) /= "ndim") error stop "read_mixed_baoab_restart: expected ndim"
+    read(unit,*) key, state%nparticles
+    if (trim(key) /= "nparticles") error stop "read_mixed_baoab_restart: expected nparticles"
+    read(unit,*) key, state%beads
+    if (trim(key) /= "beads") error stop "read_mixed_baoab_restart: expected beads"
+    read(unit,*) key, charge_policy
+    if (trim(key) /= "charge_policy") error stop "read_mixed_baoab_restart: expected charge_policy"
+    state%charge_policy = trim(charge_policy)
+    call allocate_state(state)
+
+    read(unit,*) key
+    if (trim(key) /= "positions_A") error stop "read_mixed_baoab_restart: expected positions_A"
+    do bead = 1, state%beads
+      read(unit,*) key, index_value
+      if (trim(key) /= "bead" .or. index_value /= bead) error stop "read_mixed_baoab_restart: expected bead section"
+      do i = 1, state%nparticles
+        read(unit,*) index_value, state%positions_A(:, i, bead)
+        if (index_value /= i) error stop "read_mixed_baoab_restart: position index mismatch"
+      end do
+    end do
+
+    read(unit,*) key
+    if (trim(key) /= "q_nm") error stop "read_mixed_baoab_restart: expected q_nm"
+    do coord = 1, state%ndim
+      read(unit,*) key, index_value
+      if (trim(key) /= "coord" .or. index_value /= coord) error stop "read_mixed_baoab_restart: expected q_nm coord"
+      do bead = 1, state%beads
+        read(unit,*) index_value, state%q_nm(coord, bead)
+        if (index_value /= bead) error stop "read_mixed_baoab_restart: q_nm index mismatch"
+      end do
+    end do
+
+    read(unit,*) key
+    if (trim(key) /= "v_nm") error stop "read_mixed_baoab_restart: expected v_nm"
+    do coord = 1, state%ndim
+      read(unit,*) key, index_value
+      if (trim(key) /= "coord" .or. index_value /= coord) error stop "read_mixed_baoab_restart: expected v_nm coord"
+      do bead = 1, state%beads
+        read(unit,*) index_value, state%v_nm(coord, bead)
+        if (index_value /= bead) error stop "read_mixed_baoab_restart: v_nm index mismatch"
+      end do
+    end do
+
+    read(unit,*) key
+    if (trim(key) /= "charges_by_bead") error stop "read_mixed_baoab_restart: expected charges_by_bead"
+    do bead = 1, state%beads
+      read(unit,*) key, index_value
+      if (trim(key) /= "bead" .or. index_value /= bead) error stop "read_mixed_baoab_restart: expected charge bead section"
+      do i = 1, state%nparticles
+        read(unit,*) index_value, state%charges_by_bead(i, bead), state%solver_guess_by_bead(i, bead)
+        if (index_value /= i) error stop "read_mixed_baoab_restart: charge index mismatch"
+      end do
+    end do
+    close(unit)
+  end subroutine read_mixed_baoab_restart
+
+  subroutine allocate_state(state)
+    type(mixed_baoab_restart_state), intent(inout) :: state
+
+    if (allocated(state%positions_A)) deallocate(state%positions_A)
+    if (allocated(state%q_nm)) deallocate(state%q_nm)
+    if (allocated(state%v_nm)) deallocate(state%v_nm)
+    if (allocated(state%charges_by_bead)) deallocate(state%charges_by_bead)
+    if (allocated(state%solver_guess_by_bead)) deallocate(state%solver_guess_by_bead)
+    allocate(state%positions_A(state%ndim, state%nparticles, state%beads))
+    allocate(state%q_nm(state%ndim, state%beads))
+    allocate(state%v_nm(state%ndim, state%beads))
+    allocate(state%charges_by_bead(state%nparticles, state%beads))
+    allocate(state%solver_guess_by_bead(state%nparticles, state%beads))
+    state%positions_A = 0.0_dp
+    state%q_nm = 0.0_dp
+    state%v_nm = 0.0_dp
+    state%charges_by_bead = 0.0_dp
+    state%solver_guess_by_bead = 0.0_dp
+  end subroutine allocate_state
+
+end module ereaxff_mixed_baoab_restart

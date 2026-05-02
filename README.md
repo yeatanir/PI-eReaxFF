@@ -126,6 +126,7 @@ test_15_mixed_oracle_manager_matrix: PASS
 test_16_mixed_oracle_manager_restart_output: PASS
 test_17_ereaxff_mixed_driver_smoke: PASS
 test_18_ereaxff_mixed_baoab_matrix: PASS
+test_19_ereaxff_mixed_baoab_restart: PASS
 All implemented tests passed.
 ```
 
@@ -158,4 +159,5 @@ The mixed eReaxFF smoke driver now exercises that same restart/output boundary
 through the executable path.  Production eReaxFF coupling is intentionally
 still behind the validation gates described above.
 The mixed eReaxFF BAOAB driver now exercises the force-manager and free-ring
-propagator on top of that boundary across a small bead-count matrix.
+propagator on top of that boundary across a wider bead-count matrix and a
+restart-continuity gate.

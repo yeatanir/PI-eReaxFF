@@ -62,6 +62,7 @@ Generated: 2026-05-02
 - [x] Add mixed oracle-manager restart/output regression gate.
 - [x] Add eReaxFF mixed smoke driver regression gate.
 - [x] Add eReaxFF mixed BAOAB dynamics matrix regression gate.
+- [x] Add eReaxFF mixed BAOAB restart-continuity regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -111,6 +112,7 @@ test_15_mixed_oracle_manager_matrix: PASS
 test_16_mixed_oracle_manager_restart_output: PASS
 test_17_ereaxff_mixed_driver_smoke: PASS
 test_18_ereaxff_mixed_baoab_matrix: PASS
+test_19_ereaxff_mixed_baoab_restart: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -175,7 +177,11 @@ verifies split-run equivalence across a restart boundary.
 
 The eReaxFF mixed BAOAB driver then advances the PIMD electron against the
 eReaxFF-backed force manager with the modular integrator layer and verifies a
-small bead-count matrix at `P = 1, 2, 4`.
+small bead-count matrix at `P = 1, 2, 4, 8`.
+
+The mixed BAOAB restart gate then confirms that a split run reproduces the
+same final restart state and centroid-projected compatibility snapshots as the
+continuous run.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

@@ -13,6 +13,8 @@ Current state
   through the modular restart/output helpers.
 - A mixed eReaxFF BAOAB driver now exercises the modular force-manager and
   free-ring propagator on a small bead-count matrix.
+- The mixed BAOAB driver now also has restart continuity and centroid-projected
+  compatibility snapshots.
 - The next step is to extend that manager path from the current mixed fixture to
   broader mixed classical/PIMD charge policies, restart state, and bead counts
   without putting dynamics inside the oracle.
@@ -46,8 +48,8 @@ Execution plan
    - mixed oracle-manager bead-geometry fixture
    - mixed oracle-manager bead-count matrix
    - mixed restart/output roundtrip
-8. Extend the mixed eReaxFF BAOAB path toward restart coverage and broader
-   mixed-system stress cases while keeping adapter ownership clear.
+8. Extend the mixed eReaxFF BAOAB path toward broader mixed-system stress
+   cases while keeping adapter ownership clear.
 9. Expand output checks so PIMD-native diagnostics and ReaxFF compatibility
    outputs both remain stable.
 10. Keep `LESSONS_LEARNT.md`, `PROJECT_STATUS.md`, and `VALIDATION.md` updated
@@ -83,7 +85,9 @@ Definition of done for the next phase
   output/restart regression all pass.
 - The mixed eReaxFF smoke executable also passes split-run restart/output
   regression and keeps the oracle outside the dynamics boundary.
-- The mixed eReaxFF BAOAB executable also passes a `P = 1, 2, 4` matrix on the
+- The mixed eReaxFF BAOAB executable also passes a `P = 1, 2, 4, 8` matrix on the
   same oracle-backed mixed fixture.
+- The mixed BAOAB restart gate also passes and preserves final restart and
+  compatibility snapshots across a split run.
 - Documentation explains the adapter boundary, charge policy, thermostat
   convention, ring-polymer prefactor, and compatibility-output policy.

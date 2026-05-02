@@ -516,10 +516,33 @@ Resolution:
 - Added `ereaxff_mixed_baoab_main.f90` as a thin executable that keeps the
   oracle force-only, uses the mixed force manager, and writes the same mixed
   diagnostics as the smoke driver.
-- Added a small `P = 1, 2, 4` matrix smoke test to catch integrator/boundary
+- Added a small `P = 1, 2, 4, 8` matrix smoke test to catch integrator/boundary
   regressions early.
 
 Validation:
 
 - `test_18_ereaxff_mixed_baoab_matrix` passes.
 - `make test` will include this gate once the runner summary list prints it.
+
+## 2026-05-02: Mixed BAOAB Restart And Compatibility Outputs
+
+Problem:
+
+- The mixed BAOAB path needed restart continuity, not just a forward smoke
+  path.
+- The centroid-projected compatibility outputs had to be explicit final-state
+  snapshots, not an inferred side effect of the mixed manager files.
+
+Resolution:
+
+- Added a BAOAB-specific restart format carrying bead positions, normal-mode
+  coordinates, velocities, bead charges, and solver memory.
+- Added centroid-projected ReaxFF compatibility outputs: `fort.7`, `fort.8`,
+  `molfra.out`, and `xmolout`.
+- Added a split-run restart regression that compares final restart state and
+  compatibility snapshots against a continuous run.
+
+Validation:
+
+- `test_19_ereaxff_mixed_baoab_restart` passes.
+- `make test` includes the restart gate once the runner summary list prints it.

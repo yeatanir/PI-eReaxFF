@@ -10,8 +10,11 @@ program ereaxff_mixed_baoab_main
   use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init
   use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads
   use ereaxff_mixed_baoab_integrator, only: mixed_baoab_electron_step
+  use ereaxff_mixed_baoab_restart, only: mixed_baoab_restart_state, write_mixed_baoab_restart, &
+      read_mixed_baoab_restart
   use ereaxff_mixed_restart, only: write_charge_by_bead_summary, write_charge_centroid_summary, &
       write_electron_localization_summary
+  use ereaxff_reaxff_compat_output, only: write_reaxff_compat_snapshot
   use ereaxff_output_manager, only: join_path
   use ereaxff_spring_energy, only: compute_free_ring_energy_nm, compute_spring_energy_nm
   use ereaxff_diagnostics, only: nvt_conserved_like
@@ -33,16 +36,17 @@ program ereaxff_mixed_baoab_main
   type(oracle_adapter_state) :: adapter
   type(charge_memory_state) :: charge_memory
   type(oracle_bead_summary) :: summary
+  type(mixed_baoab_restart_state) :: restart_state
   real(dp), allocatable :: positions_A(:, :, :)
   real(dp), allocatable :: q_nm(:, :)
   real(dp), allocatable :: v_nm(:, :)
   real(dp), allocatable :: solver_guess(:, :)
   real(dp) :: masses(3), kinetic_eV, spring_eV, physical_potential_eV, conserved_like
   real(dp) :: centroid_A(3), bead_spread_A, max_force, charge_diff
-  character(len=512) :: output_dir, beads_arg, steps_arg, policy_arg
+  character(len=512) :: output_dir, beads_arg, steps_arg, policy_arg, restart_in, restart_out
   character(len=512) :: v1_root, v2_root
   character(len=1100) :: mkdir_command
-  integer :: beads, steps, ios, step, energy_unit, spread_unit, heat_unit, xyz_unit
+  integer :: beads, steps, ios, step, start_step, energy_unit, spread_unit, heat_unit, xyz_unit
 
   call get_command_argument(1, output_dir)
   if (len_trim(output_dir) == 0) output_dir = "ereaxff_mixed_baoab_output"
@@ -59,6 +63,8 @@ program ereaxff_mixed_baoab_main
     if (ios /= 0 .or. steps < 0) error stop "ereaxff_mixed_baoab_main: invalid steps argument"
   end if
   call get_command_argument(4, policy_arg)
+  call get_command_argument(5, restart_in)
+  call get_command_argument(6, restart_out)
   if (len_trim(policy_arg) == 0) policy_arg = charge_policy_bead_local_acks2
   if (.not. charge_policy_is_valid(policy_arg)) error stop "ereaxff_mixed_baoab_main: invalid charge policy"
   call get_environment_variable("EREAXFF_V1_ROOT", v1_root)
@@ -83,22 +89,39 @@ program ereaxff_mixed_baoab_main
 
   call init_system_state(state, ndim, nparticles)
   call build_phase4_fixture(state)
-  call assign_mixed_groups(state, groups, assignment)
-  call init_ring_polymer(rp, beads, temperature_K, "standard_ipi")
 
+  start_step = 0
+  if (len_trim(restart_in) > 0 .and. trim(restart_in) /= "none") then
+    call read_mixed_baoab_restart(trim(restart_in), restart_state)
+    beads = restart_state%beads
+    policy_arg = restart_state%charge_policy
+    if (.not. charge_policy_is_valid(policy_arg)) error stop "ereaxff_mixed_baoab_main: restart charge policy invalid"
+    start_step = restart_state%step
+  end if
+
+  call assign_mixed_groups(state, groups, assignment)
+
+  call init_ring_polymer(rp, beads, temperature_K, "standard_ipi")
   allocate(positions_A(ndim, nparticles, beads))
   allocate(q_nm(ndim, beads))
   allocate(v_nm(ndim, beads))
   allocate(solver_guess(nparticles, beads))
 
-  call build_positions(state, positions_A, beads)
-  call perturb_electron_beads(positions_A)
-  q_nm = 0.0_dp
-  v_nm = 0.0_dp
-  call bead_positions_to_nm(positions_A, 1, rp, q_nm)
-  call init_charge_memory(charge_memory, nparticles, beads, policy_arg)
-  solver_guess = 0.0_dp
+  if (len_trim(restart_in) > 0 .and. trim(restart_in) /= "none") then
+    positions_A = restart_state%positions_A
+    q_nm = restart_state%q_nm
+    v_nm = restart_state%v_nm
+    solver_guess = restart_state%solver_guess_by_bead
+  else
+    call build_positions(state, positions_A, beads)
+    call perturb_electron_beads(positions_A)
+    q_nm = 0.0_dp
+    v_nm = 0.0_dp
+    call bead_positions_to_nm(positions_A, 1, rp, q_nm)
+    solver_guess = 0.0_dp
+  end if
 
+  call init_charge_memory(charge_memory, nparticles, beads, policy_arg)
   call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
   masses = [electron_mass_amu, electron_mass_amu, electron_mass_amu]
 
@@ -113,10 +136,12 @@ program ereaxff_mixed_baoab_main
   write(spread_unit,'(a)') "# step centroid_x centroid_y centroid_z bead_rms_spread_A"
   write(heat_unit,'(a)') "# step thermostat_heat_eV"
 
-  call write_step_outputs(0)
-  do step = 1, steps
+  call write_step_outputs(start_step)
+  step = start_step
+  do while (step < steps)
     call mixed_baoab_electron_step(positions_A, q_nm, v_nm, 1, electron_mass_amu, rp, dt_fs, &
         adapter, charge_memory, solver_guess, policy_arg, summary)
+    step = step + 1
     call write_step_outputs(step)
   end do
 
@@ -124,6 +149,8 @@ program ereaxff_mixed_baoab_main
   close(spread_unit)
   close(heat_unit)
   close(xyz_unit)
+
+  call write_final_restart_and_compat()
 
   write(*,'(a,i0)') "classical_count = ", count_particles_with_dynamics(assignment, dynamics_classical)
   write(*,'(a,i0)') "pimd_count = ", count_particles_with_dynamics(assignment, dynamics_pimd)
@@ -254,6 +281,41 @@ contains
     call write_electron_localization_summary(join_path(output_dir, "electron_localization.out"), step_in, &
         charge_diff, 0.0_dp, max_force, physical_potential_eV)
   end subroutine write_step_outputs
+
+  subroutine write_final_restart_and_compat()
+    type(mixed_baoab_restart_state) :: restart_out_state
+    real(dp) :: centroid_positions(ndim, nparticles)
+    real(dp) :: centroid_charges(nparticles)
+    real(dp) :: final_charge_sum, final_max_force
+
+    restart_out_state%step = step
+    restart_out_state%ndim = ndim
+    restart_out_state%nparticles = nparticles
+    restart_out_state%beads = beads
+    restart_out_state%charge_policy = trim(policy_arg)
+    allocate(restart_out_state%positions_A(ndim, nparticles, beads))
+    allocate(restart_out_state%q_nm(ndim, beads))
+    allocate(restart_out_state%v_nm(ndim, beads))
+    allocate(restart_out_state%charges_by_bead(nparticles, beads))
+    allocate(restart_out_state%solver_guess_by_bead(nparticles, beads))
+    restart_out_state%positions_A = positions_A
+    restart_out_state%q_nm = q_nm
+    restart_out_state%v_nm = v_nm
+    restart_out_state%charges_by_bead = charge_memory%charges_by_bead
+    restart_out_state%solver_guess_by_bead = solver_guess
+
+    if (len_trim(restart_out) == 0) restart_out = join_path(output_dir, "restart.dat")
+    if (trim(restart_out) /= "none") then
+      call write_mixed_baoab_restart(trim(restart_out), restart_out_state)
+    end if
+
+    centroid_positions = sum(positions_A, dim=3) / real(beads, dp)
+    centroid_charges = sum(charge_memory%charges_by_bead, dim=2) / real(beads, dp)
+    final_charge_sum = sum(centroid_charges)
+    final_max_force = maxval(abs(summary%scaled_forces_eV_per_A(:, 1, :)))
+    call write_reaxff_compat_snapshot(output_dir, step, centroid_positions, centroid_charges, &
+        summary%pimd_potential_eV, final_max_force, final_charge_sum, beads)
+  end subroutine write_final_restart_and_compat
 
   subroutine write_centroid_xyz_frame(unit, step_in, centroid)
     integer, intent(in) :: unit, step_in

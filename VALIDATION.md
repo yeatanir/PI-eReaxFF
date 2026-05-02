@@ -125,8 +125,13 @@ run, and confirms the driver prints the expected eReaxFF adapter diagnostic.
 
 Current status for the modular mixed dynamics path: `ereaxff_mixed_baoab_main`
 advances the PIMD electron with the force-manager and free-ring propagator
-layer, then checks a small bead-count matrix at `P = 1, 2, 4` with the same
+layer, then checks a small bead-count matrix at `P = 1, 2, 4, 8` with the same
 oracle-backed mixed fixture.
+
+Current status for restart continuity: the mixed BAOAB driver now writes a
+BAOAB-specific restart containing bead positions, normal-mode coordinates, and
+velocities.  The restart test confirms that a split run matches the continuous
+run in its final restart state and centroid-projected compatibility outputs.
 
 ## Phase 8: Mixed Classical/PIMD Configuration
 
@@ -164,6 +169,10 @@ path.
 The mixed BAOAB driver extends that boundary one layer further by integrating
 the PIMD electron against the eReaxFF force manager and checking a small
 bead-count matrix with the modular integrator boundary in place.
+
+The restart gate then compares the continuous and split mixed BAOAB runs at
+the end of the trajectory and verifies the final restart and compatibility
+snapshots match exactly.
 
 ## Structural Stress Gate
 
