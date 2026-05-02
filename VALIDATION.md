@@ -111,6 +111,12 @@ has now been run at `P = 1, 2, 4`.  That matrix confirms that the manager path
 reduces to the centroid-equivalent result at `P = 1`, while the bead-local path
 splits away at larger bead counts in a controlled, reproducible way.
 
+Current status for mixed restart/output coverage: the mixed manager fixture now
+round-trips through a text restart file containing positions, bead-local
+charges, and solver guesses.  The regression also writes bead-wise and
+centroid-charge summary files and verifies that the restart reload reproduces
+the stored mixed state exactly.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;

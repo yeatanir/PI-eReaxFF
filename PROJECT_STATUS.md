@@ -59,6 +59,7 @@ Generated: 2026-04-30
 - [x] Add oracle centroid charge-policy regression gate.
 - [x] Add mixed oracle-manager fixture regression gate.
 - [x] Add mixed oracle-manager bead-count matrix regression gate.
+- [x] Add mixed oracle-manager restart/output regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -105,6 +106,7 @@ test_12_oracle_force_manager_p1: PASS
 test_13_oracle_charge_policy_modes: PASS
 test_14_mixed_oracle_manager_fixture: PASS
 test_15_mixed_oracle_manager_matrix: PASS
+test_16_mixed_oracle_manager_restart_output: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -155,6 +157,12 @@ The mixed oracle-manager matrix extends that check across `P = 1, 2, 4`, which
 confirms that the bead-local path collapses to the centroid path at `P = 1`
 and splits away at larger bead counts while keeping the classical subset
 replicated across all beads.
+
+The mixed restart/output gate writes a text restart containing bead positions,
+bead-local charges, and solver guesses, then reads it back and verifies exact
+roundtrip.  It also writes bead-wise and centroid charge summaries so the mixed
+manager path has a tested output/restart boundary, not just an in-memory
+fixture.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

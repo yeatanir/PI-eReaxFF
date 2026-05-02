@@ -123,6 +123,7 @@ test_12_oracle_force_manager_p1: PASS
 test_13_oracle_charge_policy_modes: PASS
 test_14_mixed_oracle_manager_fixture: PASS
 test_15_mixed_oracle_manager_matrix: PASS
+test_16_mixed_oracle_manager_restart_output: PASS
 All implemented tests passed.
 ```
 
@@ -148,6 +149,7 @@ free-ring propagation, thermostat, dummy/harmonic force, mixed group
 assignment, adapter-mediated V2 oracle coverage, and force-manager P=1
 integration, centroid charge-policy, and mixed oracle-manager fixture/matrix
 foundations are tested.  A thin harmonic PIMD driver now writes PIMD-native
-diagnostic outputs and supports restart.
+diagnostic outputs and supports restart, and the mixed manager path now has a
+tested restart/output format for bead positions, charges, and solver memory.
 Production eReaxFF coupling is intentionally still behind the validation gates
 described above.

@@ -446,3 +446,28 @@ Validation:
 
 - `test_15_mixed_oracle_manager_matrix` passes.
 - `make test` passes the full suite after adding the bead-count matrix.
+
+## 2026-05-02: Mixed Restart And Output Roundtrip
+
+Problem:
+
+- The mixed manager path needed a restart format of its own, not just the
+  harmonic single-coordinate restart.
+- The restart file had to preserve bead positions, bead-local charge memory, and
+  solver guesses in a text format that can be inspected and round-tripped.
+- The output side needed bead-wise and centroid charge summaries so the mixed
+  path has an output artifact, not only an in-memory state.
+
+Resolution:
+
+- Added `ereaxff_mixed_restart` with text write/read support for mixed bead
+  positions, charges, and solver guesses.
+- Added bead-wise and centroid charge summary writers.
+- Added a regression that writes the mixed restart/output files, checks they
+  exist, then reads the restart back and verifies exact roundtrip on the stored
+  arrays and policy metadata.
+
+Validation:
+
+- `test_16_mixed_oracle_manager_restart_output` passes.
+- `make test` passes the full suite after the restart/output addition.
