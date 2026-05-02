@@ -10,9 +10,10 @@ force_provider:
   type: ereaxff_oracle
   v1_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V1"
   v2_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2"
-  ffield: "ffield"
+  ffield: "tests/T4_60el/ffield"
   geo: "geo"
-  control: "control"
+  control: "tests/T4_60el/control"
+  iopt: "tests/reference/iopt"
 
 ring_polymer:
   convention: standard_ipi
@@ -49,4 +50,3 @@ output:
   beads_xyz: true
   reaxff_compat: true
   diagnostics: true
-

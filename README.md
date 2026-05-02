@@ -128,6 +128,7 @@ test_17_ereaxff_mixed_driver_smoke: PASS
 test_18_ereaxff_mixed_baoab_matrix: PASS
 test_19_ereaxff_mixed_baoab_restart: PASS
 test_20_ereaxff_mixed_baoab_policy_matrix: PASS
+test_21_ereaxff_mixed_baoab_config_smoke: PASS
 All implemented tests passed.
 ```
 
@@ -162,3 +163,6 @@ still behind the validation gates described above.
 The mixed eReaxFF BAOAB driver now exercises the force-manager and free-ring
 propagator on top of that boundary across a wider bead-count matrix and a
 restart-continuity gate.
+The config-smoke gate now proves that the mixed BAOAB executable can read the
+YAML-subset config file directly, including the explicit legacy V1 paths for
+`control`, `ffield`, and `iopt`.

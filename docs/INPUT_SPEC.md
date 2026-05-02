@@ -15,9 +15,31 @@ schema should retain these sections:
 
 Current implementation note: the eReaxFF adapter still uses legacy V1/V2
 fixture paths for `control`, `ffield`, and `iopt`, and it generates the phase4
-geometry through the validated legacy helper in its work directory.  That is
+geometry through the validated legacy helper in its work directory.  The mixed
+BAOAB driver now reads a YAML-subset config file directly, but the legacy
+oracle inputs remain explicit paths relative to the V1 root.  That is
 intentional for the current validation stage; the user-facing YAML path is the
 next layer to standardize once the mixed dynamics boundary is stable.
+
+## Current YAML-Subset Parser
+
+The Fortran input parser currently accepts:
+
+- `simulation`: `dt_fs`, `steps`, `seed`, `integrator`, `output_stride`,
+  `restart_stride`, `output_dir`;
+- `force_provider`: `type`, `v1_path`, `v2_path`, `work_root`, `ffield`,
+  `geo`, `control`, `iopt`, `smoke_binary`, `repeat_binary`,
+  `make_geo_script`, `timeout_runner`;
+- `ring_polymer`: `convention`, `default_beads`, `propagator`;
+- `charge_coupling`: `mode`, `charge_tolerance`;
+- `groups`: `name`, `selector`, `dynamics`, `mobile`, `beads`, `thermostat`,
+  `temperature_K`, plus currently ignored thermostat tuning keys such as
+  `gamma_fs_inv` and `centroid_gamma_fs_inv`;
+- `output`: `centroid_xyz`, `beads_xyz`, `reaxff_compat`, `diagnostics`.
+
+The parser is intentionally strict about structure and selector validity, but
+it does not yet implement full YAML features such as anchors, nested maps, or
+arbitrary sequences.
 
 ## Current Selector Subset
 

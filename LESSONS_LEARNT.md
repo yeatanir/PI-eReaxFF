@@ -568,3 +568,34 @@ Validation:
 
 - `test_20_ereaxff_mixed_baoab_policy_matrix` passes.
 - `make test` includes the policy matrix once the runner summary list prints it.
+
+## 2026-05-02: Mixed BAOAB Config Layer
+
+Problem:
+
+- The mixed BAOAB executable still hardcoded its output directory, bead count,
+  run length, charge policy, and legacy V1/V2 input paths.
+- The current config examples were too shallow for the adapter boundary because
+  they named only bare legacy filenames, not the actual V1-relative paths.
+- The first parser pass was too strict about group keys and rejected thermostat
+  tuning entries that are present in the config examples but not yet consumed
+  by the dynamics path.
+
+Resolution:
+
+- Added `src/core/input_config.f90` as a small YAML-subset parser for
+  simulation, force provider, ring polymer, charge coupling, output, and
+  group sections.
+- Taught `ereaxff_mixed_baoab_main.f90` to accept either the legacy positional
+  interface or a config file directly.
+- Wired the driver to use config-defined output directory, bead count, step
+  count, temperature, charge policy, group list, and explicit V1-relative
+  input paths for `control`, `ffield`, and `iopt`.
+- Relaxed group parsing for `gamma_fs_inv` and `centroid_gamma_fs_inv` so the
+  current example configs can carry thermostat tuning metadata without blocking
+  the smoke path.
+
+Validation:
+
+- `test_21_ereaxff_mixed_baoab_config_smoke` passes.
+- `make test` passes with the new config-driven gate included.

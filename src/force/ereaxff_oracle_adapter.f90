@@ -38,10 +38,13 @@ module ereaxff_oracle_adapter
 
 contains
 
-  subroutine oracle_adapter_init(adapter, template, v1_root, v2_root, work_root)
+  subroutine oracle_adapter_init(adapter, template, v1_root, v2_root, work_root, control_path, ffield_path, iopt_path, &
+      smoke_binary, repeat_binary, make_geo_script, timeout_runner)
     type(oracle_adapter_state), intent(inout) :: adapter
     type(system_state), intent(in) :: template
     character(len=*), intent(in) :: v1_root, v2_root, work_root
+    character(len=*), intent(in), optional :: control_path, ffield_path, iopt_path
+    character(len=*), intent(in), optional :: smoke_binary, repeat_binary, make_geo_script, timeout_runner
 
     call assert_nonempty(v1_root, "oracle_adapter_init: v1_root")
     call assert_nonempty(v2_root, "oracle_adapter_init: v2_root")
@@ -52,13 +55,41 @@ contains
     adapter%v1_root = trim(v1_root)
     adapter%v2_root = trim(v2_root)
     adapter%work_root = trim(work_root)
-    adapter%smoke_binary = trim(v2_root) // "/phase4_single_point_oracle"
-    adapter%repeat_binary = trim(v2_root) // "/single_point_repeatability"
-    adapter%make_geo_script = trim(v2_root) // "/tests/regression/test_phase4_fixed_graphene/make_geo.py"
-    adapter%timeout_runner = trim(v2_root) // "/tests/regression/test_force_repeatability/run_with_timeout.py"
-    adapter%control_path = trim(v1_root) // "/tests/T4_60el/control"
-    adapter%ffield_path = trim(v1_root) // "/tests/T4_60el/ffield"
-    adapter%iopt_path = trim(v1_root) // "/tests/reference/iopt"
+    if (present(smoke_binary) .and. len_trim(smoke_binary) > 0) then
+      adapter%smoke_binary = trim(smoke_binary)
+    else
+      adapter%smoke_binary = trim(v2_root) // "/phase4_single_point_oracle"
+    end if
+    if (present(repeat_binary) .and. len_trim(repeat_binary) > 0) then
+      adapter%repeat_binary = trim(repeat_binary)
+    else
+      adapter%repeat_binary = trim(v2_root) // "/single_point_repeatability"
+    end if
+    if (present(make_geo_script) .and. len_trim(make_geo_script) > 0) then
+      adapter%make_geo_script = trim(make_geo_script)
+    else
+      adapter%make_geo_script = trim(v2_root) // "/tests/regression/test_phase4_fixed_graphene/make_geo.py"
+    end if
+    if (present(timeout_runner) .and. len_trim(timeout_runner) > 0) then
+      adapter%timeout_runner = trim(timeout_runner)
+    else
+      adapter%timeout_runner = trim(v2_root) // "/tests/regression/test_force_repeatability/run_with_timeout.py"
+    end if
+    if (present(control_path) .and. len_trim(control_path) > 0) then
+      adapter%control_path = trim(control_path)
+    else
+      adapter%control_path = trim(v1_root) // "/tests/T4_60el/control"
+    end if
+    if (present(ffield_path) .and. len_trim(ffield_path) > 0) then
+      adapter%ffield_path = trim(ffield_path)
+    else
+      adapter%ffield_path = trim(v1_root) // "/tests/T4_60el/ffield"
+    end if
+    if (present(iopt_path) .and. len_trim(iopt_path) > 0) then
+      adapter%iopt_path = trim(iopt_path)
+    else
+      adapter%iopt_path = trim(v1_root) // "/tests/reference/iopt"
+    end if
     adapter%call_count = 0
     adapter%initialized = .true.
   end subroutine oracle_adapter_init

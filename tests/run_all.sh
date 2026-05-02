@@ -43,5 +43,6 @@ cat build/test_summaries/test_17_ereaxff_mixed_driver_smoke.summary
 cat build/test_summaries/test_18_ereaxff_mixed_baoab_matrix.summary
 cat build/test_summaries/test_19_ereaxff_mixed_baoab_restart.summary
 cat build/test_summaries/test_20_ereaxff_mixed_baoab_policy_matrix.summary
+cat build/test_summaries/test_21_ereaxff_mixed_baoab_config_smoke.summary
 
 echo "All implemented tests passed."
