@@ -62,7 +62,33 @@ for got, want in zip(values, expected):
 PY
 done
 
+bad_template_cfg="$WORK_DIR/bad_template.yaml"
+python3 - "$ROOT_DIR/config/example_mixed_classical_pimd.yaml" "$bad_template_cfg" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+target = pathlib.Path(sys.argv[2])
+source = source.replace("  template: phase4_fixed_graphene", "  template: unsupported_template")
+target.write_text(source, encoding="utf-8")
+PY
+
+set +e
+"$ROOT_DIR/build/ereaxff_mixed_baoab_main" "$bad_template_cfg" "$WORK_DIR/bad_template_out" > "$WORK_DIR/bad_template.log" 2>&1
+bad_template_status=$?
+set -e
+if [[ "$bad_template_status" -eq 0 ]]; then
+  echo "test_23_ereaxff_mixed_baoab_geometry_matrix: FAIL unsupported geometry template unexpectedly succeeded" | tee "$SUMMARY"
+  exit 1
+fi
+if ! grep -q "unsupported geometry template" "$WORK_DIR/bad_template.log"; then
+  echo "test_23_ereaxff_mixed_baoab_geometry_matrix: FAIL expected template error not found" | tee "$SUMMARY"
+  cat "$WORK_DIR/bad_template.log"
+  exit 1
+fi
+
 {
   echo "test_23_ereaxff_mixed_baoab_geometry_matrix: PASS"
   echo "  geometry_positions = ${positions[*]}"
+  echo "  negative_case = unsupported_geometry_template"
 } | tee "$SUMMARY"

@@ -42,6 +42,8 @@ module ereaxff_input_config
 
   type, public :: geometry_config
     character(len=64) :: template = "phase4_fixed_graphene"
+    character(len=512) :: structure_path = ""
+    character(len=512) :: geo_path = ""
     real(dp) :: electron_position_A(3) = [7.38300_dp, 5.68433_dp, 10.001_dp]
   end type geometry_config
 
@@ -141,9 +143,17 @@ contains
     if (config%simulation%output_stride < 0) error stop "validate_input_config: output_stride must be non-negative"
     if (config%ring_polymer%default_beads < 1) error stop "validate_input_config: default_beads must be positive"
     if (len_trim(config%force_provider%provider_type) == 0) error stop "validate_input_config: force provider empty"
-    if (trim(config%geometry%template) /= "phase4_fixed_graphene") then
+    select case (trim(config%geometry%template))
+    case ("phase4_fixed_graphene")
+      continue
+    case ("user_geo_structure")
+      if (len_trim(config%geometry%structure_path) == 0 .and. len_trim(config%geometry%geo_path) == 0) then
+        error stop "validate_input_config: user_geo_structure requires structure_path or geo_path"
+      end if
+      error stop "validate_input_config: user_geo_structure geometry loader not implemented"
+    case default
       error stop "validate_input_config: unsupported geometry template"
-    end if
+    end select
     if (size(config%groups) < 1) error stop "validate_input_config: no groups provided"
 
     do i = 1, size(config%groups)
@@ -293,6 +303,10 @@ contains
     select case (trim(key))
     case ("template")
       geometry%template = strip_quotes(value)
+    case ("structure_path")
+      geometry%structure_path = strip_quotes(value)
+    case ("geo_path")
+      geometry%geo_path = strip_quotes(value)
     case ("electron_position_A")
       call parse_real_triplet(value, geometry%electron_position_A)
     case ("electron_position_x")

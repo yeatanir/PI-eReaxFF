@@ -643,3 +643,17 @@ Validation:
 
 - `test_23_ereaxff_mixed_baoab_geometry_matrix` passes.
 - `make test` passes with the geometry matrix included.
+
+Problem found during implementation:
+
+- The first geometry negative test only covered unsupported selectors and
+  overlap.  It did not prove that the geometry contract itself rejects
+  unsupported templates with a clear message.
+
+Resolution:
+
+- Added a dedicated unsupported-`geometry.template` failure case to the
+  geometry matrix.
+- Reserved `structure_path` and `geo_path` in the parser as the future
+  user-supplied loader contract, while explicitly rejecting the unimplemented
+  `user_geo_structure` template.

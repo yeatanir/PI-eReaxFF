@@ -68,6 +68,7 @@ Generated: 2026-05-02
 - [x] Add config-driven mixed BAOAB smoke regression gate.
 - [x] Add config-driven mixed BAOAB matrix and negative-case regression gate.
 - [x] Add geometry-variation regression gate for the mixed BAOAB oracle path.
+- [x] Reserve explicit user geometry-path contract fields in the parser.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.

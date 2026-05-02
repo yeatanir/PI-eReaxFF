@@ -26,6 +26,8 @@ charge_coupling:
 
 geometry:
   template: phase4_fixed_graphene
+  structure_path: ""
+  geo_path: ""
   electron_position_A: [7.38300, 5.68433, 10.00100]
 
 groups:

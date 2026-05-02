@@ -173,3 +173,6 @@ policy while also checking that invalid selectors and overlapping groups fail
 cleanly.
 The geometry-matrix gate then varies the validated electron starting position
 within the phase4 helper contract and confirms the oracle boundary still holds.
+The geometry contract now also reserves explicit `structure_path` and
+`geo_path` fields for the future user-supplied structure loader, while still
+failing unsupported templates cleanly.
