@@ -498,3 +498,28 @@ Validation:
 - `test_17_ereaxff_mixed_driver_smoke` passes.
 - `make test` includes the executable gate once the runner summary list is
   updated to print it.
+
+## 2026-05-02: eReaxFF Mixed BAOAB Matrix
+
+Problem:
+
+- The smoke path proved the adapter boundary, but we still needed an actual
+  modular dynamics path to exercise the force manager and free-ring
+  propagator.
+- The mixed BAOAB path had to stay on the same oracle-backed fixture while
+  varying bead count, not by inventing a second system setup.
+
+Resolution:
+
+- Added `ereaxff_mixed_baoab_integrator.f90` to advance the PIMD electron with
+  a BAOAB-style force split and exact free ring-propagation.
+- Added `ereaxff_mixed_baoab_main.f90` as a thin executable that keeps the
+  oracle force-only, uses the mixed force manager, and writes the same mixed
+  diagnostics as the smoke driver.
+- Added a small `P = 1, 2, 4` matrix smoke test to catch integrator/boundary
+  regressions early.
+
+Validation:
+
+- `test_18_ereaxff_mixed_baoab_matrix` passes.
+- `make test` will include this gate once the runner summary list prints it.

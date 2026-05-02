@@ -40,5 +40,6 @@ cat build/test_summaries/test_14_mixed_oracle_manager_fixture.summary
 cat build/test_summaries/test_15_mixed_oracle_manager_matrix.summary
 cat build/test_summaries/test_16_mixed_oracle_manager_restart_output.summary
 cat build/test_summaries/test_17_ereaxff_mixed_driver_smoke.summary
+cat build/test_summaries/test_18_ereaxff_mixed_baoab_matrix.summary
 
 echo "All implemented tests passed."

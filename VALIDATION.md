@@ -123,6 +123,11 @@ standalone smoke driver.  The smoke test runs the executable twice with a
 restart boundary, verifies the output files are identical across the split
 run, and confirms the driver prints the expected eReaxFF adapter diagnostic.
 
+Current status for the modular mixed dynamics path: `ereaxff_mixed_baoab_main`
+advances the PIMD electron with the force-manager and free-ring propagator
+layer, then checks a small bead-count matrix at `P = 1, 2, 4` with the same
+oracle-backed mixed fixture.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;
@@ -155,6 +160,10 @@ oracle-backed mixed path.  It writes `pimd_energy.out`,
 `charge_by_bead.out`, `charge_centroid.out`, `electron_localization.out`, and
 `restart.dat`, then checks split-run equivalence through the same executable
 path.
+
+The mixed BAOAB driver extends that boundary one layer further by integrating
+the PIMD electron against the eReaxFF force manager and checking a small
+bead-count matrix with the modular integrator boundary in place.
 
 ## Structural Stress Gate
 

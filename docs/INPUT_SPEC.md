@@ -13,6 +13,12 @@ schema should retain these sections:
   bead count;
 - `output`: PIMD-native and compatibility output choices.
 
+Current implementation note: the eReaxFF adapter still uses legacy V1/V2
+fixture paths for `control`, `ffield`, and `iopt`, and it generates the phase4
+geometry through the validated legacy helper in its work directory.  That is
+intentional for the current validation stage; the user-facing YAML path is the
+next layer to standardize once the mixed dynamics boundary is stable.
+
 ## Current Selector Subset
 
 The current Fortran selector scaffold supports:

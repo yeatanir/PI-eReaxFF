@@ -125,6 +125,7 @@ test_14_mixed_oracle_manager_fixture: PASS
 test_15_mixed_oracle_manager_matrix: PASS
 test_16_mixed_oracle_manager_restart_output: PASS
 test_17_ereaxff_mixed_driver_smoke: PASS
+test_18_ereaxff_mixed_baoab_matrix: PASS
 All implemented tests passed.
 ```
 
@@ -140,8 +141,8 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Extend the eReaxFF-backed mixed driver from smoke coverage into the modular
-   dynamics path.
+1. Extend the eReaxFF-backed mixed driver from smoke coverage into broader
+   modular dynamics and restart coverage.
 2. Add ReaxFF compatibility projections on top of the mixed driver.
 
 ## Status
@@ -156,3 +157,5 @@ tested restart/output format for bead positions, charges, and solver memory.
 The mixed eReaxFF smoke driver now exercises that same restart/output boundary
 through the executable path.  Production eReaxFF coupling is intentionally
 still behind the validation gates described above.
+The mixed eReaxFF BAOAB driver now exercises the force-manager and free-ring
+propagator on top of that boundary across a small bead-count matrix.
