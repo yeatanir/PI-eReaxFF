@@ -40,6 +40,11 @@ module ereaxff_input_config
     real(dp) :: charge_tolerance = 1.0e-8_dp
   end type charge_coupling_config
 
+  type, public :: geometry_config
+    character(len=64) :: template = "phase4_fixed_graphene"
+    real(dp) :: electron_position_A(3) = [7.38300_dp, 5.68433_dp, 10.001_dp]
+  end type geometry_config
+
   type, public :: output_config
     logical :: centroid_xyz = .true.
     logical :: beads_xyz = .true.
@@ -52,6 +57,7 @@ module ereaxff_input_config
     type(force_provider_config) :: force_provider
     type(ring_polymer_config) :: ring_polymer
     type(charge_coupling_config) :: charge_coupling
+    type(geometry_config) :: geometry
     type(output_config) :: output
     type(particle_group_spec), allocatable :: groups(:)
   end type input_config
@@ -100,6 +106,8 @@ contains
         call parse_ring_polymer_line(config%ring_polymer, line)
       case ("charge_coupling")
         call parse_charge_line(config%charge_coupling, line)
+      case ("geometry")
+        call parse_geometry_line(config%geometry, line)
       case ("output")
         call parse_output_line(config%output, line)
       case ("groups")
@@ -133,6 +141,9 @@ contains
     if (config%simulation%output_stride < 0) error stop "validate_input_config: output_stride must be non-negative"
     if (config%ring_polymer%default_beads < 1) error stop "validate_input_config: default_beads must be positive"
     if (len_trim(config%force_provider%provider_type) == 0) error stop "validate_input_config: force provider empty"
+    if (trim(config%geometry%template) /= "phase4_fixed_graphene") then
+      error stop "validate_input_config: unsupported geometry template"
+    end if
     if (size(config%groups) < 1) error stop "validate_input_config: no groups provided"
 
     do i = 1, size(config%groups)
@@ -147,6 +158,7 @@ contains
     config%force_provider = force_provider_config()
     config%ring_polymer = ring_polymer_config()
     config%charge_coupling = charge_coupling_config()
+    config%geometry = geometry_config()
     config%output = output_config()
     if (allocated(config%groups)) deallocate(config%groups)
   end subroutine reset_input_config
@@ -272,6 +284,28 @@ contains
     end select
   end subroutine parse_charge_line
 
+  subroutine parse_geometry_line(geometry, line)
+    type(geometry_config), intent(inout) :: geometry
+    character(len=*), intent(in) :: line
+    character(len=1024) :: key, value
+
+    call split_key_value(line, key, value)
+    select case (trim(key))
+    case ("template")
+      geometry%template = strip_quotes(value)
+    case ("electron_position_A")
+      call parse_real_triplet(value, geometry%electron_position_A)
+    case ("electron_position_x")
+      read(value, *) geometry%electron_position_A(1)
+    case ("electron_position_y")
+      read(value, *) geometry%electron_position_A(2)
+    case ("electron_position_z")
+      read(value, *) geometry%electron_position_A(3)
+    case default
+      error stop "parse_geometry_line: unsupported key"
+    end select
+  end subroutine parse_geometry_line
+
   subroutine parse_output_line(output, line)
     type(output_config), intent(inout) :: output
     character(len=*), intent(in) :: line
@@ -319,6 +353,23 @@ contains
       error stop "parse_group_line: unsupported key"
     end select
   end subroutine parse_group_line
+
+  subroutine parse_real_triplet(text, values)
+    character(len=*), intent(in) :: text
+    real(dp), intent(out) :: values(3)
+    character(len=:), allocatable :: compact
+    integer :: ios
+
+    compact = strip_quotes(text)
+    compact = trim(adjustl(compact))
+    if (len_trim(compact) >= 2) then
+      if (compact(1:1) == "[" .and. compact(len_trim(compact):len_trim(compact)) == "]") then
+        compact = compact(2:len_trim(compact) - 1)
+      end if
+    end if
+    read(compact, *, iostat=ios) values
+    if (ios /= 0) error stop "parse_real_triplet: invalid triplet"
+  end subroutine parse_real_triplet
 
   subroutine split_key_value(line, key, value)
     character(len=*), intent(in) :: line

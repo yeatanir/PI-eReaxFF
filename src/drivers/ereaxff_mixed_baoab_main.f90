@@ -120,7 +120,11 @@ program ereaxff_mixed_baoab_main
   write(*,'(a)') "output directory: " // trim(output_dir)
 
   call init_system_state(state, ndim, nparticles)
-  call build_phase4_fixture(state)
+  if (config_mode) then
+    call build_phase4_fixture(state, cfg%geometry%electron_position_A)
+  else
+    call build_phase4_fixture(state, [7.38300_dp, 5.68433_dp, 10.001_dp])
+  end if
 
   start_step = 0
   if (len_trim(restart_in) > 0 .and. trim(restart_in) /= "none") then
@@ -142,6 +146,11 @@ program ereaxff_mixed_baoab_main
   if (pimd_count /= 1) error stop "ereaxff_mixed_baoab_main: exactly one PIMD particle is supported"
   pimd_index = first_particle_with_dynamics(assignment, dynamics_pimd)
   beads = assignment%beads(pimd_index)
+  if (config_mode) then
+    write(*,'(a,3(1x,es12.4))') "electron_start_A:", cfg%geometry%electron_position_A
+  else
+    write(*,'(a,3(1x,es12.4))') "electron_start_A:", [7.38300_dp, 5.68433_dp, 10.001_dp]
+  end if
 
   call init_ring_polymer(rp, beads, temperature_K, "standard_ipi")
   allocate(positions_A(ndim, nparticles, beads))
@@ -155,8 +164,14 @@ program ereaxff_mixed_baoab_main
     v_nm = restart_state%v_nm
     solver_guess = restart_state%solver_guess_by_bead
   else
-    call build_positions(state, positions_A, beads)
-    call perturb_pimd_beads(positions_A, pimd_index)
+    if (config_mode) then
+      call build_phase4_fixture(state, cfg%geometry%electron_position_A)
+      call build_positions(state, positions_A, beads)
+      call set_pimd_electron_position(positions_A, pimd_index, cfg%geometry%electron_position_A)
+    else
+      call build_positions(state, positions_A, beads)
+      call perturb_pimd_beads(positions_A, pimd_index)
+    end if
     q_nm = 0.0_dp
     v_nm = 0.0_dp
     call bead_positions_to_nm(positions_A, pimd_index, rp, q_nm)
@@ -213,14 +228,12 @@ program ereaxff_mixed_baoab_main
 
 contains
 
-  subroutine build_phase4_fixture(state_out)
+  subroutine build_phase4_fixture(state_out, electron_position_A)
     type(system_state), intent(inout) :: state_out
+    real(dp), intent(in) :: electron_position_A(3)
     integer :: ix, iy, unit_index, idx
     real(dp), parameter :: a_cc = 1.4210_dp
     real(dp), parameter :: z_c = 10.0_dp
-    real(dp), parameter :: el_x = 7.38300_dp
-    real(dp), parameter :: el_y = 5.68433_dp
-    real(dp), parameter :: el_z = 10.001_dp
     real(dp) :: ax, ay, x, y
     real(dp), dimension(4, 2) :: unit
 
@@ -240,7 +253,7 @@ contains
         end do
       end do
     end do
-    call set_particle(state_out, 61, 61, "El", electron_mass_amu, [el_x, el_y, el_z])
+    call set_particle(state_out, 61, 61, "El", electron_mass_amu, electron_position_A)
   end subroutine build_phase4_fixture
 
   subroutine build_positions(state_in, positions_out, beads_in)
@@ -253,6 +266,17 @@ contains
       positions_out(:, :, bead) = state_in%position_A(:, :)
     end do
   end subroutine build_positions
+
+  subroutine set_pimd_electron_position(positions_inout, pimd_index, electron_position_A)
+    real(dp), intent(inout) :: positions_inout(:, :, :)
+    integer, intent(in) :: pimd_index
+    real(dp), intent(in) :: electron_position_A(3)
+    integer :: bead
+
+    do bead = 1, size(positions_inout, 3)
+      positions_inout(:, pimd_index, bead) = electron_position_A
+    end do
+  end subroutine set_pimd_electron_position
 
   subroutine perturb_pimd_beads(positions_inout, pimd_index)
     real(dp), intent(inout) :: positions_inout(:, :, :)

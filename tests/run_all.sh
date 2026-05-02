@@ -45,5 +45,6 @@ cat build/test_summaries/test_19_ereaxff_mixed_baoab_restart.summary
 cat build/test_summaries/test_20_ereaxff_mixed_baoab_policy_matrix.summary
 cat build/test_summaries/test_21_ereaxff_mixed_baoab_config_smoke.summary
 cat build/test_summaries/test_22_ereaxff_mixed_baoab_config_matrix.summary
+cat build/test_summaries/test_23_ereaxff_mixed_baoab_geometry_matrix.summary
 
 echo "All implemented tests passed."

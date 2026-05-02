@@ -130,6 +130,7 @@ test_19_ereaxff_mixed_baoab_restart: PASS
 test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 test_21_ereaxff_mixed_baoab_config_smoke: PASS
 test_22_ereaxff_mixed_baoab_config_matrix: PASS
+test_23_ereaxff_mixed_baoab_geometry_matrix: PASS
 All implemented tests passed.
 ```
 
@@ -170,3 +171,5 @@ YAML-subset config file directly, including the explicit legacy V1 paths for
 The config-matrix gate then widens that path across bead count and charge
 policy while also checking that invalid selectors and overlapping groups fail
 cleanly.
+The geometry-matrix gate then varies the validated electron starting position
+within the phase4 helper contract and confirms the oracle boundary still holds.

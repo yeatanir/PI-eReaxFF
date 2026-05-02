@@ -620,3 +620,26 @@ Validation:
 
 - `test_22_ereaxff_mixed_baoab_config_matrix` passes.
 - `make test` passes with the matrix and failure checks included.
+
+## 2026-05-02: Geometry Variation Within The Oracle Contract
+
+Problem:
+
+- The mixed BAOAB path was still effectively locked to one electron starting
+  point inside the validated phase4 helper.
+- We needed a way to widen the geometry stress surface without claiming the
+  oracle supports arbitrary structures.
+
+Resolution:
+
+- Added a `geometry` section to the input parser with the validated
+  `phase4_fixed_graphene` template and an explicit electron starting position.
+- Threaded the geometry position into the mixed BAOAB driver and into the
+  legacy make-geo wrapper through the existing `PHASE4_EL_X/Y/Z` contract.
+- Added a geometry-matrix regression that exercises two electron starting
+  positions while keeping the same oracle boundary.
+
+Validation:
+
+- `test_23_ereaxff_mixed_baoab_geometry_matrix` passes.
+- `make test` passes with the geometry matrix included.

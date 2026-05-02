@@ -9,6 +9,8 @@ schema should retain these sections:
 - `force_provider`: provider type and eReaxFF input paths;
 - `ring_polymer`: convention, bead count, propagator;
 - `charge_coupling`: mode and tolerances;
+- `geometry`: currently the validated phase4 graphene template plus the
+  electron starting position in Angstrom;
 - `groups`: selectors, dynamics type, mobility, thermostat, temperature, and
   bead count;
 - `output`: PIMD-native and compatibility output choices.
