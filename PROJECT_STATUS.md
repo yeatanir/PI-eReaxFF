@@ -66,6 +66,7 @@ Generated: 2026-05-02
 - [x] Add eReaxFF mixed BAOAB charge-policy matrix regression gate.
 - [x] Add YAML-subset input parser for the mixed BAOAB driver.
 - [x] Add config-driven mixed BAOAB smoke regression gate.
+- [x] Add config-driven mixed BAOAB matrix and negative-case regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -118,6 +119,7 @@ test_18_ereaxff_mixed_baoab_matrix: PASS
 test_19_ereaxff_mixed_baoab_restart: PASS
 test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 test_21_ereaxff_mixed_baoab_config_smoke: PASS
+test_22_ereaxff_mixed_baoab_config_matrix: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```

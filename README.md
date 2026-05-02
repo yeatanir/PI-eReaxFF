@@ -129,6 +129,7 @@ test_18_ereaxff_mixed_baoab_matrix: PASS
 test_19_ereaxff_mixed_baoab_restart: PASS
 test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 test_21_ereaxff_mixed_baoab_config_smoke: PASS
+test_22_ereaxff_mixed_baoab_config_matrix: PASS
 All implemented tests passed.
 ```
 
@@ -166,3 +167,6 @@ restart-continuity gate.
 The config-smoke gate now proves that the mixed BAOAB executable can read the
 YAML-subset config file directly, including the explicit legacy V1 paths for
 `control`, `ffield`, and `iopt`.
+The config-matrix gate then widens that path across bead count and charge
+policy while also checking that invalid selectors and overlapping groups fail
+cleanly.

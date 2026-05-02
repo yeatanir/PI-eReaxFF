@@ -599,3 +599,24 @@ Validation:
 
 - `test_21_ereaxff_mixed_baoab_config_smoke` passes.
 - `make test` passes with the new config-driven gate included.
+
+## 2026-05-02: Mixed BAOAB Config Matrix And Negative Cases
+
+Problem:
+
+- One config smoke run is not enough to trust the new input layer.
+- We needed to confirm that the mixed BAOAB executable stays stable across a
+  small matrix of bead counts and charge policies, and that it still rejects
+  bad selectors and overlapping groups cleanly.
+
+Resolution:
+
+- Added a config-driven matrix gate covering `P = 1, 2, 4, 8` for both
+  `bead_local_acks2` and `centroid_acks2`.
+- Added deliberate negative cases for an invalid selector and overlapping
+  group definitions.
+
+Validation:
+
+- `test_22_ereaxff_mixed_baoab_config_matrix` passes.
+- `make test` passes with the matrix and failure checks included.
