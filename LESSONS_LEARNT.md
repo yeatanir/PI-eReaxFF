@@ -336,3 +336,30 @@ Validation:
 
 - `make test_08_reaxff_oracle_smoke` now passes directly.
 - `make test` passes the full suite with the adapter gate included.
+
+## 2026-05-02: Force-Manager P=1 Integration
+
+Problem:
+
+- The adapter was validated in isolation, but the next risk is the modular
+  manager layer accidentally scaling or reordering oracle results.
+- The first manager integration needed to preserve bead-local charge memory and
+  force scaling while still calling the oracle through the new manager path.
+- A direct manager call without a dedicated summary type would have hidden bead
+  status, solver-memory, and charge outputs.
+
+Resolution:
+
+- Added `oracle_bead_summary` and `evaluate_oracle_beads` to
+  `bead_force_manager.f90`.
+- Restricted the first manager path to explicit `bead_local_acks2` so the
+  manager cannot silently cross into centroid or frozen charge modes yet.
+- Added a `P=1` regression that checks the manager path against the validated
+  V2 oracle values for energy, max force, charge sum, solver memory, and charge
+  memory update.
+
+Validation:
+
+- `test_12_oracle_force_manager_p1` passes and confirms that the manager path
+  preserves the validated oracle outputs at `P=1`.
+- `make test` still passes the entire suite after the manager integration.

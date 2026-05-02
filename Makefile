@@ -22,10 +22,11 @@ TEST06_SRCS := tests/test_06_force_scaling/test_force_scaling.f90
 TEST07_SRCS := tests/test_07_charge_memory/test_charge_memory.f90
 TEST08_SRCS := tests/test_08_reaxff_oracle_smoke/test_oracle_adapter.f90
 TEST09_SRCS := tests/test_09_mixed_classical_pimd_config/test_mixed_classical_pimd_config.f90
+TEST12_SRCS := tests/test_12_oracle_force_manager_p1/test_oracle_force_manager_p1.f90
 TEST11_SRCS := tests/test_11_structural_stress/test_structural_stress.f90
 TEST11_NEG_SRCS := tests/test_11_structural_stress/test_invalid_group_overlap.f90
 
-.PHONY: all test build_tests harmonic_pimd_main test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress clean
+.PHONY: all test build_tests harmonic_pimd_main test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 clean
 
 all: build_tests harmonic_pimd_main
 
@@ -66,6 +67,10 @@ test_08_reaxff_oracle_smoke: $(BUILD_DIR) $(MOD_DIR)
 test_09_mixed_classical_pimd_config: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST09_SRCS) -o $(BUILD_DIR)/test_09_mixed_classical_pimd_config
 
+test_12_oracle_force_manager_p1: $(BUILD_DIR) $(MOD_DIR)
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST12_SRCS) -o $(BUILD_DIR)/test_12_oracle_force_manager_p1
+	tests/test_12_oracle_force_manager_p1/run_oracle_force_manager_p1.sh
+
 harmonic_pimd_main: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(PIMD_SRCS) $(THERMOSTAT_SRCS) $(INTEGRATOR_SRCS) $(OUTPUT_SRCS) $(HARMONIC_DRIVER_SRCS) -o $(BUILD_DIR)/harmonic_pimd_main
 
@@ -77,7 +82,7 @@ test_11_structural_stress: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST11_NEG_SRCS) -o $(BUILD_DIR)/test_11_invalid_group_overlap
 	tests/test_11_structural_stress/run_structural_stress.sh
 
-build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress
+build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1
 
 test:
 	./tests/run_all.sh

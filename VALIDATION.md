@@ -87,6 +87,11 @@ rejects NaN input.  The regression checks `P=1` adapter equivalence, adapter
 repeatability, and the negative NaN path before any mixed-classical/PIMD work
 builds on top of it.
 
+Current status for the manager layer: `evaluate_oracle_beads` now exercises the
+same adapter at `P=1`, updates bead-local charge memory, and verifies that the
+force manager preserves the validated oracle outputs when the oracle is reached
+through the modular bead loop.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;

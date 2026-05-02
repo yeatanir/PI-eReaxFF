@@ -55,6 +55,7 @@ Generated: 2026-04-30
 - [x] Add force provider/scaling regression test.
 - [x] Add charge policy/memory regression test.
 - [x] Add eReaxFF oracle adapter and adapter-mediated V2 smoke/repeatability gate.
+- [x] Add oracle force-manager P=1 regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -97,6 +98,7 @@ test_08_reaxff_oracle_smoke: PASS
 test_09_mixed_classical_pimd_config: PASS
 test_10_harmonic_driver_outputs: PASS
 test_11_structural_stress: PASS
+test_12_oracle_force_manager_p1: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -124,6 +126,11 @@ work directory, returns eV energy with eV/Angstrom forces and charges, and
 rejects NaN input.  The adapter gate verifies `P=1` reproduction against the
 validated V2 oracle, repeatability across two adapter calls, and a negative
 NaN-rejection path.
+
+The force-manager gate then exercises the same adapter through
+`evaluate_oracle_beads` at `P=1`, confirming that bead-local charge memory,
+scaled forces, and PIMD averaging remain consistent when the oracle is reached
+through the modular manager layer.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

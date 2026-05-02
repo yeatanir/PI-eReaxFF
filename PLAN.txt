@@ -7,8 +7,9 @@ Current state
 - The V2 eReaxFF oracle is now mediated by `ereaxff_oracle_adapter`.
 - The adapter currently provides `P=1` equivalence, repeatability, and NaN
   rejection gates against the validated V2 oracle.
-- The next step is to use the same adapter boundary in mixed classical/PIMD
-  force-manager paths without putting dynamics inside the oracle.
+- The force-manager layer now exercises the same adapter at `P=1`.
+- The next step is to extend that manager path to mixed classical/PIMD charge
+  policies and bead counts without putting dynamics inside the oracle.
 
 Execution plan
 1. Keep the adapter contract explicit while expanding physics coverage:
@@ -30,7 +31,8 @@ Execution plan
    - NaN/Inf rejection
    - timeout or failure handling
    - `P=1` adapter-mediated reproduction of the validated V2 oracle
-6. Wire the adapter into the force-manager path using existing policy modules.
+6. Extend the manager path to mixed classical/PIMD charge policies and bead
+   counts using existing policy modules.
 7. Add mixed classical/PIMD regression coverage for:
    - one PIMD electron + classical graphene
    - frozen background electrons
