@@ -58,6 +58,7 @@ Generated: 2026-04-30
 - [x] Add oracle force-manager P=1 regression gate.
 - [x] Add oracle centroid charge-policy regression gate.
 - [x] Add mixed oracle-manager fixture regression gate.
+- [x] Add mixed oracle-manager bead-count matrix regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -103,6 +104,7 @@ test_11_structural_stress: PASS
 test_12_oracle_force_manager_p1: PASS
 test_13_oracle_charge_policy_modes: PASS
 test_14_mixed_oracle_manager_fixture: PASS
+test_15_mixed_oracle_manager_matrix: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -148,6 +150,11 @@ local versus centroid charge-policy comparison on a mixed bead geometry where
 the electron bead positions differ.  It confirms that the classical subset is
 replicated across beads, bead-local charge memory diverges across beads, and
 centroid contraction broadcasts a shared charge state.
+
+The mixed oracle-manager matrix extends that check across `P = 1, 2, 4`, which
+confirms that the bead-local path collapses to the centroid path at `P = 1`
+and splits away at larger bead counts while keeping the classical subset
+replicated across all beads.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

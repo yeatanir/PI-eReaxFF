@@ -106,6 +106,11 @@ beads, that bead-local charge memory diverges when the PIMD electron bead
 positions differ, and that centroid contraction collapses the bead-local charge
 differences back to a shared state.
 
+Current status for mixed oracle-manager bead-count coverage: the same fixture
+has now been run at `P = 1, 2, 4`.  That matrix confirms that the manager path
+reduces to the centroid-equivalent result at `P = 1`, while the bead-local path
+splits away at larger bead counts in a controlled, reproducible way.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;

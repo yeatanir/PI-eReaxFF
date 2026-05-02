@@ -420,3 +420,29 @@ Validation:
 - `test_14_mixed_oracle_manager_fixture` passes.
 - `make test` passes the full suite with the mixed oracle-manager fixture
   included.
+
+## 2026-05-02: Mixed Oracle-Manager Bead-Count Matrix
+
+Problem:
+
+- The mixed manager coverage needed a bead-count matrix, not just one `P = 2`
+  case.
+- The bead-local and centroid paths had to be checked at `P = 1` as a
+  convergence point, then at larger bead counts to confirm the split between
+  local and centroid charge handling.
+- The regression had to stay on the same phase4-derived system so the only
+  variable was bead count and bead-local perturbation.
+
+Resolution:
+
+- Added a `P = 1, 2, 4` matrix on the phase4 mixed fixture.
+- Reused the same classical carbon plus one PIMD electron assignment and
+  varied only the number of beads and the electron bead offsets.
+- Verified that `P = 1` collapses to the centroid-equivalent result, while
+  `P > 1` produces nonzero bead-local charge spread and nonzero bead-local vs
+  centroid energy differences.
+
+Validation:
+
+- `test_15_mixed_oracle_manager_matrix` passes.
+- `make test` passes the full suite after adding the bead-count matrix.

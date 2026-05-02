@@ -40,6 +40,7 @@ Execution plan
    - frozen background electrons
    - centroid charge approximation
    - mixed oracle-manager bead-geometry fixture
+   - mixed oracle-manager bead-count matrix
 8. Expand output checks so PIMD-native diagnostics and ReaxFF compatibility
    outputs both remain stable.
 9. Keep `LESSONS_LEARNT.md`, `PROJECT_STATUS.md`, and `VALIDATION.md` updated
