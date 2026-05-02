@@ -99,6 +99,13 @@ centroid evaluation, then broadcasts the result back to the bead summary.  The
 policy layer still treats `frozen_charges` and `no_charge_coupling` as valid
 names, but not as oracle-manager modes.
 
+Current status for mixed oracle-manager fixtures: a nontrivial phase4-derived
+test now exercises one PIMD electron plus classical carbon atoms on a mixed
+two-bead geometry.  It verifies that the classical subset is replicated across
+beads, that bead-local charge memory diverges when the PIMD electron bead
+positions differ, and that centroid contraction collapses the bead-local charge
+differences back to a shared state.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;

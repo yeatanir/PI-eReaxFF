@@ -57,6 +57,7 @@ Generated: 2026-04-30
 - [x] Add eReaxFF oracle adapter and adapter-mediated V2 smoke/repeatability gate.
 - [x] Add oracle force-manager P=1 regression gate.
 - [x] Add oracle centroid charge-policy regression gate.
+- [x] Add mixed oracle-manager fixture regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -101,6 +102,7 @@ test_10_harmonic_driver_outputs: PASS
 test_11_structural_stress: PASS
 test_12_oracle_force_manager_p1: PASS
 test_13_oracle_charge_policy_modes: PASS
+test_14_mixed_oracle_manager_fixture: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -139,6 +141,13 @@ The centroid-policy gate exercises the same manager path with explicit
 confirms that the manager classifies `bead_local_acks2` and
 `centroid_acks2` as oracle-supported while leaving `frozen_charges` and
 `no_charge_coupling` outside the oracle manager boundary.
+
+The mixed oracle-manager fixture then exercises a nontrivial group selection on
+the phase4 template: one PIMD electron, classical carbon atoms, and a bead-
+local versus centroid charge-policy comparison on a mixed bead geometry where
+the electron bead positions differ.  It confirms that the classical subset is
+replicated across beads, bead-local charge memory diverges across beads, and
+centroid contraction broadcasts a shared charge state.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

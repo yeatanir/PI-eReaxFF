@@ -36,5 +36,6 @@ cat build/test_summaries/test_10_harmonic_driver_outputs.summary
 cat build/test_summaries/test_11_structural_stress.summary
 cat build/test_summaries/test_12_oracle_force_manager_p1.summary
 cat build/test_summaries/test_13_oracle_charge_policy_modes.summary
+cat build/test_summaries/test_14_mixed_oracle_manager_fixture.summary
 
 echo "All implemented tests passed."

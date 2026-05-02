@@ -121,6 +121,7 @@ test_11_structural_stress: PASS
 test_11_invalid_group_overlap: PASS
 test_12_oracle_force_manager_p1: PASS
 test_13_oracle_charge_policy_modes: PASS
+test_14_mixed_oracle_manager_fixture: PASS
 All implemented tests passed.
 ```
 
@@ -144,8 +145,8 @@ All implemented tests passed.
 This repository is pre-production research software.  The normal-mode,
 free-ring propagation, thermostat, dummy/harmonic force, mixed group
 assignment, adapter-mediated V2 oracle coverage, and force-manager P=1
-integration, and centroid charge-policy foundations are tested.  A thin
-harmonic PIMD driver now writes PIMD-native diagnostic outputs and supports
-restart.
+integration, centroid charge-policy, and mixed oracle-manager fixture
+foundations are tested.  A thin harmonic PIMD driver now writes PIMD-native
+diagnostic outputs and supports restart.
 Production eReaxFF coupling is intentionally still behind the validation gates
 described above.

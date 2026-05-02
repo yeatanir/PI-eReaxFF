@@ -392,3 +392,31 @@ Validation:
 
 - `test_13_oracle_charge_policy_modes` passes.
 - `make test` passes the full suite after the policy dispatch update.
+
+## 2026-05-02: Mixed Oracle-Manager Fixture
+
+Problem:
+
+- The manager layer needed a nontrivial mixed-bead regression, not just an
+  identical-beads comparison.
+- The phase4 oracle adapter only uses the electron coordinate from each bead, so
+  the mixed fixture had to vary the PIMD electron bead positions while keeping
+  the classical subset replicated across beads.
+- The new regression needed to stay structural, not just repeat the exact
+  identical-bead charge-policy gate.
+
+Resolution:
+
+- Added a two-bead phase4-derived fixture with one PIMD electron and classical
+  carbon atoms.
+- Kept the classical subset identical across beads and perturbed the electron
+  bead coordinates so bead-local and centroid charge handling produce distinct
+  behavior.
+- Verified that the bead-local path accumulates nonzero bead-to-bead charge
+  differences while the centroid path broadcasts a shared charge state.
+
+Validation:
+
+- `test_14_mixed_oracle_manager_fixture` passes.
+- `make test` passes the full suite with the mixed oracle-manager fixture
+  included.
