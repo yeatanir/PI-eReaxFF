@@ -16,10 +16,16 @@ is an explicit approximation and must be printed in diagnostics.
 
 - policy-name validation;
 - detection of policies that require bead-local memory;
+- detection of policies that the oracle manager supports directly;
 - a small `charge_memory_state` with `charges_by_bead(nparticles, beads)`;
 - per-bead charge updates;
 - charge sum by bead;
 - maximum charge difference across beads.
+
+The oracle manager currently supports `bead_local_acks2` and
+`centroid_acks2`.  `frozen_charges` and `no_charge_coupling` remain valid
+policy names for the broader engine, but they are not treated as oracle-manager
+modes.
 
 The current implementation is a validation scaffold for later ACKS2 coupling.
 It deliberately does not call eReaxFF yet.

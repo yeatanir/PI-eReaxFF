@@ -2,7 +2,8 @@ module ereaxff_bead_force_manager
   use ereaxff_kinds, only: dp
   use ereaxff_force_provider_base, only: force_result
   use ereaxff_charge_coupling_policy, only: charge_memory_state, &
-      charge_policy_is_valid, charge_policy_uses_bead_local_memory, set_bead_charges
+      charge_policy_is_valid, charge_policy_supports_oracle_manager, &
+      charge_policy_uses_centroid_contraction, charge_policy_uses_bead_local_memory, set_bead_charges
   use ereaxff_harmonic_force_provider, only: harmonic_force_provider_state, harmonic_force_provider_evaluate
   use ereaxff_dummy_force_provider, only: dummy_force_provider_state, dummy_force_provider_evaluate
   use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_result, oracle_adapter_eval
@@ -82,24 +83,29 @@ contains
     if (.not. charge_policy_is_valid(charge_policy)) then
       error stop "evaluate_oracle_beads: invalid charge policy"
     end if
-    if (.not. charge_policy_uses_bead_local_memory(charge_policy)) then
-      error stop "evaluate_oracle_beads: only bead_local_acks2 is implemented in the manager path"
-    end if
     call evaluate_oracle_shapes(positions_A, solver_guess_by_bead, charge_memory, summary)
     p = size(positions_A, 3)
+    if (.not. charge_policy_supports_oracle_manager(charge_policy)) then
+      error stop "evaluate_oracle_beads: oracle manager supports only bead_local_acks2 and centroid_acks2"
+    end if
 
-    do bead = 1, p
-      call oracle_adapter_eval(provider, positions_A(:, :, bead), &
-          charge_memory%charges_by_bead(:, bead), solver_guess_by_bead(:, bead), bead_id=bead, &
-          charge_policy=charge_policy, result=result)
-      summary%bead_energies_eV(bead) = result%force%energy_eV
-      summary%scaled_forces_eV_per_A(:, :, bead) = result%force%forces_eV_per_A / real(p, dp)
-      summary%bead_charges(:, bead) = result%force%charges
-      summary%bead_solver_guess(:, bead) = result%solver_guess
-      summary%bead_status(bead) = result%force%status
-      call set_bead_charges(charge_memory, bead, result%force%charges)
-    end do
-    summary%pimd_potential_eV = sum(summary%bead_energies_eV) / real(p, dp)
+    if (charge_policy_uses_bead_local_memory(charge_policy)) then
+      do bead = 1, p
+        call oracle_adapter_eval(provider, positions_A(:, :, bead), &
+            charge_memory%charges_by_bead(:, bead), solver_guess_by_bead(:, bead), bead_id=bead, &
+            charge_policy=charge_policy, result=result)
+        summary%bead_energies_eV(bead) = result%force%energy_eV
+        summary%scaled_forces_eV_per_A(:, :, bead) = result%force%forces_eV_per_A / real(p, dp)
+        summary%bead_charges(:, bead) = result%force%charges
+        summary%bead_solver_guess(:, bead) = result%solver_guess
+        summary%bead_status(bead) = result%force%status
+        call set_bead_charges(charge_memory, bead, result%force%charges)
+      end do
+      summary%pimd_potential_eV = sum(summary%bead_energies_eV) / real(p, dp)
+    else if (charge_policy_uses_centroid_contraction(charge_policy)) then
+      call evaluate_oracle_centroid(provider, positions_A, charge_memory, solver_guess_by_bead, &
+          charge_policy, summary, result)
+    end if
   end subroutine evaluate_oracle_beads
 
   subroutine average_forces_over_beads(bead_forces, mean_forces)
@@ -196,5 +202,42 @@ contains
     summary%bead_status = 0
     summary%pimd_potential_eV = 0.0_dp
   end subroutine evaluate_oracle_shapes
+
+  subroutine evaluate_oracle_centroid(provider, positions_A, charge_memory, solver_guess_by_bead, &
+      charge_policy, summary, result)
+    type(oracle_adapter_state), intent(inout) :: provider
+    real(dp), intent(in) :: positions_A(:, :, :)
+    type(charge_memory_state), intent(inout) :: charge_memory
+    real(dp), intent(inout) :: solver_guess_by_bead(:, :)
+    character(len=*), intent(in) :: charge_policy
+    type(oracle_bead_summary), intent(inout) :: summary
+    type(oracle_adapter_result), intent(inout) :: result
+    real(dp), allocatable :: centroid_positions(:, :)
+    real(dp), allocatable :: centroid_charges(:)
+    real(dp), allocatable :: centroid_solver_guess(:)
+    integer :: bead, p
+
+    p = size(positions_A, 3)
+    allocate(centroid_positions(size(positions_A, 1), size(positions_A, 2)))
+    allocate(centroid_charges(size(charge_memory%charges_by_bead, 1)))
+    allocate(centroid_solver_guess(size(solver_guess_by_bead, 1)))
+    centroid_positions = sum(positions_A, dim=3) / real(p, dp)
+    centroid_charges = sum(charge_memory%charges_by_bead, dim=2) / real(p, dp)
+    centroid_solver_guess = sum(solver_guess_by_bead, dim=2) / real(p, dp)
+
+    call oracle_adapter_eval(provider, centroid_positions, centroid_charges, centroid_solver_guess, &
+        bead_id=1, charge_policy=charge_policy, result=result)
+
+    do bead = 1, p
+      summary%bead_energies_eV(bead) = result%force%energy_eV
+      summary%scaled_forces_eV_per_A(:, :, bead) = result%force%forces_eV_per_A / real(p, dp)
+      summary%bead_charges(:, bead) = result%force%charges
+      summary%bead_solver_guess(:, bead) = result%solver_guess
+      summary%bead_status(bead) = result%force%status
+      call set_bead_charges(charge_memory, bead, result%force%charges)
+      solver_guess_by_bead(:, bead) = result%solver_guess
+    end do
+    summary%pimd_potential_eV = result%force%energy_eV
+  end subroutine evaluate_oracle_centroid
 
 end module ereaxff_bead_force_manager

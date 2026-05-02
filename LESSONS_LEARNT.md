@@ -363,3 +363,32 @@ Validation:
 - `test_12_oracle_force_manager_p1` passes and confirms that the manager path
   preserves the validated oracle outputs at `P=1`.
 - `make test` still passes the entire suite after the manager integration.
+
+## 2026-05-02: Oracle Centroid Charge-Policy Dispatch
+
+Problem:
+
+- The manager path needed an explicit centroid-contraction branch instead of a
+  hidden special case inside the oracle adapter.
+- The policy layer had valid names for `frozen_charges` and
+  `no_charge_coupling`, but the oracle manager boundary still needed to state
+  clearly which policies it can actually execute.
+- A centroid regression needed to prove that the new branch does not disturb
+  the existing bead-local path.
+
+Resolution:
+
+- Added `charge_policy_uses_centroid_contraction` and
+  `charge_policy_supports_oracle_manager`.
+- Extended `evaluate_oracle_beads` so `centroid_acks2` contracts bead
+  positions, charge memory, and solver guesses to a shared oracle evaluation,
+  then broadcasts the result back to the bead summary.
+- Kept `frozen_charges` and `no_charge_coupling` as valid policy names but not
+  oracle-manager modes.
+- Added a two-bead identical-geometry regression that compares bead-local and
+  centroid-contracted results.
+
+Validation:
+
+- `test_13_oracle_charge_policy_modes` passes.
+- `make test` passes the full suite after the policy dispatch update.

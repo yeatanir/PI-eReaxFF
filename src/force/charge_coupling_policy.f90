@@ -17,6 +17,8 @@ module ereaxff_charge_coupling_policy
 
   public :: charge_policy_is_valid
   public :: charge_policy_uses_bead_local_memory
+  public :: charge_policy_uses_centroid_contraction
+  public :: charge_policy_supports_oracle_manager
   public :: init_charge_memory
   public :: set_bead_charges
   public :: charge_sum_for_bead
@@ -41,6 +43,19 @@ contains
 
     uses_memory = trim(policy) == charge_policy_bead_local_acks2
   end function charge_policy_uses_bead_local_memory
+
+  logical function charge_policy_uses_centroid_contraction(policy) result(uses_centroid)
+    character(len=*), intent(in) :: policy
+
+    uses_centroid = trim(policy) == charge_policy_centroid_acks2
+  end function charge_policy_uses_centroid_contraction
+
+  logical function charge_policy_supports_oracle_manager(policy) result(supports_manager)
+    character(len=*), intent(in) :: policy
+
+    supports_manager = charge_policy_uses_bead_local_memory(policy) .or. &
+        charge_policy_uses_centroid_contraction(policy)
+  end function charge_policy_supports_oracle_manager
 
   subroutine init_charge_memory(memory, nparticles, beads, policy)
     type(charge_memory_state), intent(inout) :: memory
@@ -97,4 +112,3 @@ contains
   end function max_charge_difference_across_beads
 
 end module ereaxff_charge_coupling_policy
-

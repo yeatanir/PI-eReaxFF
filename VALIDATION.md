@@ -92,6 +92,13 @@ same adapter at `P=1`, updates bead-local charge memory, and verifies that the
 force manager preserves the validated oracle outputs when the oracle is reached
 through the modular bead loop.
 
+Current status for charge-policy dispatch: `bead_local_acks2` and
+`centroid_acks2` are both accepted by the oracle manager.  The centroid branch
+contracts bead positions, charge memory, and solver guesses to a shared
+centroid evaluation, then broadcasts the result back to the bead summary.  The
+policy layer still treats `frozen_charges` and `no_charge_coupling` as valid
+names, but not as oracle-manager modes.
+
 ## Phase 8: Mixed Classical/PIMD Configuration
 
 - one PIMD electron plus fixed classical graphene;
