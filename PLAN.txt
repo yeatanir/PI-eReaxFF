@@ -1,0 +1,71 @@
+eReaxFF-PIMD Modular Rewrite Plan
+
+Current state
+- Core utilities, normal modes, free ring-polymer propagation, thermostats,
+  force providers, mixed group assignment, outputs, and restart scaffolding are
+  implemented and tested.
+- The V2 eReaxFF oracle is now mediated by `ereaxff_oracle_adapter`.
+- The adapter currently provides `P=1` equivalence, repeatability, and NaN
+  rejection gates against the validated V2 oracle.
+- The next step is to use the same adapter boundary in mixed classical/PIMD
+  force-manager paths without putting dynamics inside the oracle.
+
+Execution plan
+1. Keep the adapter contract explicit while expanding physics coverage:
+   - `adapter_init(ff_config, system_config) -> status`
+   - `adapter_eval(geometry, bead_id, charge_memory_in, policy_flags) -> result`
+   - `result` must include energy, forces, charges, charge memory out,
+     diagnostics, and status
+   - no bead propagation, thermostatting, output writing, or restart ownership
+2. Keep the oracle boundary force-only:
+   - initialize force field state
+   - evaluate energy, forces, and charges
+   - return status and diagnostics
+   - do not propagate beads, thermostat, or write trajectories
+3. Preserve bead-local charge memory for `bead_local_acks2`.
+4. Keep centroid contraction explicit and opt-in for `centroid_acks2`.
+5. Add early adapter regression gates:
+   - one static geometry smoke test
+   - A/B/A/B repeatability
+   - NaN/Inf rejection
+   - timeout or failure handling
+   - `P=1` adapter-mediated reproduction of the validated V2 oracle
+6. Wire the adapter into the force-manager path using existing policy modules.
+7. Add mixed classical/PIMD regression coverage for:
+   - one PIMD electron + classical graphene
+   - frozen background electrons
+   - centroid charge approximation
+8. Expand output checks so PIMD-native diagnostics and ReaxFF compatibility
+   outputs both remain stable.
+9. Keep `LESSONS_LEARNT.md`, `PROJECT_STATUS.md`, and `VALIDATION.md` updated
+    after each completed step.
+
+Test gates before proceeding
+- `make test`
+- adapter smoke test
+- repeatability test
+- `P=1` adapter equivalence test
+- mixed group regression
+- output/restart regression
+
+Rules
+- Do not modify V1/V2 legacy code in place.
+- Do not let the oracle own MD state.
+- Do not silently fall back from PILE-G to PILE-L.
+- Do not accept the `sqrt(P)` ring-polymer prefactor.
+- Fail fast on invalid configuration, invalid charge policy, or failed oracle
+  status.
+
+Definition of done for the next phase
+- The new engine can call the legacy V2 oracle only through
+  `ereaxff_oracle_adapter`.
+- The adapter has no ownership of MD state, bead propagation, thermostatting,
+  output writing, or restart logic.
+- `P=1` adapter-mediated force evaluation reproduces the validated V2 oracle
+  energy, forces, charges, and ACKS2 diagnostics.
+- Bead-local ACKS2 memory is preserved and tested.
+- Centroid ACKS2 is implemented only as an explicit opt-in policy.
+- A/B/A/B repeatability, NaN/Inf rejection, mixed group regression, and
+  output/restart regression all pass.
+- Documentation explains the adapter boundary, charge policy, thermostat
+  convention, ring-polymer prefactor, and compatibility-output policy.

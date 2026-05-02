@@ -20,6 +20,7 @@ TEST05_SRCS := tests/test_05_pile_mode_temperatures/test_pile_mode_temperatures.
 TEST05_STUB_SRCS := tests/test_05_pile_mode_temperatures/test_pile_g_stub.f90
 TEST06_SRCS := tests/test_06_force_scaling/test_force_scaling.f90
 TEST07_SRCS := tests/test_07_charge_memory/test_charge_memory.f90
+TEST08_SRCS := tests/test_08_reaxff_oracle_smoke/test_oracle_adapter.f90
 TEST09_SRCS := tests/test_09_mixed_classical_pimd_config/test_mixed_classical_pimd_config.f90
 TEST11_SRCS := tests/test_11_structural_stress/test_structural_stress.f90
 TEST11_NEG_SRCS := tests/test_11_structural_stress/test_invalid_group_overlap.f90
@@ -58,7 +59,8 @@ test_06_force_scaling: $(BUILD_DIR) $(MOD_DIR)
 test_07_charge_memory: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST07_SRCS) -o $(BUILD_DIR)/test_07_charge_memory
 
-test_08_reaxff_oracle_smoke: $(BUILD_DIR)
+test_08_reaxff_oracle_smoke: $(BUILD_DIR) $(MOD_DIR)
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST08_SRCS) -o $(BUILD_DIR)/test_08_reaxff_oracle_smoke
 	tests/test_08_reaxff_oracle_smoke/run_v2_oracle_smoke.sh
 
 test_09_mixed_classical_pimd_config: $(BUILD_DIR) $(MOD_DIR)

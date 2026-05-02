@@ -54,8 +54,7 @@ Generated: 2026-04-30
 - [x] Add charge coupling policy names and bead-local charge memory helper.
 - [x] Add force provider/scaling regression test.
 - [x] Add charge policy/memory regression test.
-- [x] Add eReaxFF oracle adapter failure stub.
-- [x] Add external V2 eReaxFF oracle smoke/repeatability gate.
+- [x] Add eReaxFF oracle adapter and adapter-mediated V2 smoke/repeatability gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -71,7 +70,7 @@ Generated: 2026-04-30
 - [x] Add split-run restart equivalence regression including RNG state.
 - [x] Add structural stress/edge-case test suite.
 - [x] Add negative overlapping-group failure test.
-- [ ] Connect eReaxFF oracle adapter to legacy V2 oracle.
+- [x] Connect eReaxFF oracle adapter to legacy V2 oracle.
 
 ## First Test Command
 
@@ -118,11 +117,13 @@ The mixed group test verifies config-style selection of classical carbons, one
 PIMD electron with 16 beads, and frozen background electrons without source-code
 special cases.
 
-The eReaxFF oracle smoke uses the existing V2 force-oracle executable as an
-external legacy boundary check without building or modifying V1/V2.  It runs a
-61-particle static graphene/electron fixture under timeout, verifies finite
-energy/force/charge/status fields, and runs the V2 repeatability executable for
-three evaluations with zero force and charge differences.
+The eReaxFF oracle adapter now owns the legacy V2 subprocess boundary.  It
+generates the phase4 geometry through the validated legacy script, runs
+`phase4_single_point_oracle` and `single_point_repeatability` in a repo-local
+work directory, returns eV energy with eV/Angstrom forces and charges, and
+rejects NaN input.  The adapter gate verifies `P=1` reproduction against the
+validated V2 oracle, repeatability across two adapter calls, and a negative
+NaN-rejection path.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

@@ -134,14 +134,15 @@ All implemented tests passed.
 
 ## Development Roadmap
 
-1. Replace the external V2 oracle smoke with a linked force-provider adapter.
+1. Extend adapter-mediated mixed classical/PIMD and charge-policy coverage.
 2. Add ReaxFF compatibility projections.
 
 ## Status
 
 This repository is pre-production research software.  The normal-mode,
 free-ring propagation, thermostat, dummy/harmonic force, mixed group assignment,
-and external V2 oracle smoke foundations are tested.  A thin harmonic PIMD
-driver now writes PIMD-native diagnostic outputs and supports restart.
+and adapter-mediated V2 oracle coverage foundations are tested.  A thin
+harmonic PIMD driver now writes PIMD-native diagnostic outputs and supports
+restart.
 Production eReaxFF coupling is intentionally still behind the validation gates
 described above.

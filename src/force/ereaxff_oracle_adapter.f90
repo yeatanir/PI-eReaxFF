@@ -1,14 +1,328 @@
 module ereaxff_oracle_adapter
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+  use ereaxff_kinds, only: dp
+  use ereaxff_force_provider_base, only: force_result, allocate_force_result
+  use ereaxff_system_state, only: system_state
   implicit none
   private
 
-  public :: ereaxff_oracle_not_implemented
+  integer, parameter :: shell_path_len = 16384
+  real(dp), parameter :: kcal2eV = 0.043364_dp
+
+  type, public :: oracle_adapter_state
+    logical :: initialized = .false.
+    integer :: call_count = 0
+    type(system_state) :: template
+    character(len=:), allocatable :: v1_root
+    character(len=:), allocatable :: v2_root
+    character(len=:), allocatable :: work_root
+    character(len=:), allocatable :: smoke_binary
+    character(len=:), allocatable :: repeat_binary
+    character(len=:), allocatable :: make_geo_script
+    character(len=:), allocatable :: timeout_runner
+    character(len=:), allocatable :: control_path
+    character(len=:), allocatable :: ffield_path
+    character(len=:), allocatable :: iopt_path
+  end type oracle_adapter_state
+
+  type, public :: oracle_adapter_result
+    type(force_result) :: force
+    real(dp), allocatable :: solver_guess(:)
+    character(len=512) :: legacy_summary = ""
+    character(len=512) :: diagnostic = ""
+  end type oracle_adapter_result
+
+  public :: oracle_adapter_init
+  public :: oracle_adapter_eval
+  public :: oracle_adapter_smoke
 
 contains
 
-  subroutine ereaxff_oracle_not_implemented()
-    error stop "eReaxFF oracle adapter is not implemented yet; validate harmonic/dummy force paths first."
-  end subroutine ereaxff_oracle_not_implemented
+  subroutine oracle_adapter_init(adapter, template, v1_root, v2_root, work_root)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    type(system_state), intent(in) :: template
+    character(len=*), intent(in) :: v1_root, v2_root, work_root
+
+    call assert_nonempty(v1_root, "oracle_adapter_init: v1_root")
+    call assert_nonempty(v2_root, "oracle_adapter_init: v2_root")
+    call assert_nonempty(work_root, "oracle_adapter_init: work_root")
+    if (template%nparticles < 1) error stop "oracle_adapter_init: template state is empty"
+
+    adapter%template = template
+    adapter%v1_root = trim(v1_root)
+    adapter%v2_root = trim(v2_root)
+    adapter%work_root = trim(work_root)
+    adapter%smoke_binary = trim(v2_root) // "/phase4_single_point_oracle"
+    adapter%repeat_binary = trim(v2_root) // "/single_point_repeatability"
+    adapter%make_geo_script = trim(v2_root) // "/tests/regression/test_phase4_fixed_graphene/make_geo.py"
+    adapter%timeout_runner = trim(v2_root) // "/tests/regression/test_force_repeatability/run_with_timeout.py"
+    adapter%control_path = trim(v1_root) // "/tests/T4_60el/control"
+    adapter%ffield_path = trim(v1_root) // "/tests/T4_60el/ffield"
+    adapter%iopt_path = trim(v1_root) // "/tests/reference/iopt"
+    adapter%call_count = 0
+    adapter%initialized = .true.
+  end subroutine oracle_adapter_init
+
+  subroutine oracle_adapter_eval(adapter, positions_A, charge_in, solver_guess_in, bead_id, charge_policy, result)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    real(dp), intent(in) :: positions_A(:, :)
+    real(dp), intent(in) :: charge_in(:)
+    real(dp), intent(in) :: solver_guess_in(:)
+    integer, intent(in), optional :: bead_id
+    character(len=*), intent(in), optional :: charge_policy
+    type(oracle_adapter_result), intent(inout) :: result
+    character(len=shell_path_len) :: work_dir
+    integer :: bead_value, status, natom
+    real(dp) :: energy_kcal, max_force, charge_sum
+    character(len=512) :: summary_line
+
+    if (.not. adapter%initialized) error stop "oracle_adapter_eval: adapter not initialized"
+    if (size(positions_A, 1) /= adapter%template%ndim) error stop "oracle_adapter_eval: position rank mismatch"
+    if (size(positions_A, 2) /= adapter%template%nparticles) error stop "oracle_adapter_eval: particle count mismatch"
+    if (size(charge_in) /= adapter%template%nparticles) error stop "oracle_adapter_eval: charge size mismatch"
+    if (size(solver_guess_in) /= adapter%template%nparticles) error stop "oracle_adapter_eval: solver guess size mismatch"
+    if (any(.not. ieee_is_finite(positions_A))) error stop "oracle_adapter_eval: non-finite position"
+    if (any(.not. ieee_is_finite(charge_in))) error stop "oracle_adapter_eval: non-finite charge"
+    if (any(.not. ieee_is_finite(solver_guess_in))) error stop "oracle_adapter_eval: non-finite solver guess"
+
+    bead_value = 1
+    if (present(bead_id)) bead_value = bead_id
+    if (bead_value < 1) error stop "oracle_adapter_eval: bead_id must be positive"
+
+    adapter%call_count = adapter%call_count + 1
+    work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(adapter%call_count, 4)
+
+    call oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
+        work_dir, energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+
+    result%force%energy_eV = energy_kcal * kcal2eV
+    result%force%status = status
+    result%force%diagnostic = trim(summary_line)
+    result%diagnostic = trim(summary_line)
+    result%legacy_summary = trim(summary_line)
+    if (present(charge_policy)) then
+      result%diagnostic = trim(result%diagnostic) // " policy=" // trim(charge_policy)
+    end if
+    if (status /= 0) then
+      result%diagnostic = "legacy oracle status=" // trim(adjustl(itoa(status)))
+    end if
+  end subroutine oracle_adapter_eval
+
+  subroutine oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_id, work_dir, &
+      energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+    type(oracle_adapter_state), intent(in) :: adapter
+    real(dp), intent(in) :: positions_A(:, :)
+    real(dp), intent(in) :: charge_in(:)
+    real(dp), intent(in) :: solver_guess_in(:)
+    integer, intent(in) :: bead_id
+    character(len=*), intent(in) :: work_dir
+    real(dp), intent(out) :: energy_kcal, max_force, charge_sum
+    integer, intent(out) :: natom, status
+    character(len=*), intent(out) :: summary_line
+    type(oracle_adapter_result), intent(inout) :: result
+    character(len=shell_path_len) :: wrapper_script
+    integer :: exitstat
+
+    call ensure_workdir(trim(work_dir))
+    call write_legacy_inputs(adapter, charge_in, solver_guess_in, trim(work_dir))
+
+    wrapper_script = trim(work_dir) // "/run_oracle_wrapper.sh"
+    call write_oracle_wrapper(trim(work_dir), trim(wrapper_script), adapter%timeout_runner, &
+        adapter%smoke_binary, adapter%repeat_binary, adapter%make_geo_script, positions_A)
+    call run_shell("sh " // shell_quote(trim(wrapper_script)), exitstat)
+    if (exitstat /= 0) then
+      error stop "oracle_adapter_smoke: legacy smoke command failed"
+    end if
+
+    call parse_single_point_summary(trim(work_dir) // "/phase4_single_point_oracle.out", &
+        energy_kcal, max_force, charge_sum, status, natom)
+    call parse_single_point_forces(trim(work_dir) // "/single_point_forces.out", result)
+
+    write(summary_line,'(a,1x,f20.12,1x,es12.4,1x,es12.4,1x,i0,1x,i0,1x,i0)') &
+        "oracle_adapter_eval", energy_kcal, max_force, charge_sum, status, natom, bead_id
+  end subroutine oracle_adapter_smoke
+
+  subroutine parse_single_point_summary(path, energy_kcal, max_force, charge_sum, status, natom)
+    character(len=*), intent(in) :: path
+    real(dp), intent(out) :: energy_kcal, max_force, charge_sum
+    integer, intent(out) :: status, natom
+    integer :: unit, ios
+    character(len=512) :: line
+
+    open(newunit=unit, file=path, status="old", action="read", iostat=ios)
+    if (ios /= 0) error stop "parse_single_point_summary: unable to open summary"
+    read(unit,'(A)',iostat=ios) line
+    if (ios /= 0) error stop "parse_single_point_summary: missing header"
+    read(unit,*,iostat=ios) energy_kcal, max_force, charge_sum, status, natom
+    if (ios /= 0) error stop "parse_single_point_summary: unable to parse data line"
+    close(unit)
+  end subroutine parse_single_point_summary
+
+  subroutine parse_single_point_forces(path, result)
+    character(len=*), intent(in) :: path
+    type(oracle_adapter_result), intent(inout) :: result
+    integer :: unit, ios, idx, natom, i
+    character(len=512) :: line
+    real(dp) :: fx, fy, fz, charge, solver
+
+    open(newunit=unit, file=path, status="old", action="read", iostat=ios)
+    if (ios /= 0) error stop "parse_single_point_forces: unable to open forces file"
+    read(unit,'(A)',iostat=ios) line
+    if (ios /= 0) error stop "parse_single_point_forces: missing header"
+    natom = 0
+    do
+      read(unit,*,iostat=ios) idx, fx, fy, fz, charge, solver
+      if (ios /= 0) exit
+      natom = natom + 1
+    end do
+    rewind(unit)
+    read(unit,'(A)',iostat=ios) line
+    if (ios /= 0) error stop "parse_single_point_forces: header rewind failed"
+    call allocate_force_result(result%force, 3, natom, .true.)
+    if (allocated(result%solver_guess)) deallocate(result%solver_guess)
+    allocate(result%solver_guess(natom))
+    result%solver_guess = 0.0_dp
+    do i = 1, natom
+      read(unit,*,iostat=ios) idx, fx, fy, fz, charge, solver
+      if (ios /= 0) error stop "parse_single_point_forces: malformed force line"
+      if (idx /= i) error stop "parse_single_point_forces: atom index mismatch"
+      result%force%forces_eV_per_A(:, i) = [fx, fy, fz]
+      result%force%charges(i) = charge
+      result%solver_guess(i) = solver
+    end do
+    close(unit)
+  end subroutine parse_single_point_forces
+
+  subroutine write_legacy_inputs(adapter, charge_in, solver_guess_in, work_dir)
+    type(oracle_adapter_state), intent(in) :: adapter
+    real(dp), intent(in) :: charge_in(:)
+    real(dp), intent(in) :: solver_guess_in(:)
+    character(len=*), intent(in) :: work_dir
+
+    call copy_fixture(adapter%control_path, trim(work_dir) // "/control")
+    call copy_fixture(adapter%ffield_path, trim(work_dir) // "/ffield")
+    call copy_fixture(adapter%iopt_path, trim(work_dir) // "/fort.20")
+    call write_text_file(trim(work_dir) // "/fort.35", "0")
+    call write_charge_trace(trim(work_dir) // "/charge_memory.in", charge_in, solver_guess_in)
+  end subroutine write_legacy_inputs
+
+  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, make_geo_script, positions_A)
+    character(len=*), intent(in) :: work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, make_geo_script
+    real(dp), intent(in) :: positions_A(:, :)
+    integer :: unit, ios
+    character(len=64) :: el_x, el_y, el_z
+
+    if (size(positions_A, 1) /= 3) error stop "write_oracle_wrapper: positions must be 3D"
+    write(el_x,'(es24.15)') positions_A(1, 1)
+    write(el_y,'(es24.15)') positions_A(2, 1)
+    write(el_z,'(es24.15)') positions_A(3, 1)
+
+    open(newunit=unit, file=script_path, status="replace", action="write", iostat=ios)
+    if (ios /= 0) error stop "write_oracle_wrapper: unable to open wrapper script"
+    write(unit,'(a)') "#!/usr/bin/env sh"
+    write(unit,'(a)') "set -eu"
+    write(unit,'(a)') "cd '" // trim(work_dir) // "'"
+    write(unit,'(a)') "PHASE4_EL_X=" // trim(adjustl(el_x)) // " PHASE4_EL_Y=" // trim(adjustl(el_y)) // &
+        " PHASE4_EL_Z=" // trim(adjustl(el_z)) // " python3 '" // trim(make_geo_script) // "'"
+    write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
+        "run_single_point.log' '" // trim(smoke_binary) // "'"
+    write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
+        "run_repeatability.log' '" // trim(repeat_binary) // "' 3"
+    close(unit)
+  end subroutine write_oracle_wrapper
+
+  subroutine write_charge_trace(path, charge_in, solver_guess_in)
+    character(len=*), intent(in) :: path
+    real(dp), intent(in) :: charge_in(:)
+    real(dp), intent(in) :: solver_guess_in(:)
+    integer :: unit, i
+
+    open(newunit=unit, file=path, status="replace", action="write")
+    do i = 1, size(charge_in)
+      write(unit,'(i0,1x,es24.15,1x,es24.15)') i, charge_in(i), solver_guess_in(i)
+    end do
+    close(unit)
+  end subroutine write_charge_trace
+
+  subroutine ensure_workdir(path)
+    character(len=*), intent(in) :: path
+    character(len=shell_path_len) :: cmd
+    integer :: exitstat
+
+    cmd = "mkdir -p " // shell_quote(path)
+    call run_shell(cmd, exitstat)
+    if (exitstat /= 0) error stop "ensure_workdir: unable to create working directory"
+  end subroutine ensure_workdir
+
+  subroutine copy_fixture(source, target)
+    character(len=*), intent(in) :: source, target
+    integer, parameter :: line_len = 8192
+    integer :: src_unit, dst_unit, ios
+    character(len=line_len) :: line
+
+    open(newunit=src_unit, file=source, status="old", action="read", iostat=ios)
+    if (ios /= 0) error stop "copy_fixture: unable to open source file"
+    open(newunit=dst_unit, file=target, status="replace", action="write", iostat=ios)
+    if (ios /= 0) error stop "copy_fixture: unable to open target file"
+    do
+      read(src_unit,'(A)',iostat=ios) line
+      if (ios /= 0) exit
+      write(dst_unit,'(a)') trim(line)
+    end do
+    close(src_unit)
+    close(dst_unit)
+  end subroutine copy_fixture
+
+  subroutine write_text_file(path, text)
+    character(len=*), intent(in) :: path, text
+    integer :: unit
+
+    open(newunit=unit, file=path, status="replace", action="write")
+    write(unit,'(a)') trim(text)
+    close(unit)
+  end subroutine write_text_file
+
+  subroutine run_shell(command, exitstat)
+    character(len=*), intent(in) :: command
+    integer, intent(out) :: exitstat
+    integer :: cmdstat
+    character(len=256) :: errmsg
+
+    call execute_command_line(trim(command), wait=.true., exitstat=exitstat, cmdstat=cmdstat, cmdmsg=errmsg)
+    if (cmdstat /= 0) error stop "run_shell: " // trim(errmsg)
+  end subroutine run_shell
+
+  pure function shell_quote(text) result(quoted)
+    character(len=*), intent(in) :: text
+    character(len=:), allocatable :: quoted
+    integer :: n
+
+    n = len_trim(text)
+    allocate(character(len=n + 2) :: quoted)
+    quoted = "'" // trim(text) // "'"
+  end function shell_quote
+
+  pure function pad_int(value, width) result(text)
+    integer, intent(in) :: value, width
+    character(len=32) :: text
+    integer :: nzeros
+
+    write(text,'(i0)') value
+    nzeros = max(0, width - len_trim(text))
+    if (nzeros > 0) text = repeat("0", nzeros) // trim(text)
+  end function pad_int
+
+  pure function itoa(value) result(text)
+    integer, intent(in) :: value
+    character(len=32) :: text
+
+    write(text,'(i0)') value
+  end function itoa
+
+  subroutine assert_nonempty(text, label)
+    character(len=*), intent(in) :: text, label
+
+    if (len_trim(text) == 0) error stop trim(label) // " must not be empty"
+  end subroutine assert_nonempty
 
 end module ereaxff_oracle_adapter
-

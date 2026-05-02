@@ -307,3 +307,32 @@ Validation:
   evaluations with zero reported force and charge differences.
 - `make test` now includes this oracle smoke gate and passes all implemented
   regression tests.
+
+## 2026-05-02: Adapter-Mediated V2 Oracle Boundary
+
+Problem:
+
+- The adapter needed to keep the legacy oracle force-only while also producing
+  the `P=1` equivalence gate and NaN rejection checks.
+- The first attempt used inline shell env assignments, which failed because the
+  current command execution path did not interpret them reliably.
+- A direct geometry writer produced a malformed legacy atom record, which the
+  oracle rejected as an unknown atom type.
+- The smoke run also needed the repeatability executable, because the force and
+  charge trace is produced there rather than by the single-point oracle.
+
+Resolution:
+
+- Switched the adapter to write the phase4 geometry through the validated legacy
+  `make_geo.py` script with explicit electron coordinates.
+- Used a shell wrapper in the adapter work directory to run the legacy oracle
+  and repeatability binaries with the correct cwd and logged outputs.
+- Parsed `phase4_single_point_oracle.out` for summary values and
+  `single_point_forces.out` for per-atom forces, charges, and solver memory.
+- Added the adapter regression binary to check `P=1` energy, forces, charges,
+  repeatability across two calls, and a deliberate NaN rejection path.
+
+Validation:
+
+- `make test_08_reaxff_oracle_smoke` now passes directly.
+- `make test` passes the full suite with the adapter gate included.

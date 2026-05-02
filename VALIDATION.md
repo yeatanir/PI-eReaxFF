@@ -79,14 +79,13 @@ yet.
 - timeout wrapper for loader or solver hangs;
 - charge sum/status diagnostics per bead.
 
-Current status: implemented an external V2 oracle smoke gate that runs the
-existing `phase4_single_point_oracle` and `single_point_repeatability`
-executables from V2 in a repo-local work directory.  The test copies legacy
-fixtures into `build/`, runs both commands under timeout, and verifies finite
-single-point diagnostics plus repeatability of force and charge results.  The
-new modular `ereaxff_oracle_adapter.f90` is still a failure stub; the next step
-is linking this validated oracle boundary through the new force-provider
-interface without moving dynamics into the oracle.
+Current status: implemented the adapter-mediated V2 oracle gate.  The new
+`ereaxff_oracle_adapter.f90` writes the legacy phase4 geometry, runs
+`phase4_single_point_oracle` and `single_point_repeatability` through a
+repo-local wrapper, returns eV energy with eV/Angstrom forces and charges, and
+rejects NaN input.  The regression checks `P=1` adapter equivalence, adapter
+repeatability, and the negative NaN path before any mixed-classical/PIMD work
+builds on top of it.
 
 ## Phase 8: Mixed Classical/PIMD Configuration
 
