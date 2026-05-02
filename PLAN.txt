@@ -15,6 +15,7 @@ Current state
   free-ring propagator on a small bead-count matrix.
 - The mixed BAOAB driver now also has restart continuity and centroid-projected
   compatibility snapshots.
+- The mixed BAOAB matrix now also exercises a charge-policy axis.
 - The next step is to extend that manager path from the current mixed fixture to
   broader mixed classical/PIMD charge policies, restart state, and bead counts
   without putting dynamics inside the oracle.
@@ -89,5 +90,7 @@ Definition of done for the next phase
   same oracle-backed mixed fixture.
 - The mixed BAOAB restart gate also passes and preserves final restart and
   compatibility snapshots across a split run.
+- The mixed BAOAB policy matrix also passes across `bead_local_acks2` and
+  `centroid_acks2` on the same fixture.
 - Documentation explains the adapter boundary, charge policy, thermostat
   convention, ring-polymer prefactor, and compatibility-output policy.

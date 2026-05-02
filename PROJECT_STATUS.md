@@ -63,6 +63,7 @@ Generated: 2026-05-02
 - [x] Add eReaxFF mixed smoke driver regression gate.
 - [x] Add eReaxFF mixed BAOAB dynamics matrix regression gate.
 - [x] Add eReaxFF mixed BAOAB restart-continuity regression gate.
+- [x] Add eReaxFF mixed BAOAB charge-policy matrix regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -113,6 +114,7 @@ test_16_mixed_oracle_manager_restart_output: PASS
 test_17_ereaxff_mixed_driver_smoke: PASS
 test_18_ereaxff_mixed_baoab_matrix: PASS
 test_19_ereaxff_mixed_baoab_restart: PASS
+test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```
@@ -182,6 +184,10 @@ small bead-count matrix at `P = 1, 2, 4, 8`.
 The mixed BAOAB restart gate then confirms that a split run reproduces the
 same final restart state and centroid-projected compatibility snapshots as the
 continuous run.
+
+The mixed BAOAB policy matrix then exercises both `bead_local_acks2` and
+`centroid_acks2` across `P = 1, 2, 4, 8`, which widens the stress matrix to
+cover charge-coupling policy as well as bead count.
 
 The harmonic quantum variance test verifies finite-P convergence toward the
 analytic quantum oscillator variance, verifies that the legacy `sqrt(P)`

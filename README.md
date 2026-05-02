@@ -127,6 +127,7 @@ test_16_mixed_oracle_manager_restart_output: PASS
 test_17_ereaxff_mixed_driver_smoke: PASS
 test_18_ereaxff_mixed_baoab_matrix: PASS
 test_19_ereaxff_mixed_baoab_restart: PASS
+test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 All implemented tests passed.
 ```
 

@@ -546,3 +546,25 @@ Validation:
 
 - `test_19_ereaxff_mixed_baoab_restart` passes.
 - `make test` includes the restart gate once the runner summary list prints it.
+
+## 2026-05-02: Mixed BAOAB Policy Matrix
+
+Problem:
+
+- The mixed-system stress matrix still only covered bead count.  We needed to
+  prove that the same executable path behaves sensibly under both explicit
+  charge-coupling policies.
+- The charge-policy matrix had to stay on the same fixture so the new signal was
+  policy behavior, not a new geometry.
+
+Resolution:
+
+- Added a policy-axis matrix over `bead_local_acks2` and `centroid_acks2`.
+- Covered `P = 1, 2, 4, 8` on the mixed BAOAB executable.
+- Checked that the centroid policy suppresses bead-to-bead charge spread while
+  the bead-local policy only collapses at `P = 1`.
+
+Validation:
+
+- `test_20_ereaxff_mixed_baoab_policy_matrix` passes.
+- `make test` includes the policy matrix once the runner summary list prints it.
