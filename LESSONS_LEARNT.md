@@ -4,6 +4,72 @@ This file records implementation problems, scientific risks, and fixes as the
 modular PI-eReaxFF engine is built.  It should be updated at each phase before
 the phase is considered complete.
 
+## 2026-05-02: Mixed BAOAB Thermostats, Restart Heat, And Build Order
+
+Problem:
+
+- The mixed eReaxFF path needed separate thermostat choices for the classical
+  carbon group and the PIMD electron group.
+- The mixed restart format did not preserve classical velocities, cumulative
+  thermostat heat, or RNG state, so split-run equivalence broke once the bath
+  was wired in.
+- `particle_groups.f90` started depending on `thermostat_registry`, which the
+  build graph did not include in the core-only test targets.
+- The initial policy-matrix regression was too strict for a thermalized mixed
+  run: the last frame could relax back toward equal bead charges even though the
+  policy path itself was valid.
+
+Resolution:
+
+- Added per-group thermostat diagnostics and explicit handling for classical
+  Langevin versus PIMD PILE-L.
+- Extended the mixed BAOAB restart file with classical velocities, cumulative
+  classical/electron heat, and RNG state.
+- Restored electron thermostat heat after restart initialization so the split
+  trajectory matches the continuous one.
+- Moved `thermostat_registry.f90` into the core build list so the module order
+  remains valid for core-only and mixed builds.
+- Kept the policy-matrix test as a robustness gate by checking finite
+  diagnostics across the trajectory instead of requiring the final frame to
+  remain nonzero.
+
+Validation:
+
+- `test_19_ereaxff_mixed_baoab_restart` now passes with continuous-vs-restart
+  equality.
+- `make test` passed after the build graph and restart fixes.
+
+## 2026-05-03: Explicit Cell State And CRYSTX Parsing
+
+Problem:
+
+- The ReaxFF compatibility layer was still inferring box lengths from the
+  centroid coordinates.
+- That was too weak for periodic geometries and did not match the legacy
+  ReaxFF contract, where `CRYSTX` is an explicit cell record.
+- The mixed BAOAB path also needed a visible cell contract in the startup
+  diagnostics so the geometry boundary is clear at runtime.
+
+Resolution:
+
+- Added a first-class cell state to `system_state` with explicit `crystx`,
+  `periodic`, and cached matrix/inverse data.
+- Parsed `CRYSTX` from legacy `geo` files in the loader and propagated it into
+  the shared state.
+- Updated the compatibility output to use the explicit cell for
+  minimum-image connectivity and molecule lists instead of inferring a box from
+  coordinates.
+- Added YAML `geometry.periodic` and `geometry.crystx` fields for explicit box
+  specification when the geometry file does not provide one.
+- Added a periodic minimum-image regression with a tiny CRYSTX fixture that
+  detects a bond across the box boundary.
+
+Validation:
+
+- `test_26_crystx_periodic_loader` passes and confirms the periodic bond is
+  detected.
+- `make test` passes with the new cell-aware state and output layer.
+
 ## 2026-04-30: Initial Scaffold And Normal Modes
 
 Problem:
@@ -547,6 +613,34 @@ Validation:
 - `test_19_ereaxff_mixed_baoab_restart` passes.
 - `make test` includes the restart gate once the runner summary list prints it.
 
+## 2026-05-03: Legacy ReaxFF Output Semantics And Thermal Partition
+
+Problem:
+
+- The compatibility layer had been treating `fort.7`, `fort.8`, and
+  `molfra.out` as generic snapshots instead of ReaxFF-style topology outputs.
+- The mixed BAOAB path also needed a phase6-like temperature partition
+  diagnostic so the hot-electron branch can be tracked explicitly.
+
+Resolution:
+
+- Reworked the compatibility writer so `fort.7` and `fort.8` are connection
+  tables and `molfra.out` is a per-frame molecule list / molecular
+  fragmentation summary.
+- Added minimum-image topology handling for the centroid-projected
+  compatibility writer.
+- Added `carbon_temperature.out`, `electron_temperature.out`, and
+  `electron_mode_temperature.out` to the mixed BAOAB path.
+- Added a phase6-style temperature partition regression that records the
+  carbon/electron split as a diagnostic, not as a proof of a solved hot-electron
+  physics problem.
+
+Validation:
+
+- `test_24_ereaxff_mixed_baoab_user_geo_matrix` passes.
+- `test_25_phase6_like_temperature_partition` passes.
+- `make test` passes.
+
 ## 2026-05-02: Mixed BAOAB Policy Matrix
 
 Problem:
@@ -657,3 +751,44 @@ Resolution:
 - Reserved `structure_path` and `geo_path` in the parser as the future
   user-supplied loader contract, while explicitly rejecting the unimplemented
   `user_geo_structure` template.
+
+## 2026-05-02: Legacy Geo Loader And Geometry Control
+
+Problem:
+
+- The mixed BAOAB path needed to move beyond the phase4-only geometry helper
+  and accept a user-supplied legacy `geo` file path.
+- The first attempt to parse the legacy `geo` file with list-directed reads was
+  too brittle for the fixed-width HETATM layout used by the V1/V2 fixtures.
+- The first attempt to reuse legacy atom ids from the file did not give a
+  reliable selector contract for the modular group system.
+
+Resolution:
+
+- Added `src/core/legacy_geo_loader.f90` to load fixed-width legacy `geo`
+  files into `system_state`.
+- Wired `geometry.template: user_geo_structure` plus `geo_path`/`structure_path`
+  through the mixed BAOAB driver and the eReaxFF adapter.
+- Switched the loader to parse HETATM records with the legacy fixed format and
+  to assign deterministic sequential ids so the selector layer remains stable.
+
+Validation:
+
+- `test_24_ereaxff_mixed_baoab_user_geo_matrix` runs the mixed BAOAB executable
+  against the V2 background-revisit `geo` fixture and checks the geometry
+  source, particle counts, and output files.
+- `make test` passed after the new loader was added.
+
+Problem found during integration:
+
+- A clean rebuild failed because the Makefile compiled `bead_force_manager`
+  before `ereaxff_oracle_adapter`, leaving the module dependency unresolved.
+
+Resolution:
+
+- Reordered `FORCE_SRCS` so the oracle adapter compiles before the bead force
+  manager on a clean tree.
+
+Validation:
+
+- Clean rebuild and full `make test` passed after the source-order fix.

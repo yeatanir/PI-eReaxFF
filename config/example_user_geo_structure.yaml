@@ -1,0 +1,63 @@
+simulation:
+  dt_fs: 0.1
+  steps: 100
+  seed: 12345
+  integrator: baoab
+  output_stride: 10
+  restart_stride: 20
+
+force_provider:
+  type: ereaxff_oracle
+  v1_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V1"
+  v2_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2"
+  ffield: "tests/T4_60el/ffield"
+  geo: "geo"
+  control: "tests/T4_60el/control"
+  iopt: "tests/reference/iopt"
+
+ring_polymer:
+  convention: standard_ipi
+  default_beads: 4
+  propagator: exact
+
+charge_coupling:
+  mode: bead_local_acks2
+  charge_tolerance: 1.0e-8
+
+geometry:
+  template: user_geo_structure
+  structure_path: ""
+  geo_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2/tests/regression/test_background_revisit/work_ladder/classical_bg6_p16/geo"
+  periodic: true
+  crystx: [12.50000, 12.50000, 20.00000, 90.00000, 90.00000, 90.00000]
+  electron_position_A: [7.38300, 5.68433, 10.00100]
+
+groups:
+  - name: graphene_carbons
+    selector: "element == C"
+    dynamics: classical
+    mobile: true
+    thermostat: langevin
+    temperature_K: 300.0
+    gamma_fs_inv: 0.001
+
+  - name: excess_electron
+    selector: "element == El and id == 1"
+    dynamics: pimd
+    beads: 4
+    thermostat: pile_l
+    temperature_K: 300.0
+    centroid_gamma_fs_inv: 0.001
+
+  - name: background_electrons
+    selector: "element == El and id != 1"
+    dynamics: classical
+    mobile: false
+    thermostat: none
+    temperature_K: 0.0
+
+output:
+  centroid_xyz: true
+  beads_xyz: true
+  reaxff_compat: true
+  diagnostics: true

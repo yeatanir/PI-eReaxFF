@@ -20,6 +20,7 @@ module ereaxff_oracle_adapter
     character(len=:), allocatable :: repeat_binary
     character(len=:), allocatable :: make_geo_script
     character(len=:), allocatable :: timeout_runner
+    character(len=:), allocatable :: geo_path
     character(len=:), allocatable :: control_path
     character(len=:), allocatable :: ffield_path
     character(len=:), allocatable :: iopt_path
@@ -39,12 +40,12 @@ module ereaxff_oracle_adapter
 contains
 
   subroutine oracle_adapter_init(adapter, template, v1_root, v2_root, work_root, control_path, ffield_path, iopt_path, &
-      smoke_binary, repeat_binary, make_geo_script, timeout_runner)
+      smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path)
     type(oracle_adapter_state), intent(inout) :: adapter
     type(system_state), intent(in) :: template
     character(len=*), intent(in) :: v1_root, v2_root, work_root
     character(len=*), intent(in), optional :: control_path, ffield_path, iopt_path
-    character(len=*), intent(in), optional :: smoke_binary, repeat_binary, make_geo_script, timeout_runner
+    character(len=*), intent(in), optional :: smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path
 
     call assert_nonempty(v1_root, "oracle_adapter_init: v1_root")
     call assert_nonempty(v2_root, "oracle_adapter_init: v2_root")
@@ -74,6 +75,11 @@ contains
       adapter%timeout_runner = trim(timeout_runner)
     else
       adapter%timeout_runner = trim(v2_root) // "/tests/regression/test_force_repeatability/run_with_timeout.py"
+    end if
+    if (present(geo_path) .and. len_trim(geo_path) > 0) then
+      adapter%geo_path = trim(geo_path)
+    else
+      adapter%geo_path = ""
     end if
     if (present(control_path) .and. len_trim(control_path) > 0) then
       adapter%control_path = trim(control_path)
@@ -153,13 +159,21 @@ contains
     type(oracle_adapter_result), intent(inout) :: result
     character(len=shell_path_len) :: wrapper_script
     integer :: exitstat
+    logical :: has_geo_path
 
     call ensure_workdir(trim(work_dir))
     call write_legacy_inputs(adapter, charge_in, solver_guess_in, trim(work_dir))
 
+    has_geo_path = len_trim(adapter%geo_path) > 0
+    if (has_geo_path) then
+      call copy_fixture(adapter%geo_path, trim(work_dir) // "/geo")
+    else
+      call generate_phase4_geo(trim(work_dir), adapter%make_geo_script, positions_A)
+    end if
+
     wrapper_script = trim(work_dir) // "/run_oracle_wrapper.sh"
     call write_oracle_wrapper(trim(work_dir), trim(wrapper_script), adapter%timeout_runner, &
-        adapter%smoke_binary, adapter%repeat_binary, adapter%make_geo_script, positions_A)
+        adapter%smoke_binary, adapter%repeat_binary)
     call run_shell("sh " // shell_quote(trim(wrapper_script)), exitstat)
     if (exitstat /= 0) then
       error stop "oracle_adapter_smoke: legacy smoke command failed"
@@ -237,30 +251,39 @@ contains
     call write_charge_trace(trim(work_dir) // "/charge_memory.in", charge_in, solver_guess_in)
   end subroutine write_legacy_inputs
 
-  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, make_geo_script, positions_A)
-    character(len=*), intent(in) :: work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, make_geo_script
-    real(dp), intent(in) :: positions_A(:, :)
+  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary)
+    character(len=*), intent(in) :: work_dir, script_path, timeout_runner, smoke_binary, repeat_binary
     integer :: unit, ios
-    character(len=64) :: el_x, el_y, el_z
-
-    if (size(positions_A, 1) /= 3) error stop "write_oracle_wrapper: positions must be 3D"
-    write(el_x,'(es24.15)') positions_A(1, 1)
-    write(el_y,'(es24.15)') positions_A(2, 1)
-    write(el_z,'(es24.15)') positions_A(3, 1)
 
     open(newunit=unit, file=script_path, status="replace", action="write", iostat=ios)
     if (ios /= 0) error stop "write_oracle_wrapper: unable to open wrapper script"
     write(unit,'(a)') "#!/usr/bin/env sh"
     write(unit,'(a)') "set -eu"
     write(unit,'(a)') "cd '" // trim(work_dir) // "'"
-    write(unit,'(a)') "PHASE4_EL_X=" // trim(adjustl(el_x)) // " PHASE4_EL_Y=" // trim(adjustl(el_y)) // &
-        " PHASE4_EL_Z=" // trim(adjustl(el_z)) // " python3 '" // trim(make_geo_script) // "'"
     write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
         "run_single_point.log' '" // trim(smoke_binary) // "'"
     write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
         "run_repeatability.log' '" // trim(repeat_binary) // "' 3"
     close(unit)
   end subroutine write_oracle_wrapper
+
+  subroutine generate_phase4_geo(work_dir, make_geo_script, positions_A)
+    character(len=*), intent(in) :: work_dir, make_geo_script
+    real(dp), intent(in) :: positions_A(:, :)
+    character(len=64) :: el_x, el_y, el_z
+    character(len=shell_path_len) :: command
+    integer :: exitstat
+
+    if (size(positions_A, 1) /= 3) error stop "generate_phase4_geo: positions must be 3D"
+    write(el_x,'(es24.15)') positions_A(1, 1)
+    write(el_y,'(es24.15)') positions_A(2, 1)
+    write(el_z,'(es24.15)') positions_A(3, 1)
+    command = "cd " // shell_quote(work_dir) // " && PHASE4_EL_X=" // trim(adjustl(el_x)) // &
+        " PHASE4_EL_Y=" // trim(adjustl(el_y)) // " PHASE4_EL_Z=" // trim(adjustl(el_z)) // &
+        " python3 " // shell_quote(make_geo_script)
+    call run_shell(command, exitstat)
+    if (exitstat /= 0) error stop "generate_phase4_geo: geometry generation failed"
+  end subroutine generate_phase4_geo
 
   subroutine write_charge_trace(path, charge_in, solver_guess_in)
     character(len=*), intent(in) :: path

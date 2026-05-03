@@ -46,5 +46,8 @@ cat build/test_summaries/test_20_ereaxff_mixed_baoab_policy_matrix.summary
 cat build/test_summaries/test_21_ereaxff_mixed_baoab_config_smoke.summary
 cat build/test_summaries/test_22_ereaxff_mixed_baoab_config_matrix.summary
 cat build/test_summaries/test_23_ereaxff_mixed_baoab_geometry_matrix.summary
+cat build/test_summaries/test_24_ereaxff_mixed_baoab_user_geo_matrix.summary
+cat build/test_summaries/test_25_phase6_like_temperature_partition.summary
+cat build/test_summaries/test_26_crystx_periodic_loader.summary
 
 echo "All implemented tests passed."

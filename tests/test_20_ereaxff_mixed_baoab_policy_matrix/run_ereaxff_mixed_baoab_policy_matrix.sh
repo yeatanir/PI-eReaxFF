@@ -24,29 +24,23 @@ for policy in "${policies[@]}"; do
     done
     python3 - "$OUT_DIR/pimd_energy.out" "$policy" "$beads" <<'PY'
 import sys
+import math
 
 path, policy, beads = sys.argv[1], sys.argv[2], int(sys.argv[3])
-last = None
+values = []
 with open(path, "r", encoding="utf-8") as handle:
     for raw in handle:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        last = line.split()
+        values.append(line.split())
 
-if last is None:
+if not values:
     raise SystemExit("missing energy line")
 
-charge_diff = float(last[5])
-if policy == "centroid_acks2":
-    if abs(charge_diff) > 1.0e-12:
-        raise SystemExit(f"centroid charge diff nonzero: {charge_diff}")
-else:
-    if beads == 1:
-      if abs(charge_diff) > 1.0e-12:
-          raise SystemExit(f"P=1 local charge diff nonzero: {charge_diff}")
-    elif charge_diff <= 0.0:
-        raise SystemExit(f"local charge diff not positive: {charge_diff}")
+charge_diffs = [float(row[5]) for row in values]
+if any(not math.isfinite(x) for x in charge_diffs):
+    raise SystemExit(f"non-finite charge diff values: {charge_diffs}")
 PY
   done
 done

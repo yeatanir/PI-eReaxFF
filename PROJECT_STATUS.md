@@ -64,11 +64,21 @@ Generated: 2026-05-02
 - [x] Add eReaxFF mixed BAOAB dynamics matrix regression gate.
 - [x] Add eReaxFF mixed BAOAB restart-continuity regression gate.
 - [x] Add eReaxFF mixed BAOAB charge-policy matrix regression gate.
+- [x] Add per-group thermostat selection for classical carbons and the PIMD electron.
+- [x] Preserve mixed BAOAB thermostat heat, classical velocities, and RNG state in restart files.
 - [x] Add YAML-subset input parser for the mixed BAOAB driver.
 - [x] Add config-driven mixed BAOAB smoke regression gate.
 - [x] Add config-driven mixed BAOAB matrix and negative-case regression gate.
 - [x] Add geometry-variation regression gate for the mixed BAOAB oracle path.
-- [x] Reserve explicit user geometry-path contract fields in the parser.
+- [x] Implement explicit user geometry-path contract fields in the parser.
+- [x] Carry explicit periodic cell / CRYSTX data through the shared state and
+      compatibility outputs.
+- [x] Add legacy `geo` loader for user-supplied V1/V2 structure files.
+- [x] Add legacy ReaxFF-style compatibility writer for `fort.7`, `fort.8`,
+  and `molfra.out`.
+- [x] Add minimum-image topology handling for the compatibility writer.
+- [x] Add phase6-style carbon/electron temperature partition diagnostics.
+- [x] Add phase6-like hot-electron diagnostic regression gate.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -123,6 +133,9 @@ test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 test_21_ereaxff_mixed_baoab_config_smoke: PASS
 test_22_ereaxff_mixed_baoab_config_matrix: PASS
 test_23_ereaxff_mixed_baoab_geometry_matrix: PASS
+test_24_ereaxff_mixed_baoab_user_geo_matrix: PASS
+test_25_phase6_like_temperature_partition: PASS
+test_26_crystx_periodic_loader: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```

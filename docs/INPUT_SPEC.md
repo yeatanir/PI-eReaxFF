@@ -9,9 +9,9 @@ schema should retain these sections:
 - `force_provider`: provider type and eReaxFF input paths;
 - `ring_polymer`: convention, bead count, propagator;
 - `charge_coupling`: mode and tolerances;
-- `geometry`: currently the validated phase4 graphene template, optional
-  future structure-path fields, and the electron starting position in
-  Angstrom;
+- `geometry`: the validated phase4 graphene template, the user-supplied
+  legacy `geo` loader, the electron starting position in Angstrom, and the
+  explicit cell / periodicity contract;
 - `groups`: selectors, dynamics type, mobility, thermostat, temperature, and
   bead count;
 - `output`: PIMD-native and compatibility output choices.
@@ -35,17 +35,19 @@ The Fortran input parser currently accepts:
   `make_geo_script`, `timeout_runner`;
 - `ring_polymer`: `convention`, `default_beads`, `propagator`;
 - `charge_coupling`: `mode`, `charge_tolerance`;
-- `geometry`: `template`, `structure_path`, `geo_path`, `electron_position_A`;
+- `geometry`: `template`, `structure_path`, `geo_path`, `periodic`,
+  `crystx`, and `electron_position_A`;
 - `groups`: `name`, `selector`, `dynamics`, `mobile`, `beads`, `thermostat`,
-  `temperature_K`, plus currently ignored thermostat tuning keys such as
-  `gamma_fs_inv` and `centroid_gamma_fs_inv`;
+  `temperature_K`, `gamma_fs_inv`, and `centroid_gamma_fs_inv`;
 - `output`: `centroid_xyz`, `beads_xyz`, `reaxff_compat`, `diagnostics`.
 
 The parser is intentionally strict about structure and selector validity, but
 it does not yet implement full YAML features such as anchors, nested maps, or
-arbitrary sequences.  The `user_geo_structure` geometry contract is reserved
-for future loader work and currently fails with a clear error even when a
-`structure_path` or `geo_path` is provided.
+arbitrary sequences.  The `user_geo_structure` geometry contract is now
+implemented for legacy `geo` files containing `HETATM` records and supports
+both `structure_path` and `geo_path`.  `CRYSTX` records are parsed into the
+shared cell state, and the YAML can also provide explicit `periodic` and
+`crystx` values when the geometry file does not.
 
 ## Current Selector Subset
 
@@ -63,3 +65,8 @@ The current Fortran selector scaffold supports:
 This is intentionally small but already covers the first target scenarios:
 classical carbons, one selected PIMD electron, and frozen background electrons.
 Unsupported selector syntax fails during group validation.
+
+Current mixed-driver note: the classical carbon group now commonly uses a
+Cartesian Langevin bath while the selected PIMD electron uses PILE-L.  The
+driver prints the per-group thermostat choice at startup so mixed runs do not
+silently inherit a single global bath.

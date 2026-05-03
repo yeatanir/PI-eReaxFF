@@ -2,6 +2,7 @@ module ereaxff_particle_groups
   use ereaxff_kinds, only: dp
   use ereaxff_system_state, only: system_state
   use ereaxff_selectors, only: selector_matches, selector_is_supported
+  use ereaxff_thermostat_registry, only: thermostat_is_supported
   implicit none
   private
 
@@ -17,6 +18,8 @@ module ereaxff_particle_groups
     integer :: beads = 1
     character(len=32) :: thermostat = "none"
     real(dp) :: temperature_K = 0.0_dp
+    real(dp) :: gamma_fs_inv = 0.0_dp
+    real(dp) :: centroid_gamma_fs_inv = 0.0_dp
   end type particle_group_spec
 
   type, public :: particle_group_assignment
@@ -45,6 +48,9 @@ contains
       error stop "validate_group_spec: non-PIMD groups must use one bead"
     end if
     if (group%temperature_K < 0.0_dp) error stop "validate_group_spec: temperature must be non-negative"
+    if (group%gamma_fs_inv < 0.0_dp) error stop "validate_group_spec: gamma must be non-negative"
+    if (group%centroid_gamma_fs_inv < 0.0_dp) error stop "validate_group_spec: centroid gamma must be non-negative"
+    if (.not. thermostat_is_supported(group%thermostat)) error stop "validate_group_spec: unsupported thermostat"
   end subroutine validate_group_spec
 
   subroutine assign_particle_groups(state, groups, assignment)
@@ -129,4 +135,3 @@ contains
   end function dynamics_is_valid
 
 end module ereaxff_particle_groups
-

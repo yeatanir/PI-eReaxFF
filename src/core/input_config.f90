@@ -44,6 +44,8 @@ module ereaxff_input_config
     character(len=64) :: template = "phase4_fixed_graphene"
     character(len=512) :: structure_path = ""
     character(len=512) :: geo_path = ""
+    logical :: periodic = .false.
+    real(dp) :: crystx(6) = 0.0_dp
     real(dp) :: electron_position_A(3) = [7.38300_dp, 5.68433_dp, 10.001_dp]
   end type geometry_config
 
@@ -150,7 +152,6 @@ contains
       if (len_trim(config%geometry%structure_path) == 0 .and. len_trim(config%geometry%geo_path) == 0) then
         error stop "validate_input_config: user_geo_structure requires structure_path or geo_path"
       end if
-      error stop "validate_input_config: user_geo_structure geometry loader not implemented"
     case default
       error stop "validate_input_config: unsupported geometry template"
     end select
@@ -307,6 +308,10 @@ contains
       geometry%structure_path = strip_quotes(value)
     case ("geo_path")
       geometry%geo_path = strip_quotes(value)
+    case ("periodic")
+      call parse_logical(value, geometry%periodic)
+    case ("crystx")
+      call parse_real_six(value, geometry%crystx)
     case ("electron_position_A")
       call parse_real_triplet(value, geometry%electron_position_A)
     case ("electron_position_x")
@@ -361,8 +366,10 @@ contains
       group%thermostat = strip_quotes(value)
     case ("temperature_K")
       read(value, *) group%temperature_K
-    case ("gamma_fs_inv", "centroid_gamma_fs_inv")
-      continue
+    case ("gamma_fs_inv")
+      read(value, *) group%gamma_fs_inv
+    case ("centroid_gamma_fs_inv")
+      read(value, *) group%centroid_gamma_fs_inv
     case default
       error stop "parse_group_line: unsupported key"
     end select
@@ -384,6 +391,23 @@ contains
     read(compact, *, iostat=ios) values
     if (ios /= 0) error stop "parse_real_triplet: invalid triplet"
   end subroutine parse_real_triplet
+
+  subroutine parse_real_six(text, values)
+    character(len=*), intent(in) :: text
+    real(dp), intent(out) :: values(6)
+    character(len=:), allocatable :: compact
+    integer :: ios
+
+    compact = strip_quotes(text)
+    compact = trim(adjustl(compact))
+    if (len_trim(compact) >= 2) then
+      if (compact(1:1) == "[" .and. compact(len_trim(compact):len_trim(compact)) == "]") then
+        compact = compact(2:len_trim(compact) - 1)
+      end if
+    end if
+    read(compact, *, iostat=ios) values
+    if (ios /= 0) error stop "parse_real_six: invalid sextuplet"
+  end subroutine parse_real_six
 
   subroutine split_key_value(line, key, value)
     character(len=*), intent(in) :: line

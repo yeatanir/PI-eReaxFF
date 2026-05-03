@@ -6,6 +6,8 @@ module ereaxff_mixed_baoab_integrator
   use ereaxff_free_ring_propagator, only: exact_free_propagation
   use ereaxff_charge_coupling_policy, only: charge_memory_state
   use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads
+  use ereaxff_rng, only: rng_state
+  use ereaxff_thermostat_pile_l, only: pile_l_thermostat_state, pile_l_step
   use ereaxff_oracle_adapter, only: oracle_adapter_state
   implicit none
   private
@@ -15,7 +17,8 @@ module ereaxff_mixed_baoab_integrator
 contains
 
   subroutine mixed_baoab_electron_step(positions_A, q_nm, v_nm, electron_index, electron_mass_amu, &
-      rp, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary)
+      rp, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, &
+      electron_thermostat, rng)
     real(dp), intent(inout) :: positions_A(:, :, :)
     real(dp), intent(inout) :: q_nm(:, :)
     real(dp), intent(inout) :: v_nm(:, :)
@@ -27,6 +30,8 @@ contains
     real(dp), intent(inout) :: solver_guess_by_bead(:, :)
     character(len=*), intent(in) :: charge_policy
     type(oracle_bead_summary), intent(inout) :: summary
+    type(pile_l_thermostat_state), intent(inout) :: electron_thermostat
+    type(rng_state), intent(inout) :: rng
     real(dp) :: force_bead(size(q_nm, 1), size(q_nm, 2))
     real(dp) :: force_nm(size(q_nm, 1), size(q_nm, 2))
     if (electron_index < 1 .or. electron_index > size(positions_A, 2)) then
@@ -46,6 +51,9 @@ contains
     call half_kick_from_summary(summary, electron_index, electron_mass_amu, dt_fs, rp, force_bead, force_nm, v_nm)
 
     call exact_free_propagation(q_nm, v_nm, 0.5_dp * dt_fs, rp%omega_k)
+    if (allocated(electron_thermostat%c1)) then
+      call pile_l_step(electron_thermostat, v_nm, [electron_mass_amu, electron_mass_amu, electron_mass_amu], rng)
+    end if
     call exact_free_propagation(q_nm, v_nm, 0.5_dp * dt_fs, rp%omega_k)
 
     call update_electron_positions(positions_A, q_nm, rp)

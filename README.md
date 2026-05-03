@@ -131,6 +131,9 @@ test_20_ereaxff_mixed_baoab_policy_matrix: PASS
 test_21_ereaxff_mixed_baoab_config_smoke: PASS
 test_22_ereaxff_mixed_baoab_config_matrix: PASS
 test_23_ereaxff_mixed_baoab_geometry_matrix: PASS
+test_24_ereaxff_mixed_baoab_user_geo_matrix: PASS
+test_25_phase6_like_temperature_partition: PASS
+test_26_crystx_periodic_loader: PASS
 All implemented tests passed.
 ```
 
@@ -173,6 +176,10 @@ policy while also checking that invalid selectors and overlapping groups fail
 cleanly.
 The geometry-matrix gate then varies the validated electron starting position
 within the phase4 helper contract and confirms the oracle boundary still holds.
-The geometry contract now also reserves explicit `structure_path` and
-`geo_path` fields for the future user-supplied structure loader, while still
-failing unsupported templates cleanly.
+The geometry contract now also reserves explicit `structure_path`,
+`geo_path`, `periodic`, and `crystx` fields for the user-supplied legacy `geo`
+loader, which is now implemented for fixed-width HETATM files and exercised
+against the V2 background-revisit fixture. Legacy `CRYSTX` records are parsed
+into the shared cell state, and the compatibility writer now uses that shared
+cell for minimum-image connectivity instead of inferring a box from the
+centroid coordinates. Unsupported templates still fail cleanly.

@@ -28,15 +28,18 @@ geometry:
   template: phase4_fixed_graphene
   structure_path: ""
   geo_path: ""
+  periodic: false
+  crystx: [12.50000, 12.50000, 20.00000, 90.00000, 90.00000, 90.00000]
   electron_position_A: [7.38300, 5.68433, 10.00100]
 
 groups:
   - name: graphene_carbons
     selector: "element == C"
     dynamics: classical
-    mobile: false
-    thermostat: none
+    mobile: true
+    thermostat: langevin
     temperature_K: 300.0
+    gamma_fs_inv: 0.001
 
   - name: excess_electron
     selector: "element == El and id == 61"

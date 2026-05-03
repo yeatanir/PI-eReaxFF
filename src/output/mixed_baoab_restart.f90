@@ -1,5 +1,5 @@
 module ereaxff_mixed_baoab_restart
-  use ereaxff_kinds, only: dp
+  use ereaxff_kinds, only: dp, i8
   implicit none
   private
 
@@ -9,7 +9,11 @@ module ereaxff_mixed_baoab_restart
     integer :: nparticles = 0
     integer :: beads = 0
     character(len=32) :: charge_policy = ""
+    real(dp) :: classical_heat_eV = 0.0_dp
+    real(dp) :: electron_heat_eV = 0.0_dp
+    integer(i8) :: rng_state_i8 = 0_i8
     real(dp), allocatable :: positions_A(:, :, :)
+    real(dp), allocatable :: classical_velocities(:, :)
     real(dp), allocatable :: q_nm(:, :)
     real(dp), allocatable :: v_nm(:, :)
     real(dp), allocatable :: charges_by_bead(:, :)
@@ -39,12 +43,19 @@ contains
     write(unit,'(a,1x,i0)') "nparticles", state%nparticles
     write(unit,'(a,1x,i0)') "beads", state%beads
     write(unit,'(a,1x,a)') "charge_policy", trim(state%charge_policy)
+    write(unit,'(a,1x,es24.16)') "classical_heat_eV", state%classical_heat_eV
+    write(unit,'(a,1x,es24.16)') "electron_heat_eV", state%electron_heat_eV
+    write(unit,'(a,1x,i0)') "rng_state_i8", state%rng_state_i8
     write(unit,'(a)') "positions_A"
     do bead = 1, state%beads
       write(unit,'(a,1x,i0)') "bead", bead
       do i = 1, state%nparticles
         write(unit,'(i8,3(1x,es24.16))') i, state%positions_A(:, i, bead)
       end do
+    end do
+    write(unit,'(a)') "classical_velocities"
+    do i = 1, state%nparticles
+      write(unit,'(i8,3(1x,es24.16))') i, state%classical_velocities(:, i)
     end do
     write(unit,'(a)') "q_nm"
     do coord = 1, state%ndim
@@ -90,6 +101,12 @@ contains
     read(unit,*) key, charge_policy
     if (trim(key) /= "charge_policy") error stop "read_mixed_baoab_restart: expected charge_policy"
     state%charge_policy = trim(charge_policy)
+    read(unit,*) key, state%classical_heat_eV
+    if (trim(key) /= "classical_heat_eV") error stop "read_mixed_baoab_restart: expected classical_heat_eV"
+    read(unit,*) key, state%electron_heat_eV
+    if (trim(key) /= "electron_heat_eV") error stop "read_mixed_baoab_restart: expected electron_heat_eV"
+    read(unit,*) key, state%rng_state_i8
+    if (trim(key) /= "rng_state_i8") error stop "read_mixed_baoab_restart: expected rng_state_i8"
     call allocate_state(state)
 
     read(unit,*) key
@@ -101,6 +118,13 @@ contains
         read(unit,*) index_value, state%positions_A(:, i, bead)
         if (index_value /= i) error stop "read_mixed_baoab_restart: position index mismatch"
       end do
+    end do
+
+    read(unit,*) key
+    if (trim(key) /= "classical_velocities") error stop "read_mixed_baoab_restart: expected classical_velocities"
+    do i = 1, state%nparticles
+      read(unit,*) index_value, state%classical_velocities(:, i)
+      if (index_value /= i) error stop "read_mixed_baoab_restart: velocity index mismatch"
     end do
 
     read(unit,*) key
@@ -142,16 +166,19 @@ contains
     type(mixed_baoab_restart_state), intent(inout) :: state
 
     if (allocated(state%positions_A)) deallocate(state%positions_A)
+    if (allocated(state%classical_velocities)) deallocate(state%classical_velocities)
     if (allocated(state%q_nm)) deallocate(state%q_nm)
     if (allocated(state%v_nm)) deallocate(state%v_nm)
     if (allocated(state%charges_by_bead)) deallocate(state%charges_by_bead)
     if (allocated(state%solver_guess_by_bead)) deallocate(state%solver_guess_by_bead)
     allocate(state%positions_A(state%ndim, state%nparticles, state%beads))
+    allocate(state%classical_velocities(state%ndim, state%nparticles))
     allocate(state%q_nm(state%ndim, state%beads))
     allocate(state%v_nm(state%ndim, state%beads))
     allocate(state%charges_by_bead(state%nparticles, state%beads))
     allocate(state%solver_guess_by_bead(state%nparticles, state%beads))
     state%positions_A = 0.0_dp
+    state%classical_velocities = 0.0_dp
     state%q_nm = 0.0_dp
     state%v_nm = 0.0_dp
     state%charges_by_bead = 0.0_dp
