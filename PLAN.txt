@@ -94,3 +94,9 @@ Definition of done for the next phase
   `centroid_acks2` on the same fixture.
 - Documentation explains the adapter boundary, charge policy, thermostat
   convention, ring-polymer prefactor, and compatibility-output policy.
+
+Multi-particle follow-on plan
+- See [docs/MULTI_PIMD_ARCHITECTURE_PLAN.md](docs/MULTI_PIMD_ARCHITECTURE_PLAN.md)
+  for the next architectural step: removing the single-electron PIMD
+  assumption and supporting multiple quantum electrons / bead counts in one
+  mixed run.
