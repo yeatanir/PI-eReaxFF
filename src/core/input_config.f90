@@ -184,6 +184,7 @@ contains
     group%beads = 1
     group%thermostat = "none"
     group%temperature_K = 0.0_dp
+    group%mass_amu = -1.0_dp
   end subroutine init_group
 
   subroutine append_group(groups, count, group)
@@ -370,6 +371,8 @@ contains
       read(value, *) group%gamma_fs_inv
     case ("centroid_gamma_fs_inv")
       read(value, *) group%centroid_gamma_fs_inv
+    case ("mass_amu")
+      read(value, *) group%mass_amu
     case default
       error stop "parse_group_line: unsupported key"
     end select

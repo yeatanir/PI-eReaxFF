@@ -1,6 +1,6 @@
 # Project Status
 
-Generated: 2026-05-02
+Generated: 2026-05-03
 
 ## Inputs Provided
 
@@ -79,6 +79,8 @@ Generated: 2026-05-02
 - [x] Add minimum-image topology handling for the compatibility writer.
 - [x] Add phase6-style carbon/electron temperature partition diagnostics.
 - [x] Add phase6-like hot-electron diagnostic regression gate.
+- [x] Add multi-quantum mixed BAOAB restart regression gate.
+- [x] Add explicit pseudo-mass support for PIMD quantum particles.
 - [x] Add system state module.
 - [x] Add selector module for `all`, `element == X`, `id == N`, `id != N`, and `id in [...]`.
 - [x] Add particle group assignment module.
@@ -136,6 +138,7 @@ test_23_ereaxff_mixed_baoab_geometry_matrix: PASS
 test_24_ereaxff_mixed_baoab_user_geo_matrix: PASS
 test_25_phase6_like_temperature_partition: PASS
 test_26_crystx_periodic_loader: PASS
+test_27_multi_quantum_restart: PASS
 test_11_invalid_group_overlap: PASS
 All implemented tests passed.
 ```

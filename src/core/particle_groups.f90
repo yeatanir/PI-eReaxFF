@@ -20,6 +20,7 @@ module ereaxff_particle_groups
     real(dp) :: temperature_K = 0.0_dp
     real(dp) :: gamma_fs_inv = 0.0_dp
     real(dp) :: centroid_gamma_fs_inv = 0.0_dp
+    real(dp) :: mass_amu = -1.0_dp
   end type particle_group_spec
 
   type, public :: particle_group_assignment
@@ -50,6 +51,8 @@ contains
     if (group%temperature_K < 0.0_dp) error stop "validate_group_spec: temperature must be non-negative"
     if (group%gamma_fs_inv < 0.0_dp) error stop "validate_group_spec: gamma must be non-negative"
     if (group%centroid_gamma_fs_inv < 0.0_dp) error stop "validate_group_spec: centroid gamma must be non-negative"
+    if (group%mass_amu < 0.0_dp .and. abs(group%mass_amu + 1.0_dp) > 1.0e-12_dp) &
+        error stop "validate_group_spec: mass must be positive or unset"
     if (.not. thermostat_is_supported(group%thermostat)) error stop "validate_group_spec: unsupported thermostat"
   end subroutine validate_group_spec
 

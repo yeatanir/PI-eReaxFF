@@ -38,7 +38,7 @@ The Fortran input parser currently accepts:
 - `geometry`: `template`, `structure_path`, `geo_path`, `periodic`,
   `crystx`, and `electron_position_A`;
 - `groups`: `name`, `selector`, `dynamics`, `mobile`, `beads`, `thermostat`,
-  `temperature_K`, `gamma_fs_inv`, and `centroid_gamma_fs_inv`;
+  `temperature_K`, `gamma_fs_inv`, `centroid_gamma_fs_inv`, and `mass_amu`;
 - `output`: `centroid_xyz`, `beads_xyz`, `reaxff_compat`, `diagnostics`.
 
 The parser is intentionally strict about structure and selector validity, but
@@ -70,3 +70,9 @@ Current mixed-driver note: the classical carbon group now commonly uses a
 Cartesian Langevin bath while the selected PIMD electron uses PILE-L.  The
 driver prints the per-group thermostat choice at startup so mixed runs do not
 silently inherit a single global bath.
+
+Current multi-quantum note: the mixed BAOAB path now accepts multiple PIMD
+particles in one run, provided they share a common bead count.  Their
+pseudo-masses are specified per group with `mass_amu`, and the restart format
+round-trips the full set of quantum indices, masses, normal-mode coordinates,
+and cumulative heat.

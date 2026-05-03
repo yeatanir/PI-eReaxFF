@@ -69,7 +69,8 @@ standalone engine.  It should not become a second independent force path.
 
 ## Current Scope
 
-The current implementation is the first foundation deliverable:
+The current implementation now spans the validated modular foundation and the
+first mixed eReaxFF dynamics boundary:
 
 - repository scaffold and architecture documentation;
 - core numeric kinds and physical constants;
@@ -77,11 +78,14 @@ The current implementation is the first foundation deliverable:
 - standard i-PI ring-polymer frequency calculation;
 - bead-to-normal-mode and normal-mode-to-bead transforms;
 - regression test for orthogonality, roundtrip, centroid consistency, and the
-  standard `omega_P` prefactor.
-
-eReaxFF oracle coupling, thermostats, mixed classical/PIMD grouping, restart,
-and compatibility outputs are planned but intentionally not implemented before
-the normal-mode foundation is tested.
+  standard `omega_P` prefactor;
+- eReaxFF oracle adapter boundary with repeatability and NaN rejection;
+- force-manager `P=1` reproduction of the validated V2 oracle;
+- mixed classical/PIMD grouping with explicit thermostat selection;
+- mixed BAOAB restart and compatibility output handling;
+- multiple PIMD particles in one mixed run when they share a common bead
+  count;
+- explicit pseudo-mass and restart state for each quantum particle.
 
 ## Build And Test
 
@@ -134,6 +138,7 @@ test_23_ereaxff_mixed_baoab_geometry_matrix: PASS
 test_24_ereaxff_mixed_baoab_user_geo_matrix: PASS
 test_25_phase6_like_temperature_partition: PASS
 test_26_crystx_periodic_loader: PASS
+test_27_multi_quantum_restart: PASS
 All implemented tests passed.
 ```
 
@@ -161,10 +166,10 @@ assignment, adapter-mediated V2 oracle coverage, and force-manager P=1
 integration, centroid charge-policy, and mixed oracle-manager fixture/matrix
 foundations are tested.  A thin harmonic PIMD driver now writes PIMD-native
 diagnostic outputs and supports restart, and the mixed manager path now has a
-tested restart/output format for bead positions, charges, and solver memory.
-The mixed eReaxFF smoke driver now exercises that same restart/output boundary
-through the executable path.  Production eReaxFF coupling is intentionally
-still behind the validation gates described above.
+tested restart/output format for bead positions, charges, solver memory, and
+multiple quantum particles.  The mixed eReaxFF smoke driver now exercises that
+same restart/output boundary through the executable path.  Production eReaxFF
+coupling is intentionally still behind the validation gates described above.
 The mixed eReaxFF BAOAB driver now exercises the force-manager and free-ring
 propagator on top of that boundary across a wider bead-count matrix and a
 restart-continuity gate.
@@ -183,3 +188,8 @@ against the V2 background-revisit fixture. Legacy `CRYSTX` records are parsed
 into the shared cell state, and the compatibility writer now uses that shared
 cell for minimum-image connectivity instead of inferring a box from the
 centroid coordinates. Unsupported templates still fail cleanly.
+
+The mixed BAOAB path also accepts multiple quantum particles in one run so
+long as they share the same bead count.  Their pseudo-masses are set via
+`groups[].mass_amu`, and the restart format round-trips all quantum indices,
+masses, normal-mode coordinates, and cumulative heat.

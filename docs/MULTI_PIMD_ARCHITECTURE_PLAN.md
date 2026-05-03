@@ -9,6 +9,14 @@ the modular boundary, thermostat plumbing, restart/output handling, and the
 
 It is not enough for the real problem class.
 
+Current implementation note:
+
+- multiple PIMD particles are now supported in the mixed BAOAB path;
+- the restart state round-trips multiple quantum indices, masses, and bead
+  coordinates;
+- heterogeneous bead counts in one mixed run are still intentionally rejected
+  so the production boundary remains testable.
+
 The target workload includes:
 
 - one or more excess electrons as PIMD particles;

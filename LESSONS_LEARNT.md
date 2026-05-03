@@ -792,3 +792,29 @@ Resolution:
 Validation:
 
 - Clean rebuild and full `make test` passed after the source-order fix.
+
+## 2026-05-03: Multi-Quantum Mixed BAOAB Support
+
+Problem:
+
+- The mixed BAOAB driver still assumed exactly one PIMD particle in practice.
+- That made the framework unusable for the real graphitic transport cases,
+  where multiple excess electrons can be quantum particles in the same run.
+- The pseudo-electron mass was still too implicit in the driver boundary.
+
+Resolution:
+
+- Removed the hard singleton guard and generalized the mixed BAOAB step to
+  carry an explicit list of quantum particles.
+- Kept the production boundary conservative by requiring a shared bead count
+  for all quantum particles in one mixed run.
+- Added explicit `mass_amu` support to group specifications so pseudo-particle
+  mass is not hidden inside driver code.
+- Extended the restart state to round-trip multiple quantum indices, masses,
+  normal-mode coordinates, charges, and solver guesses.
+
+Validation:
+
+- `test_27_multi_quantum_restart` passes for a two-quantum-particle mixed
+  restart roundtrip.
+- `make test` passes end to end with the new multi-quantum boundary.
