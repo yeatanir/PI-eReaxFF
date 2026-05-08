@@ -21,8 +21,10 @@
 | --- | --- | ---: | ---: | --- | --- | --- |
 | Strict single-point | `config_jamil_112c_113el_p1_300K.yaml` | 0 | 1 | on | single point passed; repeatability timed out | 143.76 s |
 | Production smoke | `config_jamil_112c_113el_p1_300K_prod.yaml` | 1 | 1 | off | passed; 5 oracle calls | 258.13 s |
+| Parallel PIMD smoke | `config_jamil_112c_113el_p16_300K_prod.yaml` | 1 | 16 | off | passed with `OMP_NUM_THREADS=16`; 80 oracle calls | 4066.99 s |
 
 The production smoke gives about 51.6 s per serial force-export oracle call on this 112C/113El target. A P=16 one-step run would require many serial bead force calls on the current adapter path, so the first P=16 launch should be a short bounded smoke or should wait for parallel force-call dispatch.
+The P=16 smoke confirmed bead calls dispatch in parallel waves, but 16 concurrent legacy force-export binaries scale poorly on this machine. Use lower thread counts, for example `OMP_NUM_THREADS=4` or `OMP_NUM_THREADS=8`, for the next production stress runs.
 
 ## 2026-05-07 P=1 Production Smoke
 
@@ -36,3 +38,18 @@ The production smoke gives about 51.6 s per serial force-export oracle call on t
   - classical Berendsen: -1.01771946427576E-04 eV
   - electron PILE: -2.13726349951010E-03 eV
 - Host assignment check for the input geometry: 113 electrons assigned across 112 unique carbon hosts, as expected for one excess electron.
+
+## 2026-05-07 P=16 Parallel Smoke
+
+- Command:
+  `env OMP_NUM_THREADS=16 ./build/ereaxff_mixed_baoab_main projects/jamil_replication/config_jamil_112c_113el_p16_300K_prod.yaml build/jamil_replication/run_jamil_112c_113el_p16_prod_steps1_parallel/out`
+- Result: passed one 0.1 fs step.
+- Oracle calls: 80 complete `adapter_call_*` directories.
+- Adapter work size: 715 MB.
+- Final carbon temperature: 292.973 K.
+- Final electron temperature: 505.433 K.
+- Final `energy_eV`: -511.163605892981.
+- Final `max_force_eV_per_A`: 2.24834187306845E-03.
+- Thermostat heat after one step:
+  - classical Berendsen: -1.01771946427576E-04 eV
+  - electron PILE: 6.48222086563056E-01 eV

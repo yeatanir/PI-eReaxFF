@@ -1,5 +1,5 @@
 override FC := $(if $(filter default undefined,$(origin FC)),gfortran,$(FC))
-FFLAGS ?= -std=f2018 -Wall -Wextra -Wimplicit-interface -fcheck=all -O2
+FFLAGS ?= -std=f2018 -Wall -Wextra -Wimplicit-interface -fcheck=all -O2 -fopenmp
 
 BUILD_DIR := build
 MOD_DIR := $(BUILD_DIR)/mod

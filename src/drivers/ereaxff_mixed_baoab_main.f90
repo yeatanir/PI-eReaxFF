@@ -129,7 +129,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a)') "PI-eReaxFF mixed eReaxFF BAOAB driver"
   write(*,'(a)') "build/version: development"
   write(*,'(a)') "ring-polymer convention: standard_ipi"
-  write(*,'(a,i0)') "P: ", beads
+  write(*,'(a,i0)') "configured default P: ", beads
   write(*,'(a,es12.4)') "T_K: ", temperature_K
   write(*,'(a)') "thermostat mode: mixed_group"
   write(*,'(a)') "integrator mode: mixed_baoab"
@@ -211,6 +211,7 @@ program ereaxff_mixed_baoab_main
   if (len_trim(restart_in) > 0 .and. trim(restart_in) /= "none") then
     if (restart_state%beads /= beads) error stop "ereaxff_mixed_baoab_main: restart max bead-count mismatch"
   end if
+  write(*,'(a,i0)') "active max P: ", beads
   call print_group_thermostats(groups)
 
   allocate(rp(nquantum))

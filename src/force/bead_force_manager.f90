@@ -72,6 +72,9 @@ contains
     character(len=*), intent(in) :: charge_policy
     type(oracle_bead_summary), intent(inout) :: summary
     type(oracle_adapter_result) :: result
+    type(oracle_adapter_result), allocatable :: bead_results(:)
+    type(oracle_adapter_state), allocatable :: bead_providers(:)
+    integer :: call_base
     integer :: bead, p
 
     result%force%energy_eV = 0.0_dp
@@ -90,16 +93,30 @@ contains
     end if
 
     if (charge_policy_uses_bead_local_memory(charge_policy)) then
+      allocate(bead_results(p))
+      allocate(bead_providers(p))
+      call_base = provider%call_count
+      provider%call_count = provider%call_count + p
       do bead = 1, p
-        call oracle_adapter_eval(provider, positions_A(:, :, bead), &
+        bead_providers(bead) = provider
+      end do
+
+!$omp parallel do default(none) private(bead) shared(p, bead_providers, positions_A, charge_memory, &
+!$omp& solver_guess_by_bead, charge_policy, bead_results, call_base)
+      do bead = 1, p
+        call oracle_adapter_eval(bead_providers(bead), positions_A(:, :, bead), &
             charge_memory%charges_by_bead(:, bead), solver_guess_by_bead(:, bead), bead_id=bead, &
-            charge_policy=charge_policy, result=result)
-        summary%bead_energies_eV(bead) = result%force%energy_eV
-        summary%scaled_forces_eV_per_A(:, :, bead) = result%force%forces_eV_per_A / real(p, dp)
-        summary%bead_charges(:, bead) = result%force%charges
-        summary%bead_solver_guess(:, bead) = result%solver_guess
-        summary%bead_status(bead) = result%force%status
-        call set_bead_charges(charge_memory, bead, result%force%charges)
+            charge_policy=charge_policy, result=bead_results(bead), call_slot=call_base + bead)
+      end do
+!$omp end parallel do
+
+      do bead = 1, p
+        summary%bead_energies_eV(bead) = bead_results(bead)%force%energy_eV
+        summary%scaled_forces_eV_per_A(:, :, bead) = bead_results(bead)%force%forces_eV_per_A / real(p, dp)
+        summary%bead_charges(:, bead) = bead_results(bead)%force%charges
+        summary%bead_solver_guess(:, bead) = bead_results(bead)%solver_guess
+        summary%bead_status(bead) = bead_results(bead)%force%status
+        call set_bead_charges(charge_memory, bead, bead_results(bead)%force%charges)
       end do
       summary%pimd_potential_eV = sum(summary%bead_energies_eV) / real(p, dp)
     else if (charge_policy_uses_centroid_contraction(charge_policy)) then

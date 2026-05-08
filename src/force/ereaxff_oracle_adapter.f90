@@ -107,7 +107,7 @@ contains
     adapter%initialized = .true.
   end subroutine oracle_adapter_init
 
-  subroutine oracle_adapter_eval(adapter, positions_A, charge_in, solver_guess_in, bead_id, charge_policy, result)
+  subroutine oracle_adapter_eval(adapter, positions_A, charge_in, solver_guess_in, bead_id, charge_policy, result, call_slot)
     type(oracle_adapter_state), intent(inout) :: adapter
     real(dp), intent(in) :: positions_A(:, :)
     real(dp), intent(in) :: charge_in(:)
@@ -115,6 +115,7 @@ contains
     integer, intent(in), optional :: bead_id
     character(len=*), intent(in), optional :: charge_policy
     type(oracle_adapter_result), intent(inout) :: result
+    integer, intent(in), optional :: call_slot
     character(len=shell_path_len) :: work_dir
     integer :: bead_value, status, natom
     real(dp) :: energy_kcal, max_force, charge_sum
@@ -133,8 +134,13 @@ contains
     if (present(bead_id)) bead_value = bead_id
     if (bead_value < 1) error stop "oracle_adapter_eval: bead_id must be positive"
 
-    adapter%call_count = adapter%call_count + 1
-    work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(adapter%call_count, 4)
+    if (present(call_slot)) then
+      if (call_slot < 1) error stop "oracle_adapter_eval: call_slot must be positive"
+      work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(call_slot, 4)
+    else
+      adapter%call_count = adapter%call_count + 1
+      work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(adapter%call_count, 4)
+    end if
 
     call oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
         work_dir, energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
