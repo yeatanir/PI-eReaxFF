@@ -251,12 +251,60 @@ contains
     real(dp), intent(in) :: solver_guess_in(:)
     character(len=*), intent(in) :: work_dir
 
-    call copy_fixture(adapter%control_path, trim(work_dir) // "/control")
+    call write_control_with_cell(adapter, trim(work_dir) // "/control")
     call copy_fixture(adapter%ffield_path, trim(work_dir) // "/ffield")
     call copy_fixture(adapter%iopt_path, trim(work_dir) // "/fort.20")
     call write_text_file(trim(work_dir) // "/fort.35", "0")
     call write_charge_trace(trim(work_dir) // "/charge_memory.in", charge_in, solver_guess_in)
   end subroutine write_legacy_inputs
+
+  subroutine write_control_with_cell(adapter, target)
+    type(oracle_adapter_state), intent(in) :: adapter
+    character(len=*), intent(in) :: target
+    integer, parameter :: line_len = 8192
+    integer :: src_unit, dst_unit, ios
+    character(len=line_len) :: line
+    logical :: replaced
+
+    open(newunit=src_unit, file=adapter%control_path, status="old", action="read", iostat=ios)
+    if (ios /= 0) error stop "write_control_with_cell: unable to open source control"
+    open(newunit=dst_unit, file=target, status="replace", action="write", iostat=ios)
+    if (ios /= 0) error stop "write_control_with_cell: unable to open target control"
+
+    do
+      read(src_unit,'(A)',iostat=ios) line
+      if (ios /= 0) exit
+      replaced = .false.
+      if (adapter%template%cell%defined) then
+        call maybe_write_control_axis(dst_unit, line, "axis1", adapter%template%cell%crystx(1), replaced)
+        if (.not. replaced) call maybe_write_control_axis(dst_unit, line, "axis2", adapter%template%cell%crystx(2), replaced)
+        if (.not. replaced) call maybe_write_control_axis(dst_unit, line, "axis3", adapter%template%cell%crystx(3), replaced)
+      end if
+      if (.not. replaced) write(dst_unit,'(a)') trim(line)
+    end do
+
+    close(src_unit)
+    close(dst_unit)
+  end subroutine write_control_with_cell
+
+  subroutine maybe_write_control_axis(unit, line, axis_label, axis_value, replaced)
+    integer, intent(in) :: unit
+    character(len=*), intent(in) :: line, axis_label
+    real(dp), intent(in) :: axis_value
+    logical, intent(inout) :: replaced
+    character(len=64) :: label
+    real(dp) :: old_value
+    integer :: ios
+
+    if (replaced) return
+    label = ""
+    old_value = 0.0_dp
+    read(line, *, iostat=ios) old_value, label
+    if (ios == 0 .and. trim(label) == axis_label) then
+      write(unit,'(f12.5,1x,a)') axis_value, trim(axis_label)
+      replaced = .true.
+    end if
+  end subroutine maybe_write_control_axis
 
   subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, repeatability_check)
     character(len=*), intent(in) :: work_dir, script_path, timeout_runner, smoke_binary, repeat_binary
