@@ -3,6 +3,17 @@ FFLAGS ?= -std=f2018 -Wall -Wextra -Wimplicit-interface -fcheck=all -O2
 
 BUILD_DIR := build
 MOD_DIR := $(BUILD_DIR)/mod
+V2_ROOT ?= /Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2
+V2_BUILD_DIR := $(V2_ROOT)/build
+V2_ORACLE_OBJS := \
+	$(V2_BUILD_DIR)/ereaxff_force_oracle_v2.o \
+	$(V2_BUILD_DIR)/reac_v2.o \
+	$(V2_BUILD_DIR)/poten_v2.o \
+	$(V2_BUILD_DIR)/blas.o \
+	$(V2_BUILD_DIR)/cg.o \
+	$(V2_BUILD_DIR)/shanno_v2.o \
+	$(V2_BUILD_DIR)/minres.o \
+	$(V2_BUILD_DIR)/legacy_link_stubs.o
 
 CORE_SRCS := src/core/kinds.f90 src/core/constants.f90 src/core/units.f90 src/core/errors.f90 src/core/rng.f90 src/core/system_state.f90 src/core/legacy_geo_loader.f90 src/core/selectors.f90 src/thermostat/thermostat_registry.f90 src/core/particle_groups.f90 src/core/input_config.f90 src/core/restart.f90
 PIMD_SRCS := src/pimd/normal_modes.f90 src/pimd/ring_polymer.f90 src/pimd/spring_energy.f90 src/pimd/free_ring_propagator.f90 src/pimd/harmonic_quantum_variance.f90
@@ -37,12 +48,18 @@ TEST11_NEG_SRCS := tests/test_11_structural_stress/test_invalid_group_overlap.f9
 TEST26_SRCS := tests/test_26_crystx_periodic_loader/test_crystx_periodic_loader.f90
 TEST27_SRCS := tests/test_27_multi_quantum_restart/test_multi_quantum_restart.f90
 
-.PHONY: all test build_tests harmonic_pimd_main ereaxff_pimd_main ereaxff_mixed_baoab_main test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 test_13_oracle_charge_policy_modes test_14_mixed_oracle_manager_fixture test_15_mixed_oracle_manager_matrix test_16_mixed_oracle_manager_restart_output test_17_ereaxff_mixed_driver_smoke test_18_ereaxff_mixed_baoab_matrix test_19_ereaxff_mixed_baoab_restart test_20_ereaxff_mixed_baoab_policy_matrix test_21_ereaxff_mixed_baoab_config_smoke test_22_ereaxff_mixed_baoab_config_matrix test_23_ereaxff_mixed_baoab_geometry_matrix test_24_ereaxff_mixed_baoab_user_geo_matrix test_25_phase6_like_temperature_partition test_26_crystx_periodic_loader test_27_multi_quantum_restart test_28_paired_graphene_60el_60c_smoke clean
+.PHONY: all test build_tests harmonic_pimd_main ereaxff_pimd_main ereaxff_mixed_baoab_main oracle_single_point_force_export test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 test_13_oracle_charge_policy_modes test_14_mixed_oracle_manager_fixture test_15_mixed_oracle_manager_matrix test_16_mixed_oracle_manager_restart_output test_17_ereaxff_mixed_driver_smoke test_18_ereaxff_mixed_baoab_matrix test_19_ereaxff_mixed_baoab_restart test_20_ereaxff_mixed_baoab_policy_matrix test_21_ereaxff_mixed_baoab_config_smoke test_22_ereaxff_mixed_baoab_config_matrix test_23_ereaxff_mixed_baoab_geometry_matrix test_24_ereaxff_mixed_baoab_user_geo_matrix test_25_phase6_like_temperature_partition test_26_crystx_periodic_loader test_27_multi_quantum_restart test_28_paired_graphene_60el_60c_smoke clean
 
 all: build_tests harmonic_pimd_main
 
 $(BUILD_DIR) $(MOD_DIR):
 	mkdir -p $@
+
+oracle_single_point_force_export: $(BUILD_DIR)
+	$(MAKE) -C $(V2_ROOT) v2_sources
+	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore \
+		tools/oracle_single_point_force_export.f90 $(V2_ORACLE_OBJS) \
+		-o $(BUILD_DIR)/oracle_single_point_force_export
 
 test_00_build: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST00_SRCS) -o $(BUILD_DIR)/test_00_build

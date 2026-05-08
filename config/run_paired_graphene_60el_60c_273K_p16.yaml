@@ -14,6 +14,8 @@ force_provider:
   geo: "geo"
   control: "../V2/tests/regression/test_trackB2_geometry_check/work/excess/control"
   iopt: "tests/reference/iopt"
+  smoke_binary: "/Users/yeatanir/PhD/eReaxFF PIMD/ereaxff_pimd_modular/build/oracle_single_point_force_export"
+  repeatability_check: false
 
 ring_polymer:
   convention: standard_ipi

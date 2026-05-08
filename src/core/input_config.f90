@@ -27,6 +27,7 @@ module ereaxff_input_config
     character(len=512) :: repeat_binary = ""
     character(len=512) :: make_geo_script = ""
     character(len=512) :: timeout_runner = ""
+    logical :: repeatability_check = .true.
   end type force_provider_config
 
   type, public :: ring_polymer_config
@@ -263,6 +264,8 @@ contains
       force%make_geo_script = strip_quotes(value)
     case ("timeout_runner")
       force%timeout_runner = strip_quotes(value)
+    case ("repeatability_check")
+      call parse_logical(value, force%repeatability_check)
     case default
       error stop "parse_force_provider_line: unsupported key"
     end select

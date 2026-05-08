@@ -24,6 +24,7 @@ module ereaxff_oracle_adapter
     character(len=:), allocatable :: control_path
     character(len=:), allocatable :: ffield_path
     character(len=:), allocatable :: iopt_path
+    logical :: repeatability_check = .true.
   end type oracle_adapter_state
 
   type, public :: oracle_adapter_result
@@ -40,12 +41,13 @@ module ereaxff_oracle_adapter
 contains
 
   subroutine oracle_adapter_init(adapter, template, v1_root, v2_root, work_root, control_path, ffield_path, iopt_path, &
-      smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path)
+      smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path, repeatability_check)
     type(oracle_adapter_state), intent(inout) :: adapter
     type(system_state), intent(in) :: template
     character(len=*), intent(in) :: v1_root, v2_root, work_root
     character(len=*), intent(in), optional :: control_path, ffield_path, iopt_path
     character(len=*), intent(in), optional :: smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path
+    logical, intent(in), optional :: repeatability_check
 
     call assert_nonempty(v1_root, "oracle_adapter_init: v1_root")
     call assert_nonempty(v2_root, "oracle_adapter_init: v2_root")
@@ -80,6 +82,11 @@ contains
       adapter%geo_path = trim(geo_path)
     else
       adapter%geo_path = ""
+    end if
+    if (present(repeatability_check)) then
+      adapter%repeatability_check = repeatability_check
+    else
+      adapter%repeatability_check = .true.
     end if
     if (present(control_path) .and. len_trim(control_path) > 0) then
       adapter%control_path = trim(control_path)
@@ -173,7 +180,7 @@ contains
 
     wrapper_script = trim(work_dir) // "/run_oracle_wrapper.sh"
     call write_oracle_wrapper(trim(work_dir), trim(wrapper_script), adapter%timeout_runner, &
-        adapter%smoke_binary, adapter%repeat_binary)
+        adapter%smoke_binary, adapter%repeat_binary, adapter%repeatability_check)
     call run_shell("sh " // shell_quote(trim(wrapper_script)), exitstat)
     if (exitstat /= 0) then
       error stop "oracle_adapter_smoke: legacy smoke command failed"
@@ -251,8 +258,9 @@ contains
     call write_charge_trace(trim(work_dir) // "/charge_memory.in", charge_in, solver_guess_in)
   end subroutine write_legacy_inputs
 
-  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary)
+  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, repeatability_check)
     character(len=*), intent(in) :: work_dir, script_path, timeout_runner, smoke_binary, repeat_binary
+    logical, intent(in) :: repeatability_check
     integer :: unit, ios
 
     open(newunit=unit, file=script_path, status="replace", action="write", iostat=ios)
@@ -262,8 +270,12 @@ contains
     write(unit,'(a)') "cd '" // trim(work_dir) // "'"
     write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
         "run_single_point.log' '" // trim(smoke_binary) // "'"
-    write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
-        "run_repeatability.log' '" // trim(repeat_binary) // "' 3"
+    if (repeatability_check) then
+      write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
+          "run_repeatability.log' '" // trim(repeat_binary) // "' 3"
+    else
+      write(unit,'(a)') "printf '%s\n' 'repeatability_check skipped' > run_repeatability.log"
+    end if
     close(unit)
   end subroutine write_oracle_wrapper
 

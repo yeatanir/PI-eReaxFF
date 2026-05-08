@@ -84,6 +84,7 @@ program test_mixed_classical_pimd_config
   call assert_int("parsed second PIMD beads", cfg%groups(3)%beads, 8)
   call assert_close("parsed first PIMD mass", cfg%groups(2)%mass_amu, 0.00054858_dp, 1.0e-12_dp)
   call assert_close("parsed second PIMD mass", cfg%groups(3)%mass_amu, 0.00109716_dp, 1.0e-12_dp)
+  call assert_true("parsed production oracle mode", .not. cfg%force_provider%repeatability_check)
 
   write(*,'(a)') "test_09_mixed_classical_pimd_config: PASS"
   write(*,'(a,i0)') "  classical_count = ", count_particles_with_dynamics(assignment, dynamics_classical)
@@ -104,6 +105,7 @@ contains
     write(unit,'(a)') "  steps: 0"
     write(unit,'(a)') "force_provider:"
     write(unit,'(a)') "  type: ereaxff_oracle"
+    write(unit,'(a)') "  repeatability_check: false"
     write(unit,'(a)') "ring_polymer:"
     write(unit,'(a)') "  default_beads: 16"
     write(unit,'(a)') "charge_coupling:"

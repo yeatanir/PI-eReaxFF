@@ -135,6 +135,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a)') "integrator mode: mixed_baoab"
   write(*,'(a)') "charge coupling mode: " // trim(policy_arg)
   write(*,'(a)') "force provider: eReaxFF adapter"
+  if (config_mode) write(*,'(a,l1)') "oracle repeatability_check=", cfg%force_provider%repeatability_check
   write(*,'(a)') "geometry template: " // trim(cfg%geometry%template)
   if (config_mode) then
     write(*,'(a)') "input boundary: config-driven legacy V1/V2 fixtures"
@@ -282,7 +283,7 @@ program ereaxff_mixed_baoab_main
         iopt_path=join_path(v1_root, trim(cfg%force_provider%iopt)), &
         smoke_binary=trim(cfg%force_provider%smoke_binary), repeat_binary=trim(cfg%force_provider%repeat_binary), &
         make_geo_script=trim(cfg%force_provider%make_geo_script), timeout_runner=trim(cfg%force_provider%timeout_runner), &
-        geo_path=trim(geometry_path))
+        geo_path=trim(geometry_path), repeatability_check=cfg%force_provider%repeatability_check)
   else
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
   end if

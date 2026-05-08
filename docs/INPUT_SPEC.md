@@ -32,7 +32,7 @@ The Fortran input parser currently accepts:
   `restart_stride`, `output_dir`;
 - `force_provider`: `type`, `v1_path`, `v2_path`, `work_root`, `ffield`,
   `geo`, `control`, `iopt`, `smoke_binary`, `repeat_binary`,
-  `make_geo_script`, `timeout_runner`;
+  `make_geo_script`, `timeout_runner`, `repeatability_check`;
 - `ring_polymer`: `convention`, `default_beads`, `propagator`;
 - `charge_coupling`: `mode`, `charge_tolerance`;
 - `geometry`: `template`, `structure_path`, `geo_path`, `periodic`,
@@ -48,6 +48,12 @@ implemented for legacy `geo` files containing `HETATM` records and supports
 both `structure_path` and `geo_path`.  `CRYSTX` records are parsed into the
 shared cell state, and the YAML can also provide explicit `periodic` and
 `crystx` values when the geometry file does not.
+
+For long production eReaxFF runs, set `force_provider.repeatability_check:
+false` and point `force_provider.smoke_binary` at
+`build/oracle_single_point_force_export` after building it with
+`make oracle_single_point_force_export`.  Regression configs should leave
+`repeatability_check` at its default `true`.
 
 ## Current Selector Subset
 
