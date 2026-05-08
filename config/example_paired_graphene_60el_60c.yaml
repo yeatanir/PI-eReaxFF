@@ -1,0 +1,55 @@
+simulation:
+  dt_fs: 0.01
+  steps: 1
+  seed: 24680
+  integrator: baoab
+  output_stride: 1
+  restart_stride: 1
+
+force_provider:
+  type: ereaxff_oracle
+  v1_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V1"
+  v2_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2"
+  ffield: "../V2/tests/regression/test_trackB2_geometry_check/work/excess/ffield"
+  geo: "geo"
+  control: "../V2/tests/regression/test_trackB2_geometry_check/work/excess/control"
+  iopt: "tests/reference/iopt"
+
+ring_polymer:
+  convention: standard_ipi
+  default_beads: 2
+  propagator: exact
+
+charge_coupling:
+  mode: bead_local_acks2
+  charge_tolerance: 1.0e-8
+
+geometry:
+  template: user_geo_structure
+  structure_path: ""
+  geo_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2/tests/regression/test_trackB2_geometry_check/work/excess/paired_graphene_60el.geo"
+  periodic: true
+  crystx: [12.30620, 12.78900, 20.00000, 90.00000, 90.00000, 90.00000]
+
+groups:
+  - name: graphene_carbons
+    selector: "element == C"
+    dynamics: classical
+    mobile: true
+    thermostat: none
+    temperature_K: 300.0
+
+  - name: paired_electrons
+    selector: "element == El"
+    dynamics: pimd
+    beads: 2
+    thermostat: pile_l
+    temperature_K: 300.0
+    centroid_gamma_fs_inv: 0.001
+    mass_amu: 0.00054858
+
+output:
+  centroid_xyz: true
+  beads_xyz: true
+  reaxff_compat: true
+  diagnostics: true

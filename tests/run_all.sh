@@ -50,5 +50,6 @@ cat build/test_summaries/test_24_ereaxff_mixed_baoab_user_geo_matrix.summary
 cat build/test_summaries/test_25_phase6_like_temperature_partition.summary
 cat build/test_summaries/test_26_crystx_periodic_loader.summary
 cat build/test_summaries/test_27_multi_quantum_restart.summary
+cat build/test_summaries/test_28_paired_graphene_60el_60c_smoke.summary
 
 echo "All implemented tests passed."

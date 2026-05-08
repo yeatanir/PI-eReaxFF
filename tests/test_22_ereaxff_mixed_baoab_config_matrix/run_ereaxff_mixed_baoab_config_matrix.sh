@@ -80,7 +80,7 @@ import sys
 source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 target = pathlib.Path(sys.argv[2])
 source = source.replace("  - name: other_electrons\n    selector: \"element == El and id != 61\"\n    dynamics: frozen\n    thermostat: none\n", "")
-source = source.replace("  - name: selected_electrons\n    selector: \"element == El and id in [61]\"\n    dynamics: pimd\n    beads: 16\n    thermostat: pile_l\n    temperature_K: 300.0\n    centroid_gamma_fs_inv: 0.001\n", "  - name: selected_electrons\n    selector: \"all\"\n    dynamics: pimd\n    beads: 4\n    thermostat: pile_l\n    temperature_K: 300.0\n    centroid_gamma_fs_inv: 0.001\n")
+source = source.replace("  - name: selected_electrons\n    selector: \"element == El and id in [61]\"\n    dynamics: pimd\n    beads: 16\n    thermostat: pile_l\n    temperature_K: 300.0\n    centroid_gamma_fs_inv: 0.001\n    mass_amu: 0.00054858\n", "  - name: selected_electrons\n    selector: \"all\"\n    dynamics: pimd\n    beads: 4\n    thermostat: pile_l\n    temperature_K: 300.0\n    centroid_gamma_fs_inv: 0.001\n    mass_amu: 0.00054858\n")
 target.write_text(source, encoding="utf-8")
 PY
 

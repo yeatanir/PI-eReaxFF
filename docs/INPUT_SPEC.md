@@ -71,8 +71,12 @@ Cartesian Langevin bath while the selected PIMD electron uses PILE-L.  The
 driver prints the per-group thermostat choice at startup so mixed runs do not
 silently inherit a single global bath.
 
-Current multi-quantum note: the mixed BAOAB path now accepts multiple PIMD
-particles in one run, provided they share a common bead count.  Their
-pseudo-masses are specified per group with `mass_amu`, and the restart format
-round-trips the full set of quantum indices, masses, normal-mode coordinates,
-and cumulative heat.
+Current multi-quantum note: the config/model layer now parses multiple PIMD
+groups in one input, preserves group-specific bead counts on the particle
+assignment, and requires every config-file PIMD group to set an explicit
+`mass_amu`.  This matches the V2 Phase 9 lesson that each selected electron
+must remain a labeled ring polymer with its own pseudo-mass.  The mixed BAOAB
+path now creates one ring-polymer state per quantum particle and stores
+per-quantum bead counts in restart files.  The force-manager storage is still
+one `max_beads` axis, with inactive bead slots centroid-filled for particles
+whose active bead count is smaller.

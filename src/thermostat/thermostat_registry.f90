@@ -11,7 +11,7 @@ contains
     character(len=*), intent(in) :: name
 
     select case (trim(name))
-    case ("none", "langevin", "pile_l", "pile_g")
+    case ("none", "langevin", "berendsen", "pile_l", "pile_g")
       is_supported = .true.
     case default
       is_supported = .false.
@@ -25,4 +25,3 @@ contains
   end function thermostat_requires_stub_failure
 
 end module ereaxff_thermostat_registry
-

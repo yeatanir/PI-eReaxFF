@@ -56,6 +56,7 @@ program test_multi_quantum_restart
   allocate(restart_a%positions_A(3, 3, 4))
   allocate(restart_a%classical_velocities(3, 3))
   allocate(restart_a%quantum_indices(2))
+  allocate(restart_a%quantum_beads(2))
   allocate(restart_a%quantum_masses_amu(2))
   allocate(restart_a%quantum_heat_eV(2))
   allocate(restart_a%q_nm(3, 2, 4))
@@ -63,6 +64,7 @@ program test_multi_quantum_restart
   allocate(restart_a%charges_by_bead(3, 4))
   allocate(restart_a%solver_guess_by_bead(3, 4))
   restart_a%quantum_indices = [2, 3]
+  restart_a%quantum_beads = [4, 4]
   restart_a%quantum_masses_amu = [1.0_dp, 1.0_dp]
   restart_a%quantum_heat_eV = [0.1_dp, 0.2_dp]
   restart_a%positions_A = 0.0_dp
@@ -89,6 +91,8 @@ program test_multi_quantum_restart
   call assert_int("restart_nquantum", restart_b%nquantum, 2)
   call assert_int("restart_quantum_index_1", restart_b%quantum_indices(1), 2)
   call assert_int("restart_quantum_index_2", restart_b%quantum_indices(2), 3)
+  call assert_int("restart_quantum_beads_1", restart_b%quantum_beads(1), 4)
+  call assert_int("restart_quantum_beads_2", restart_b%quantum_beads(2), 4)
   call assert_close("restart_heat_1", restart_b%quantum_heat_eV(1), 0.1_dp, 1.0e-12_dp)
   call assert_close("restart_heat_2", restart_b%quantum_heat_eV(2), 0.2_dp, 1.0e-12_dp)
   call assert_close("restart_qnm", restart_b%q_nm(1, 2, 4), restart_a%q_nm(1, 2, 4), 1.0e-12_dp)

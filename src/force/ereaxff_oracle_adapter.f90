@@ -166,7 +166,7 @@ contains
 
     has_geo_path = len_trim(adapter%geo_path) > 0
     if (has_geo_path) then
-      call copy_fixture(adapter%geo_path, trim(work_dir) // "/geo")
+      call write_geo_with_positions(adapter, adapter%geo_path, trim(work_dir) // "/geo", positions_A)
     else
       call generate_phase4_geo(trim(work_dir), adapter%make_geo_script, positions_A)
     end if
@@ -285,6 +285,79 @@ contains
     if (exitstat /= 0) error stop "generate_phase4_geo: geometry generation failed"
   end subroutine generate_phase4_geo
 
+  subroutine write_geo_with_positions(adapter, source, target, positions_A)
+    type(oracle_adapter_state), intent(in) :: adapter
+    character(len=*), intent(in) :: source, target
+    real(dp), intent(in) :: positions_A(:, :)
+    integer, parameter :: line_len = 8192
+    integer :: src_unit, dst_unit, ios, atom_counter
+    character(len=line_len) :: line
+    character(len=8) :: record, res3, res5
+    character(len=5) :: atom_name, atom_type
+    character(len=1) :: res1
+    integer :: atom_id_read, dummy_int1, dummy_int2
+    real(dp) :: x, y, z, dummy_real
+    logical :: wrote_crystx
+
+    if (size(positions_A, 1) /= 3) error stop "write_geo_with_positions: positions must be 3D"
+    open(newunit=src_unit, file=source, status="old", action="read", iostat=ios)
+    if (ios /= 0) error stop "write_geo_with_positions: unable to open source geo"
+    open(newunit=dst_unit, file=target, status="replace", action="write", iostat=ios)
+    if (ios /= 0) error stop "write_geo_with_positions: unable to open target geo"
+
+    atom_counter = 0
+    wrote_crystx = .false.
+    do
+      read(src_unit,'(A)',iostat=ios) line
+      if (ios /= 0) exit
+      if (starts_with(trim(line), "CRYSTX")) then
+        if (adapter%template%cell%defined) then
+          call write_crystx_line(dst_unit, adapter%template%cell%crystx)
+        else
+          write(dst_unit,'(a)') trim(line)
+        end if
+        wrote_crystx = .true.
+      else if (starts_with(trim(line), "HETATM")) then
+        if (adapter%template%cell%defined .and. .not. wrote_crystx) then
+          call write_crystx_line(dst_unit, adapter%template%cell%crystx)
+          wrote_crystx = .true.
+        end if
+        record = ""
+        atom_name = ""
+        atom_type = ""
+        res3 = ""
+        res1 = ""
+        res5 = ""
+        x = 0.0_dp
+        y = 0.0_dp
+        z = 0.0_dp
+        dummy_int1 = 0
+        dummy_int2 = 0
+        dummy_real = 0.0_dp
+        read(line, '(a6,1x,i5,1x,a5,1x,a3,1x,a1,1x,a5,3f10.5,1x,a5,i3,i2,1x,f8.5)', iostat=ios) &
+            record, atom_id_read, atom_name, res3, res1, atom_type, x, y, z, res5, dummy_int1, dummy_int2, dummy_real
+        if (ios /= 0) error stop "write_geo_with_positions: malformed HETATM record"
+        atom_counter = atom_counter + 1
+        if (atom_counter > size(positions_A, 2)) error stop "write_geo_with_positions: too many HETATM records"
+        write(dst_unit,'(a6,1x,i5,1x,a5,1x,a3,1x,a1,1x,a5,3f10.5,1x,a5,i3,i2,1x,f8.5)') &
+            record, atom_id_read, atom_name, res3, res1, atom_type, positions_A(:, atom_counter), &
+            res5, dummy_int1, dummy_int2, dummy_real
+      else
+        write(dst_unit,'(a)') trim(line)
+      end if
+    end do
+    close(src_unit)
+    close(dst_unit)
+    if (atom_counter /= size(positions_A, 2)) error stop "write_geo_with_positions: HETATM count mismatch"
+  end subroutine write_geo_with_positions
+
+  subroutine write_crystx_line(unit, crystx)
+    integer, intent(in) :: unit
+    real(dp), intent(in) :: crystx(6)
+
+    write(unit,'(a6,6(1x,f12.5))') "CRYSTX", crystx
+  end subroutine write_crystx_line
+
   subroutine write_charge_trace(path, charge_in, solver_guess_in)
     character(len=*), intent(in) :: path
     real(dp), intent(in) :: charge_in(:)
@@ -326,6 +399,18 @@ contains
     close(src_unit)
     close(dst_unit)
   end subroutine copy_fixture
+
+  pure logical function starts_with(text, prefix) result(match)
+    character(len=*), intent(in) :: text, prefix
+    integer :: n
+
+    n = len_trim(prefix)
+    if (len_trim(text) < n) then
+      match = .false.
+    else
+      match = text(1:n) == prefix(1:n)
+    end if
+  end function starts_with
 
   subroutine write_text_file(path, text)
     character(len=*), intent(in) :: path, text

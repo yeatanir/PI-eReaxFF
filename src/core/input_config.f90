@@ -159,6 +159,9 @@ contains
 
     do i = 1, size(config%groups)
       call validate_group_spec(config%groups(i))
+      if (trim(config%groups(i)%dynamics) == "pimd" .and. config%groups(i)%mass_amu <= 0.0_dp) then
+        error stop "validate_input_config: PIMD groups require explicit mass_amu"
+      end if
     end do
   end subroutine validate_input_config
 
@@ -184,6 +187,9 @@ contains
     group%beads = 1
     group%thermostat = "none"
     group%temperature_K = 0.0_dp
+    group%gamma_fs_inv = 0.0_dp
+    group%centroid_gamma_fs_inv = 0.0_dp
+    group%tau_fs = 0.0_dp
     group%mass_amu = -1.0_dp
   end subroutine init_group
 
@@ -371,6 +377,8 @@ contains
       read(value, *) group%gamma_fs_inv
     case ("centroid_gamma_fs_inv")
       read(value, *) group%centroid_gamma_fs_inv
+    case ("tau_fs")
+      read(value, *) group%tau_fs
     case ("mass_amu")
       read(value, *) group%mass_amu
     case default

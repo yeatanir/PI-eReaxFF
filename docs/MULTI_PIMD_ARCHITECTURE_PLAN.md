@@ -14,8 +14,14 @@ Current implementation note:
 - multiple PIMD particles are now supported in the mixed BAOAB path;
 - the restart state round-trips multiple quantum indices, masses, and bead
   coordinates;
-- heterogeneous bead counts in one mixed run are still intentionally rejected
-  so the production boundary remains testable.
+- the config/model layer now accepts multiple PIMD groups, records
+  group-specific bead counts per particle, and requires explicit `mass_amu` for
+  every config-file PIMD group;
+- the mixed BAOAB path now allocates one `ring_polymer_state` per quantum
+  particle and propagates each active normal-mode slice with its own bead count;
+- the current oracle manager still evaluates a single `max_beads` axis; quantum
+  particles with fewer beads have inactive slots centroid-filled for oracle
+  bookkeeping and ignored by their normal-mode propagation.
 
 The target workload includes:
 

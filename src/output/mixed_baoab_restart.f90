@@ -16,6 +16,7 @@ module ereaxff_mixed_baoab_restart
     real(dp), allocatable :: positions_A(:, :, :)
     real(dp), allocatable :: classical_velocities(:, :)
     integer, allocatable :: quantum_indices(:)
+    integer, allocatable :: quantum_beads(:)
     real(dp), allocatable :: quantum_masses_amu(:)
     real(dp), allocatable :: q_nm(:, :, :)
     real(dp), allocatable :: v_nm(:, :, :)
@@ -35,6 +36,7 @@ contains
 
     if (.not. allocated(state%positions_A)) error stop "write_mixed_baoab_restart: positions not allocated"
     if (.not. allocated(state%quantum_indices)) error stop "write_mixed_baoab_restart: quantum indices not allocated"
+    if (.not. allocated(state%quantum_beads)) error stop "write_mixed_baoab_restart: quantum bead counts not allocated"
     if (.not. allocated(state%quantum_masses_amu)) error stop "write_mixed_baoab_restart: quantum masses not allocated"
     if (.not. allocated(state%quantum_heat_eV)) error stop "write_mixed_baoab_restart: quantum heat not allocated"
     if (.not. allocated(state%q_nm)) error stop "write_mixed_baoab_restart: q_nm not allocated"
@@ -42,6 +44,7 @@ contains
     if (.not. allocated(state%charges_by_bead)) error stop "write_mixed_baoab_restart: charges not allocated"
     if (.not. allocated(state%solver_guess_by_bead)) error stop "write_mixed_baoab_restart: solver memory not allocated"
     if (size(state%quantum_indices) /= state%nquantum) error stop "write_mixed_baoab_restart: nquantum mismatch"
+    if (size(state%quantum_beads) /= state%nquantum) error stop "write_mixed_baoab_restart: quantum bead count mismatch"
     if (size(state%quantum_masses_amu) /= state%nquantum) error stop "write_mixed_baoab_restart: mass count mismatch"
     if (size(state%quantum_heat_eV) /= state%nquantum) error stop "write_mixed_baoab_restart: heat count mismatch"
 
@@ -57,7 +60,7 @@ contains
     write(unit,'(a,1x,i0)') "rng_state_i8", state%rng_state_i8
     write(unit,'(a)') "quantum_indices"
     do q = 1, state%nquantum
-      write(unit,'(i8,1x,i0,1x,es24.16,1x,es24.16)') q, state%quantum_indices(q), &
+      write(unit,'(i8,1x,i0,1x,i0,2(1x,es24.16))') q, state%quantum_indices(q), state%quantum_beads(q), &
           state%quantum_masses_amu(q), state%quantum_heat_eV(q)
     end do
     write(unit,'(a)') "positions_A"
@@ -134,7 +137,8 @@ contains
     read(unit,*) key
     if (trim(key) /= "quantum_indices") error stop "read_mixed_baoab_restart: expected quantum_indices"
     do q = 1, state%nquantum
-      read(unit,*) index_value, state%quantum_indices(q), state%quantum_masses_amu(q), state%quantum_heat_eV(q)
+      read(unit,*) index_value, state%quantum_indices(q), state%quantum_beads(q), &
+          state%quantum_masses_amu(q), state%quantum_heat_eV(q)
       if (index_value /= q) error stop "read_mixed_baoab_restart: quantum index mismatch"
     end do
 
@@ -211,6 +215,7 @@ contains
     if (allocated(state%positions_A)) deallocate(state%positions_A)
     if (allocated(state%classical_velocities)) deallocate(state%classical_velocities)
     if (allocated(state%quantum_indices)) deallocate(state%quantum_indices)
+    if (allocated(state%quantum_beads)) deallocate(state%quantum_beads)
     if (allocated(state%quantum_masses_amu)) deallocate(state%quantum_masses_amu)
     if (allocated(state%quantum_heat_eV)) deallocate(state%quantum_heat_eV)
     if (allocated(state%q_nm)) deallocate(state%q_nm)
@@ -220,6 +225,7 @@ contains
     allocate(state%positions_A(state%ndim, state%nparticles, state%beads))
     allocate(state%classical_velocities(state%ndim, state%nparticles))
     allocate(state%quantum_indices(state%nquantum))
+    allocate(state%quantum_beads(state%nquantum))
     allocate(state%quantum_masses_amu(state%nquantum))
     allocate(state%quantum_heat_eV(state%nquantum))
     allocate(state%q_nm(state%ndim, state%nquantum, state%beads))
@@ -229,6 +235,7 @@ contains
     state%positions_A = 0.0_dp
     state%classical_velocities = 0.0_dp
     state%quantum_indices = 0
+    state%quantum_beads = state%beads
     state%quantum_masses_amu = 0.0_dp
     state%quantum_heat_eV = 0.0_dp
     state%q_nm = 0.0_dp

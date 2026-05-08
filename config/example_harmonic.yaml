@@ -26,10 +26,10 @@ groups:
     thermostat: pile_l
     temperature_K: 300.0
     centroid_gamma_fs_inv: 0.001
+    mass_amu: 1.0
 
 output:
   centroid_xyz: true
   beads_xyz: true
   reaxff_compat: false
   diagnostics: true
-

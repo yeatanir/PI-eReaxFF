@@ -46,6 +46,7 @@ groups:
     thermostat: pile_l
     temperature_K: 300.0
     centroid_gamma_fs_inv: 0.001
+    mass_amu: 0.00054858
 
   - name: other_electrons
     selector: "element == El and id != 61"

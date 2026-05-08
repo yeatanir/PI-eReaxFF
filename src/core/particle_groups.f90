@@ -20,6 +20,7 @@ module ereaxff_particle_groups
     real(dp) :: temperature_K = 0.0_dp
     real(dp) :: gamma_fs_inv = 0.0_dp
     real(dp) :: centroid_gamma_fs_inv = 0.0_dp
+    real(dp) :: tau_fs = 0.0_dp
     real(dp) :: mass_amu = -1.0_dp
   end type particle_group_spec
 
@@ -30,6 +31,7 @@ module ereaxff_particle_groups
     integer, allocatable :: beads(:)
     character(len=32), allocatable :: thermostat(:)
     real(dp), allocatable :: temperature_K(:)
+    real(dp), allocatable :: mass_amu(:)
   end type particle_group_assignment
 
   public :: validate_group_spec
@@ -51,6 +53,9 @@ contains
     if (group%temperature_K < 0.0_dp) error stop "validate_group_spec: temperature must be non-negative"
     if (group%gamma_fs_inv < 0.0_dp) error stop "validate_group_spec: gamma must be non-negative"
     if (group%centroid_gamma_fs_inv < 0.0_dp) error stop "validate_group_spec: centroid gamma must be non-negative"
+    if (group%tau_fs < 0.0_dp) error stop "validate_group_spec: tau must be non-negative"
+    if (trim(group%thermostat) == "berendsen" .and. group%tau_fs <= 0.0_dp) &
+        error stop "validate_group_spec: berendsen requires positive tau_fs"
     if (group%mass_amu < 0.0_dp .and. abs(group%mass_amu + 1.0_dp) > 1.0e-12_dp) &
         error stop "validate_group_spec: mass must be positive or unset"
     if (.not. thermostat_is_supported(group%thermostat)) error stop "validate_group_spec: unsupported thermostat"
@@ -86,6 +91,11 @@ contains
       assignment%beads(i) = groups(matched)%beads
       assignment%thermostat(i) = groups(matched)%thermostat
       assignment%temperature_K(i) = groups(matched)%temperature_K
+      if (groups(matched)%mass_amu > 0.0_dp) then
+        assignment%mass_amu(i) = groups(matched)%mass_amu
+      else
+        assignment%mass_amu(i) = state%mass_amu(i)
+      end if
     end do
   end subroutine assign_particle_groups
 
@@ -110,6 +120,7 @@ contains
     if (allocated(assignment%beads)) deallocate(assignment%beads)
     if (allocated(assignment%thermostat)) deallocate(assignment%thermostat)
     if (allocated(assignment%temperature_K)) deallocate(assignment%temperature_K)
+    if (allocated(assignment%mass_amu)) deallocate(assignment%mass_amu)
 
     allocate(assignment%group_index(nparticles))
     allocate(assignment%dynamics(nparticles))
@@ -117,6 +128,7 @@ contains
     allocate(assignment%beads(nparticles))
     allocate(assignment%thermostat(nparticles))
     allocate(assignment%temperature_K(nparticles))
+    allocate(assignment%mass_amu(nparticles))
 
     assignment%group_index = 0
     assignment%dynamics = ""
@@ -124,6 +136,7 @@ contains
     assignment%beads = 1
     assignment%thermostat = "none"
     assignment%temperature_K = 0.0_dp
+    assignment%mass_amu = 0.0_dp
   end subroutine allocate_assignment
 
   logical function dynamics_is_valid(dynamics) result(is_valid)

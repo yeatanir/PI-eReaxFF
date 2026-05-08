@@ -31,6 +31,7 @@ module ereaxff_system_state
   public :: cell_is_defined
   public :: cell_lengths_A
   public :: minimum_image_displacement
+  public :: wrap_position_into_cell
 
 contains
 
@@ -177,6 +178,18 @@ contains
     fractional = fractional - nint(fractional)
     displacement_A = matmul(state%cell%matrix_A, fractional)
   end subroutine minimum_image_displacement
+
+  pure subroutine wrap_position_into_cell(state, position_A)
+    type(system_state), intent(in) :: state
+    real(dp), intent(inout) :: position_A(:)
+    real(dp) :: fractional(3)
+
+    if (.not. state%cell%defined .or. .not. state%cell%periodic) return
+    if (size(position_A) /= 3) error stop "wrap_position_into_cell: position must be 3D"
+    fractional = matmul(state%cell%inverse_A, position_A)
+    fractional = fractional - floor(fractional)
+    position_A = matmul(state%cell%matrix_A, fractional)
+  end subroutine wrap_position_into_cell
 
   subroutine invert_3x3(matrix_A, inverse_A)
     real(dp), intent(in) :: matrix_A(3, 3)
