@@ -6,7 +6,7 @@ program ereaxff_pimd_main
   use ereaxff_charge_coupling_policy, only: charge_memory_state, init_charge_memory, &
       charge_policy_bead_local_acks2, charge_policy_is_valid, &
       max_charge_difference_across_beads
-  use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init
+  use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init, oracle_adapter_shutdown
   use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads
   use ereaxff_output_manager, only: join_path
   use ereaxff_mixed_restart, only: mixed_restart_state, write_mixed_restart, read_mixed_restart, &
@@ -85,9 +85,10 @@ program ereaxff_pimd_main
     solver_guess = 0.0_dp
   end if
 
-  call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
+  call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"), &
+      backend_mode="external_process")
   call init_charge_memory(charge_memory, nparticles, beads, policy_arg)
-  call evaluate_oracle_beads(adapter, positions, charge_memory, solver_guess, policy_arg, summary)
+  call evaluate_oracle_beads(adapter, positions, charge_memory, solver_guess, policy_arg, summary, 0, "initial_force")
 
   local_charge_diff = max_charge_difference_across_beads(charge_memory)
   centroid_charge_diff = 0.0_dp
@@ -127,6 +128,8 @@ program ereaxff_pimd_main
   write(*,'(a,es24.15)') "energy_eV = ", energy_eV
   write(*,'(a,i0)') "classical_count = ", count_particles_with_dynamics(assignment, dynamics_classical)
   write(*,'(a,i0)') "pimd_count = ", count_particles_with_dynamics(assignment, dynamics_pimd)
+
+  call oracle_adapter_shutdown(adapter)
 
 contains
 

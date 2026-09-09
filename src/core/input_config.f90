@@ -16,6 +16,7 @@ module ereaxff_input_config
 
   type, public :: force_provider_config
     character(len=32) :: provider_type = "ereaxff_oracle"
+    character(len=32) :: oracle_backend_mode = "external_process"
     character(len=512) :: v1_path = ""
     character(len=512) :: v2_path = ""
     character(len=512) :: work_root = ""
@@ -27,6 +28,13 @@ module ereaxff_input_config
     character(len=512) :: repeat_binary = ""
     character(len=512) :: make_geo_script = ""
     character(len=512) :: timeout_runner = ""
+    character(len=512) :: persistent_worker_binary = ""
+    character(len=32) :: oracle_dispatch_mode = "openmp_all"
+    integer :: oracle_max_workers = 1
+    logical :: oracle_timing_log = .false.
+    integer :: oracle_stagger_launch_ms = 0
+    logical :: oracle_fail_fast = .true.
+    integer :: oracle_timeout_s = 90
     logical :: repeatability_check = .true.
   end type force_provider_config
 
@@ -146,6 +154,23 @@ contains
     if (config%simulation%output_stride < 0) error stop "validate_input_config: output_stride must be non-negative"
     if (config%ring_polymer%default_beads < 1) error stop "validate_input_config: default_beads must be positive"
     if (len_trim(config%force_provider%provider_type) == 0) error stop "validate_input_config: force provider empty"
+    select case (trim(config%force_provider%oracle_backend_mode))
+    case ("external_process", "persistent_worker")
+      continue
+    case default
+      error stop "validate_input_config: unsupported oracle_backend_mode"
+    end select
+    select case (trim(config%force_provider%oracle_dispatch_mode))
+    case ("serial", "openmp_all", "bounded_pool")
+      continue
+    case default
+      error stop "validate_input_config: unsupported oracle_dispatch_mode"
+    end select
+    if (config%force_provider%oracle_max_workers < 1) error stop "validate_input_config: oracle_max_workers must be positive"
+    if (config%force_provider%oracle_stagger_launch_ms < 0) then
+      error stop "validate_input_config: oracle_stagger_launch_ms must be non-negative"
+    end if
+    if (config%force_provider%oracle_timeout_s < 1) error stop "validate_input_config: oracle_timeout_s must be positive"
     select case (trim(config%geometry%template))
     case ("phase4_fixed_graphene")
       continue
@@ -242,6 +267,8 @@ contains
     select case (trim(key))
     case ("type")
       force%provider_type = strip_quotes(value)
+    case ("oracle_backend_mode")
+      force%oracle_backend_mode = strip_quotes(value)
     case ("v1_path")
       force%v1_path = strip_quotes(value)
     case ("v2_path")
@@ -264,6 +291,20 @@ contains
       force%make_geo_script = strip_quotes(value)
     case ("timeout_runner")
       force%timeout_runner = strip_quotes(value)
+    case ("persistent_worker_binary")
+      force%persistent_worker_binary = strip_quotes(value)
+    case ("oracle_dispatch_mode")
+      force%oracle_dispatch_mode = strip_quotes(value)
+    case ("oracle_max_workers")
+      read(value, *) force%oracle_max_workers
+    case ("oracle_timing_log")
+      call parse_logical(value, force%oracle_timing_log)
+    case ("oracle_stagger_launch_ms")
+      read(value, *) force%oracle_stagger_launch_ms
+    case ("oracle_fail_fast")
+      call parse_logical(value, force%oracle_fail_fast)
+    case ("oracle_timeout_s")
+      read(value, *) force%oracle_timeout_s
     case ("repeatability_check")
       call parse_logical(value, force%repeatability_check)
     case default

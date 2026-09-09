@@ -23,8 +23,30 @@
 | Production smoke | `config_jamil_112c_113el_p1_300K_prod.yaml` | 1 | 1 | off | passed; 5 oracle calls | 258.13 s |
 | Parallel PIMD smoke | `config_jamil_112c_113el_p16_300K_prod.yaml` | 1 | 16 | off | passed with `OMP_NUM_THREADS=16`; 80 oracle calls | 4066.99 s |
 
-The production smoke gives about 51.6 s per serial force-export oracle call on this 112C/113El target. A P=16 one-step run would require many serial bead force calls on the current adapter path, so the first P=16 launch should be a short bounded smoke or should wait for parallel force-call dispatch.
-The P=16 smoke confirmed bead calls dispatch in parallel waves, but 16 concurrent legacy force-export binaries scale poorly on this machine. Use lower thread counts, for example `OMP_NUM_THREADS=4` or `OMP_NUM_THREADS=8`, for the next production stress runs.
+The production smoke gives about 51.6 s per serial force-export oracle call on this 112C/113El target.
+The adapter now supports three dispatch modes:
+
+- `serial`
+- `openmp_all`
+- `bounded_pool`
+
+For the legacy external oracle backend, the recommended baseline is:
+
+```bash
+export OMP_NUM_THREADS=1
+```
+
+with config:
+
+```yaml
+oracle_dispatch_mode: bounded_pool
+oracle_max_workers: 2   # or 4
+oracle_timing_log: true
+oracle_stagger_launch_ms: 0
+oracle_fail_fast: true
+```
+
+The P=16 smoke confirmed that 16 concurrent legacy force-export binaries scale poorly on this machine. The next benchmark sweep should start from bounded batches, not full fan-out.
 
 ## 2026-05-07 P=1 Production Smoke
 
@@ -53,3 +75,58 @@ The P=16 smoke confirmed bead calls dispatch in parallel waves, but 16 concurren
 - Thermostat heat after one step:
   - classical Berendsen: -1.01771946427576E-04 eV
   - electron PILE: 6.48222086563056E-01 eV
+
+## 2026-05-08 Dispatch Sweep Template
+
+Use the production P=16 geometry with `OMP_NUM_THREADS=1` and sweep `oracle_max_workers` over `1, 2, 4, 6, 8`.
+
+Command template:
+
+```bash
+OMP_NUM_THREADS=1 ./build/ereaxff_mixed_baoab_main \
+  projects/jamil_replication/config_jamil_112c_113el_p16_300K_prod.yaml \
+  build/jamil_replication/run_jamil_112c_113el_p16_w4/out
+```
+
+Benchmark table:
+
+| Workers | Dispatch mode | Wall time | Oracle calls | Batch count | Min call | Mean call | Max call | Notes |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | bounded_pool |  |  |  |  |  |  | serial baseline |
+| 2 | bounded_pool |  |  |  |  |  |  |  |
+| 4 | bounded_pool |  |  |  |  |  |  |  |
+| 6 | bounded_pool |  |  |  |  |  |  |  |
+| 8 | bounded_pool |  |  |  |  |  |  |  |
+
+Interpretation:
+- pick the smallest wall time that keeps all forces finite and does not trigger long-tail stalls.
+- if worker counts above 4 slow down, keep the backend bounded and do not fan out all 16 beads.
+
+## Oracle Call Count Audit
+
+The observed `80` oracle calls in the P=16 one-step smoke are not extra validation traffic. They come from the current mixed BAOAB schedule:
+
+- `initial_force`
+- `group_pre_force`
+- `quantum_pre_force`
+- `quantum_post_force`
+- `group_post_force`
+
+That is `5` oracle evaluations per step, multiplied by `16` bead-local jobs per evaluation.
+
+Production-only validation traffic is already controlled by `repeatability_check`; the current production configs set it to `false`. No additional validation-only call path was identified in the P=16 smoke. So the next gain should come from bounded dispatch tuning, not from hiding extra oracle calls.
+
+The timing log now records `stage_kind` and `stage_label` for each call, so the 80-call trace is visible in `oracle_timing.log` as a stage-by-stage series instead of a single undifferentiated bead-local batch.
+
+## 2026-05-08 Partial Dispatch Sweep
+
+I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.
+
+Observed so far for `oracle_max_workers=2`:
+
+- step 0 `initial_force` completed as 5 bead batches of 2 jobs each
+- each 2-job batch was about `96-97 s`
+- each bead call was still about `48-49 s`
+- after 5 batches the run had already spent about `484 s` just on `initial_force`
+
+That is the same negative shape as before: two-way concurrency did not improve throughput. The full sweep was stopped before `workers=4,6,8` because the `workers=2` result already showed that bounded process-level concurrency is not fixing the legacy backend cost.

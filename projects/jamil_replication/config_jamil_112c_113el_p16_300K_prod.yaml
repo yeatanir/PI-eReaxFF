@@ -15,6 +15,12 @@ force_provider:
   control: "../V2/tests/regression/test_trackB2_geometry_check/work/excess/control"
   iopt: "tests/reference/iopt"
   smoke_binary: "/Users/yeatanir/PhD/eReaxFF PIMD/ereaxff_pimd_modular/build/oracle_single_point_force_export"
+  oracle_dispatch_mode: bounded_pool
+  oracle_max_workers: 4
+  oracle_timing_log: true
+  oracle_stagger_launch_ms: 0
+  oracle_fail_fast: true
+  oracle_timeout_s: 90
   repeatability_check: false
 
 ring_polymer:

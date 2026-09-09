@@ -24,7 +24,28 @@ module ereaxff_oracle_adapter
     character(len=:), allocatable :: control_path
     character(len=:), allocatable :: ffield_path
     character(len=:), allocatable :: iopt_path
+    character(len=:), allocatable :: backend_mode
+    character(len=:), allocatable :: dispatch_mode
+    character(len=:), allocatable :: timing_log_path
+    character(len=:), allocatable :: persistent_worker_binary
+    character(len=:), allocatable :: persistent_worker_root
+    character(len=:), allocatable :: persistent_request_path
+    character(len=:), allocatable :: persistent_response_path
+    character(len=:), allocatable :: persistent_ready_path
+    character(len=:), allocatable :: persistent_shutdown_path
+    character(len=:), allocatable :: persistent_done_path
+    character(len=:), allocatable :: persistent_pid_path
+    character(len=:), allocatable :: persistent_log_path
+    integer :: max_workers = 1
+    integer :: stagger_launch_ms = 0
+    integer :: timeout_s = 90
+    integer :: persistent_worker_poll_ms = 25
+    integer :: persistent_worker_start_timeout_s = 60
+    integer :: persistent_worker_request_count = 0
+    logical :: timing_log = .false.
+    logical :: fail_fast = .true.
     logical :: repeatability_check = .true.
+    logical :: persistent_worker_started = .false.
   end type oracle_adapter_state
 
   type, public :: oracle_adapter_result
@@ -36,18 +57,26 @@ module ereaxff_oracle_adapter
 
   public :: oracle_adapter_init
   public :: oracle_adapter_eval
+  public :: oracle_adapter_shutdown
+  public :: oracle_adapter_worker_state
   public :: oracle_adapter_smoke
 
 contains
 
   subroutine oracle_adapter_init(adapter, template, v1_root, v2_root, work_root, control_path, ffield_path, iopt_path, &
-      smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path, repeatability_check)
+      smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path, backend_mode, dispatch_mode, max_workers, &
+      timing_log, stagger_launch_ms, fail_fast, timeout_s, repeatability_check, persistent_worker_binary, &
+      persistent_worker_poll_ms, persistent_worker_start_timeout_s)
     type(oracle_adapter_state), intent(inout) :: adapter
     type(system_state), intent(in) :: template
     character(len=*), intent(in) :: v1_root, v2_root, work_root
     character(len=*), intent(in), optional :: control_path, ffield_path, iopt_path
     character(len=*), intent(in), optional :: smoke_binary, repeat_binary, make_geo_script, timeout_runner, geo_path
-    logical, intent(in), optional :: repeatability_check
+    character(len=*), intent(in), optional :: backend_mode, persistent_worker_binary
+    character(len=*), intent(in), optional :: dispatch_mode
+    integer, intent(in), optional :: max_workers, stagger_launch_ms, timeout_s
+    integer, intent(in), optional :: persistent_worker_poll_ms, persistent_worker_start_timeout_s
+    logical, intent(in), optional :: timing_log, fail_fast, repeatability_check
 
     call assert_nonempty(v1_root, "oracle_adapter_init: v1_root")
     call assert_nonempty(v2_root, "oracle_adapter_init: v2_root")
@@ -84,6 +113,11 @@ contains
     else
       adapter%geo_path = ""
     end if
+    if (present(backend_mode) .and. len_trim(backend_mode) > 0) then
+      adapter%backend_mode = trim(backend_mode)
+    else
+      adapter%backend_mode = "external_process"
+    end if
     if (present(repeatability_check)) then
       adapter%repeatability_check = repeatability_check
     else
@@ -104,9 +138,107 @@ contains
     else
       adapter%iopt_path = trim(v1_root) // "/tests/reference/iopt"
     end if
+    if (present(dispatch_mode) .and. len_trim(dispatch_mode) > 0) then
+      adapter%dispatch_mode = trim(dispatch_mode)
+    else
+      adapter%dispatch_mode = "openmp_all"
+    end if
+    if (present(persistent_worker_binary) .and. len_trim(persistent_worker_binary) > 0) then
+      adapter%persistent_worker_binary = trim(persistent_worker_binary)
+    else
+      adapter%persistent_worker_binary = "build/persistent_oracle_worker"
+    end if
+    if (present(max_workers)) then
+      adapter%max_workers = max_workers
+    else
+      adapter%max_workers = 1
+    end if
+    if (present(timing_log)) then
+      adapter%timing_log = timing_log
+    else
+      adapter%timing_log = .false.
+    end if
+    if (present(stagger_launch_ms)) then
+      adapter%stagger_launch_ms = stagger_launch_ms
+    else
+      adapter%stagger_launch_ms = 0
+    end if
+    if (present(fail_fast)) then
+      adapter%fail_fast = fail_fast
+    else
+      adapter%fail_fast = .true.
+    end if
+    if (present(timeout_s)) then
+      adapter%timeout_s = timeout_s
+    else
+      adapter%timeout_s = 90
+    end if
+    if (present(persistent_worker_poll_ms)) then
+      adapter%persistent_worker_poll_ms = persistent_worker_poll_ms
+    else
+      adapter%persistent_worker_poll_ms = 25
+    end if
+    if (present(persistent_worker_start_timeout_s)) then
+      adapter%persistent_worker_start_timeout_s = persistent_worker_start_timeout_s
+    else
+      adapter%persistent_worker_start_timeout_s = 60
+    end if
+    if (trim(adapter%backend_mode) == "persistent_worker") then
+      adapter%timing_log_path = trim(work_root) // "/persistent_oracle_timing.log"
+      adapter%persistent_worker_root = trim(work_root) // "/persistent_worker"
+      adapter%persistent_request_path = trim(adapter%persistent_worker_root) // "/persistent_request.in"
+      adapter%persistent_response_path = trim(adapter%persistent_worker_root) // "/persistent_response.ready"
+      adapter%persistent_ready_path = trim(adapter%persistent_worker_root) // "/persistent_worker.ready"
+      adapter%persistent_shutdown_path = trim(adapter%persistent_worker_root) // "/persistent_shutdown.flag"
+      adapter%persistent_done_path = trim(adapter%persistent_worker_root) // "/persistent_worker.done"
+      adapter%persistent_pid_path = trim(adapter%persistent_worker_root) // "/persistent_worker.pid"
+      adapter%persistent_log_path = trim(adapter%persistent_worker_root) // "/persistent_worker.log"
+    else
+      adapter%timing_log_path = trim(work_root) // "/oracle_timing.log"
+      adapter%persistent_worker_root = ""
+      adapter%persistent_request_path = ""
+      adapter%persistent_response_path = ""
+      adapter%persistent_ready_path = ""
+      adapter%persistent_shutdown_path = ""
+      adapter%persistent_done_path = ""
+      adapter%persistent_pid_path = ""
+      adapter%persistent_log_path = ""
+    end if
+    if (trim(adapter%backend_mode) == "persistent_worker") then
+      call ensure_workdir(trim(adapter%persistent_worker_root))
+      call write_text_file(trim(adapter%persistent_worker_root) // "/persistent_init.marker", "persistent_backend_init")
+    end if
+    call write_text_file(trim(work_root) // "/backend_mode_seen.txt", trim(adapter%backend_mode))
     adapter%call_count = 0
     adapter%initialized = .true.
   end subroutine oracle_adapter_init
+
+  subroutine oracle_adapter_shutdown(adapter)
+    type(oracle_adapter_state), intent(inout) :: adapter
+
+    if (.not. adapter%initialized) return
+    if (trim(adapter%backend_mode) /= "persistent_worker") return
+    if (.not. adapter%persistent_worker_started) return
+    call remove_file(trim(adapter%persistent_done_path))
+    call write_text_file(trim(adapter%persistent_shutdown_path), "shutdown")
+    call wait_for_file(trim(adapter%persistent_done_path), adapter%persistent_worker_start_timeout_s * 1000)
+    adapter%persistent_worker_started = .false.
+  end subroutine oracle_adapter_shutdown
+
+  pure function oracle_adapter_worker_state(adapter) result(state)
+    type(oracle_adapter_state), intent(in) :: adapter
+    character(len=16) :: state
+
+    if (trim(adapter%backend_mode) == "persistent_worker") then
+      if (adapter%persistent_worker_request_count <= 1) then
+        state = "startup"
+      else
+        state = "reused"
+      end if
+    else
+      state = "external"
+    end if
+  end function oracle_adapter_worker_state
 
   subroutine oracle_adapter_eval(adapter, positions_A, charge_in, solver_guess_in, bead_id, charge_policy, result, call_slot)
     type(oracle_adapter_state), intent(inout) :: adapter
@@ -143,8 +275,13 @@ contains
       work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(adapter%call_count, 4)
     end if
 
-    call oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
-        work_dir, energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+    if (trim(adapter%backend_mode) == "persistent_worker") then
+      call persistent_worker_eval(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
+          energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+    else
+      call oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
+          work_dir, energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+    end if
 
     result%force%energy_eV = energy_kcal * kcal2eV
     result%force%status = status
@@ -187,7 +324,7 @@ contains
 
     wrapper_script = trim(work_dir) // "/run_oracle_wrapper.sh"
     call write_oracle_wrapper(trim(work_dir), trim(wrapper_script), adapter%timeout_runner, &
-        adapter%smoke_binary, adapter%repeat_binary, adapter%repeatability_check)
+        adapter%timeout_s, adapter%smoke_binary, adapter%repeat_binary, adapter%repeatability_check)
     call run_shell("sh " // shell_quote(trim(wrapper_script)), exitstat)
     if (exitstat /= 0) then
       error stop "oracle_adapter_smoke: legacy smoke command failed"
@@ -200,6 +337,180 @@ contains
     write(summary_line,'(a,1x,f20.12,1x,es12.4,1x,es12.4,1x,i0,1x,i0,1x,i0)') &
         "oracle_adapter_eval", energy_kcal, max_force, charge_sum, status, natom, bead_id
   end subroutine oracle_adapter_smoke
+
+  subroutine ensure_persistent_worker(adapter)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    integer :: timeout_ms
+
+    if (trim(adapter%backend_mode) /= "persistent_worker") return
+    if (adapter%persistent_worker_started) return
+
+    call ensure_workdir(trim(adapter%persistent_worker_root))
+    call write_text_file(trim(adapter%persistent_worker_root) // "/ensure_called.txt", "ensure_persistent_worker")
+    call start_persistent_worker(adapter)
+    timeout_ms = adapter%persistent_worker_start_timeout_s * 1000
+    call wait_for_file(trim(adapter%persistent_ready_path), timeout_ms)
+    adapter%persistent_worker_started = .true.
+  end subroutine ensure_persistent_worker
+
+  subroutine start_persistent_worker(adapter)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    character(len=shell_path_len) :: launch_script
+    integer :: unit, exitstat, ios
+
+    launch_script = trim(adapter%persistent_worker_root) // "/persistent_launch.sh"
+    open(newunit=unit, file=trim(launch_script), status="replace", action="write", iostat=ios)
+    if (ios /= 0) error stop "start_persistent_worker: unable to write launch script"
+    write(unit,'(a)') "#!/usr/bin/env sh"
+    write(unit,'(a)') "set -eu"
+    write(unit,'(a)') "cd '" // trim(adapter%persistent_worker_root) // "'"
+    write(unit,'(a)') "nohup '" // trim(adapter%persistent_worker_binary) // "' '" // trim(adapter%control_path) // "' '" // &
+        trim(adapter%ffield_path) // "' '" // trim(adapter%iopt_path) // "' '" // trim(adapter%geo_path) // "' '" // &
+        trim(adapter%timing_log_path) // "' '" // trim(adapter%persistent_worker_root) // "' '" // &
+        trim(adapter%smoke_binary) // "' '" // trim(adapter%make_geo_script) // "' > '" // &
+        trim(adapter%persistent_log_path) // "' 2>&1 &"
+    write(unit,'(a)') "echo $! > '" // trim(adapter%persistent_pid_path) // "'"
+    close(unit)
+    call execute_command_line("sh '" // trim(launch_script) // "'", wait=.true., exitstat=exitstat)
+    if (exitstat /= 0) error stop "start_persistent_worker: unable to launch worker"
+  end subroutine start_persistent_worker
+
+  subroutine write_persistent_request(path, request_id, bead_id, stage_label, positions_A, charge_in, &
+      solver_guess_in)
+    character(len=*), intent(in) :: path, stage_label
+    integer, intent(in) :: request_id, bead_id
+    real(dp), intent(in) :: positions_A(:, :)
+    real(dp), intent(in) :: charge_in(:), solver_guess_in(:)
+    integer :: unit, i
+
+    if (size(positions_A, 2) /= size(charge_in)) error stop "write_persistent_request: size mismatch"
+    open(newunit=unit, file=trim(path), status="replace", action="write")
+    write(unit,'(i0)') request_id
+    write(unit,'(i0,1x,i0,1x,i0)') 0, bead_id, size(charge_in)
+    write(unit,'(a)') trim(stage_label)
+    do i = 1, size(charge_in)
+      write(unit,'(i8,5(1x,es24.15))') i, positions_A(1, i), positions_A(2, i), positions_A(3, i), charge_in(i), &
+          solver_guess_in(i)
+    end do
+    close(unit)
+  end subroutine write_persistent_request
+
+  subroutine wait_for_file(path, timeout_ms)
+    character(len=*), intent(in) :: path
+    integer, intent(in) :: timeout_ms
+    integer :: elapsed_ms
+
+    elapsed_ms = 0
+    do
+      if (file_exists(trim(path))) return
+      if (elapsed_ms >= timeout_ms) error stop "wait_for_file: timed out"
+      call wait_milliseconds(25)
+      elapsed_ms = elapsed_ms + 25
+    end do
+  end subroutine wait_for_file
+
+  logical function file_exists(path) result(exists)
+    character(len=*), intent(in) :: path
+    inquire(file=trim(path), exist=exists)
+  end function file_exists
+
+  subroutine read_integer_file(path, value, ios_out)
+    character(len=*), intent(in) :: path
+    integer, intent(out) :: value
+    integer, intent(out) :: ios_out
+    integer :: unit
+
+    value = -1
+    open(newunit=unit, file=trim(path), status="old", action="read", iostat=ios_out)
+    if (ios_out /= 0) return
+    read(unit, *, iostat=ios_out) value
+    close(unit)
+  end subroutine read_integer_file
+
+  subroutine remove_file(path)
+    character(len=*), intent(in) :: path
+    integer :: exitstat
+
+    call execute_command_line("rm -f " // shell_quote(trim(path)), wait=.true., exitstat=exitstat)
+  end subroutine remove_file
+
+  subroutine wait_milliseconds(ms)
+    integer, intent(in) :: ms
+    integer :: start_count, now_count, rate, target_count
+
+    if (ms <= 0) return
+    call system_clock(start_count, rate)
+    if (rate <= 0) return
+    target_count = start_count + ceiling(real(ms, dp) * real(rate, dp) / 1000.0_dp)
+    do
+      call system_clock(now_count)
+      if (now_count >= target_count) exit
+    end do
+  end subroutine wait_milliseconds
+
+  subroutine persistent_worker_eval(adapter, positions_A, charge_in, solver_guess_in, bead_id, &
+      energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    real(dp), intent(in) :: positions_A(:, :)
+    real(dp), intent(in) :: charge_in(:)
+    real(dp), intent(in) :: solver_guess_in(:)
+    integer, intent(in) :: bead_id
+    real(dp), intent(out) :: energy_kcal, max_force, charge_sum
+    integer, intent(out) :: natom, status
+    character(len=*), intent(out) :: summary_line
+    type(oracle_adapter_result), intent(inout) :: result
+    integer :: request_id, response_id, response_ios, start_count, end_count, clock_rate
+    character(len=64) :: stage_label, worker_state
+    character(len=512) :: request_path, response_path, persistent_work_dir, summary_path, forces_path
+    character(len=512) :: completion_path
+
+    call ensure_persistent_worker(adapter)
+
+    request_id = adapter%persistent_worker_request_count + 1
+    adapter%persistent_worker_request_count = request_id
+    stage_label = "persistent_worker"
+    request_path = trim(adapter%persistent_request_path)
+    response_path = trim(adapter%persistent_response_path)
+    persistent_work_dir = trim(adapter%persistent_worker_root) // "/adapter_call_" // trim(pad_int(request_id, 4))
+    summary_path = trim(persistent_work_dir) // "/phase4_single_point_oracle.out"
+    forces_path = trim(persistent_work_dir) // "/single_point_forces.out"
+    completion_path = trim(persistent_work_dir) // "/persistent_request.done"
+    call remove_file(request_path)
+    call remove_file(response_path)
+    call remove_file(summary_path)
+    call remove_file(forces_path)
+    call remove_file(completion_path)
+    call write_persistent_request(request_path, request_id, bead_id, stage_label, positions_A, charge_in, &
+        solver_guess_in)
+
+    call system_clock(start_count, clock_rate)
+    if (clock_rate <= 0) error stop "persistent_worker_eval: system clock unavailable"
+    call wait_for_file(trim(response_path), adapter%persistent_worker_start_timeout_s * 1000)
+    call read_integer_file(trim(response_path), response_id, response_ios)
+    if (response_ios /= 0 .or. response_id /= request_id) error stop "persistent_worker_eval: response id mismatch"
+    call wait_for_file(trim(summary_path), adapter%persistent_worker_start_timeout_s * 1000)
+    call wait_for_file(trim(forces_path), adapter%persistent_worker_start_timeout_s * 1000)
+    call system_clock(end_count)
+
+    call parse_single_point_summary(trim(summary_path), &
+        energy_kcal, max_force, charge_sum, status, natom)
+    call parse_single_point_forces(trim(forces_path), result)
+
+    result%force%energy_eV = energy_kcal * kcal2eV
+    result%force%status = status
+    result%force%diagnostic = "persistent worker"
+    result%diagnostic = "persistent worker"
+    result%legacy_summary = "persistent worker"
+    if (status /= 0) then
+      result%diagnostic = "legacy oracle status=" // trim(adjustl(itoa(status)))
+    end if
+    if (adapter%persistent_worker_request_count == 1) then
+      worker_state = "startup"
+    else
+      worker_state = "reused"
+    end if
+    summary_line = "persistent_worker " // trim(worker_state) // " request=" // trim(itoa(request_id))
+  end subroutine persistent_worker_eval
 
   subroutine parse_single_point_summary(path, energy_kcal, max_force, charge_sum, status, natom)
     character(len=*), intent(in) :: path
@@ -313,8 +624,10 @@ contains
     end if
   end subroutine maybe_write_control_axis
 
-  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, smoke_binary, repeat_binary, repeatability_check)
+  subroutine write_oracle_wrapper(work_dir, script_path, timeout_runner, timeout_s, smoke_binary, repeat_binary, &
+      repeatability_check)
     character(len=*), intent(in) :: work_dir, script_path, timeout_runner, smoke_binary, repeat_binary
+    integer, intent(in) :: timeout_s
     logical, intent(in) :: repeatability_check
     integer :: unit, ios
 
@@ -323,10 +636,10 @@ contains
     write(unit,'(a)') "#!/usr/bin/env sh"
     write(unit,'(a)') "set -eu"
     write(unit,'(a)') "cd '" // trim(work_dir) // "'"
-    write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
+    write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' " // trim(itoa(timeout_s)) // " '" // &
         "run_single_point.log' '" // trim(smoke_binary) // "'"
     if (repeatability_check) then
-      write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' 90 '" // &
+      write(unit,'(a)') "python3 '" // trim(timeout_runner) // "' " // trim(itoa(timeout_s)) // " '" // &
           "run_repeatability.log' '" // trim(repeat_binary) // "' 3"
     else
       write(unit,'(a)') "printf '%s\n' 'repeatability_check skipped' > run_repeatability.log"

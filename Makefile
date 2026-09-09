@@ -47,8 +47,10 @@ TEST11_SRCS := tests/test_11_structural_stress/test_structural_stress.f90
 TEST11_NEG_SRCS := tests/test_11_structural_stress/test_invalid_group_overlap.f90
 TEST26_SRCS := tests/test_26_crystx_periodic_loader/test_crystx_periodic_loader.f90
 TEST27_SRCS := tests/test_27_multi_quantum_restart/test_multi_quantum_restart.f90
+TEST29_SRCS := tests/test_29_oracle_dispatch_modes/test_oracle_dispatch_modes.f90
+TEST30_SRCS := tests/test_30_persistent_oracle_worker/test_persistent_oracle_worker.f90
 
-.PHONY: all test build_tests harmonic_pimd_main ereaxff_pimd_main ereaxff_mixed_baoab_main oracle_single_point_force_export test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 test_13_oracle_charge_policy_modes test_14_mixed_oracle_manager_fixture test_15_mixed_oracle_manager_matrix test_16_mixed_oracle_manager_restart_output test_17_ereaxff_mixed_driver_smoke test_18_ereaxff_mixed_baoab_matrix test_19_ereaxff_mixed_baoab_restart test_20_ereaxff_mixed_baoab_policy_matrix test_21_ereaxff_mixed_baoab_config_smoke test_22_ereaxff_mixed_baoab_config_matrix test_23_ereaxff_mixed_baoab_geometry_matrix test_24_ereaxff_mixed_baoab_user_geo_matrix test_25_phase6_like_temperature_partition test_26_crystx_periodic_loader test_27_multi_quantum_restart test_28_paired_graphene_60el_60c_smoke clean
+.PHONY: all test build_tests harmonic_pimd_main ereaxff_pimd_main ereaxff_mixed_baoab_main oracle_single_point_force_export persistent_oracle_worker test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 test_13_oracle_charge_policy_modes test_14_mixed_oracle_manager_fixture test_15_mixed_oracle_manager_matrix test_16_mixed_oracle_manager_restart_output test_17_ereaxff_mixed_driver_smoke test_18_ereaxff_mixed_baoab_matrix test_19_ereaxff_mixed_baoab_restart test_20_ereaxff_mixed_baoab_policy_matrix test_21_ereaxff_mixed_baoab_config_smoke test_22_ereaxff_mixed_baoab_config_matrix test_23_ereaxff_mixed_baoab_geometry_matrix test_24_ereaxff_mixed_baoab_user_geo_matrix test_25_phase6_like_temperature_partition test_26_crystx_periodic_loader test_27_multi_quantum_restart test_28_paired_graphene_60el_60c_smoke test_29_oracle_dispatch_modes test_30_persistent_oracle_worker clean
 
 all: build_tests harmonic_pimd_main
 
@@ -60,6 +62,12 @@ oracle_single_point_force_export: $(BUILD_DIR)
 	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore \
 		tools/oracle_single_point_force_export.f90 $(V2_ORACLE_OBJS) \
 		-o $(BUILD_DIR)/oracle_single_point_force_export
+
+persistent_oracle_worker: $(BUILD_DIR)
+	$(MAKE) -C $(V2_ROOT) v2_sources
+	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore \
+		tools/persistent_oracle_worker.f90 $(V2_ORACLE_OBJS) \
+		-o $(BUILD_DIR)/persistent_oracle_worker
 
 test_00_build: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST00_SRCS) -o $(BUILD_DIR)/test_00_build
@@ -159,6 +167,14 @@ test_27_multi_quantum_restart: $(BUILD_DIR) $(MOD_DIR)
 test_28_paired_graphene_60el_60c_smoke: ereaxff_mixed_baoab_main $(BUILD_DIR) $(MOD_DIR)
 	tests/test_28_paired_graphene_60el_60c_smoke/run_paired_graphene_60el_60c_smoke.sh
 
+test_29_oracle_dispatch_modes: $(BUILD_DIR) $(MOD_DIR)
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST29_SRCS) -o $(BUILD_DIR)/test_29_oracle_dispatch_modes_bin
+	tests/test_29_oracle_dispatch_modes/run_oracle_dispatch_modes.sh
+
+test_30_persistent_oracle_worker: persistent_oracle_worker $(BUILD_DIR) $(MOD_DIR)
+	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST30_SRCS) -o $(BUILD_DIR)/test_30_persistent_oracle_worker_bin
+	tests/test_30_persistent_oracle_worker/run_persistent_oracle_worker.sh
+
 harmonic_pimd_main: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(PIMD_SRCS) $(THERMOSTAT_SRCS) $(INTEGRATOR_SRCS) $(OUTPUT_SRCS) $(HARMONIC_DRIVER_SRCS) -o $(BUILD_DIR)/harmonic_pimd_main
 
@@ -170,7 +186,7 @@ test_11_structural_stress: $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(TEST11_NEG_SRCS) -o $(BUILD_DIR)/test_11_invalid_group_overlap
 	tests/test_11_structural_stress/run_structural_stress.sh
 
-build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 test_13_oracle_charge_policy_modes test_14_mixed_oracle_manager_fixture test_15_mixed_oracle_manager_matrix test_16_mixed_oracle_manager_restart_output test_17_ereaxff_mixed_driver_smoke test_18_ereaxff_mixed_baoab_matrix test_19_ereaxff_mixed_baoab_restart test_20_ereaxff_mixed_baoab_policy_matrix test_21_ereaxff_mixed_baoab_config_smoke test_22_ereaxff_mixed_baoab_config_matrix test_23_ereaxff_mixed_baoab_geometry_matrix test_24_ereaxff_mixed_baoab_user_geo_matrix test_25_phase6_like_temperature_partition test_26_crystx_periodic_loader test_27_multi_quantum_restart test_28_paired_graphene_60el_60c_smoke
+build_tests: test_00_build test_01_normal_modes test_02_free_ring_polymer test_03_harmonic_quantum_variance test_04_thermostat_ou_statistics test_05_pile_mode_temperatures test_05_pile_g_stub test_06_force_scaling test_07_charge_memory test_08_reaxff_oracle_smoke test_09_mixed_classical_pimd_config test_10_driver_outputs test_11_structural_stress test_12_oracle_force_manager_p1 test_13_oracle_charge_policy_modes test_14_mixed_oracle_manager_fixture test_15_mixed_oracle_manager_matrix test_16_mixed_oracle_manager_restart_output test_17_ereaxff_mixed_driver_smoke test_18_ereaxff_mixed_baoab_matrix test_19_ereaxff_mixed_baoab_restart test_20_ereaxff_mixed_baoab_policy_matrix test_21_ereaxff_mixed_baoab_config_smoke test_22_ereaxff_mixed_baoab_config_matrix test_23_ereaxff_mixed_baoab_geometry_matrix test_24_ereaxff_mixed_baoab_user_geo_matrix test_25_phase6_like_temperature_partition test_26_crystx_periodic_loader test_27_multi_quantum_restart test_28_paired_graphene_60el_60c_smoke test_29_oracle_dispatch_modes
 
 test:
 	./tests/run_all.sh

@@ -11,7 +11,7 @@ program ereaxff_mixed_baoab_main
   use ereaxff_normal_modes, only: bead_to_nm, nm_to_bead
   use ereaxff_charge_coupling_policy, only: charge_memory_state, init_charge_memory, &
       charge_policy_bead_local_acks2, charge_policy_is_valid, max_charge_difference_across_beads
-  use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init
+  use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init, oracle_adapter_shutdown
   use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads
   use ereaxff_mixed_baoab_restart, only: mixed_baoab_restart_state, write_mixed_baoab_restart, &
       read_mixed_baoab_restart
@@ -284,7 +284,12 @@ program ereaxff_mixed_baoab_main
         iopt_path=join_path(v1_root, trim(cfg%force_provider%iopt)), &
         smoke_binary=trim(cfg%force_provider%smoke_binary), repeat_binary=trim(cfg%force_provider%repeat_binary), &
         make_geo_script=trim(cfg%force_provider%make_geo_script), timeout_runner=trim(cfg%force_provider%timeout_runner), &
-        geo_path=trim(geometry_path), repeatability_check=cfg%force_provider%repeatability_check)
+        geo_path=trim(geometry_path), backend_mode=trim(cfg%force_provider%oracle_backend_mode), &
+        dispatch_mode=trim(cfg%force_provider%oracle_dispatch_mode), &
+        max_workers=cfg%force_provider%oracle_max_workers, timing_log=cfg%force_provider%oracle_timing_log, &
+        stagger_launch_ms=cfg%force_provider%oracle_stagger_launch_ms, fail_fast=cfg%force_provider%oracle_fail_fast, &
+        timeout_s=cfg%force_provider%oracle_timeout_s, repeatability_check=cfg%force_provider%repeatability_check, &
+        persistent_worker_binary=trim(cfg%force_provider%persistent_worker_binary))
   else
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
   end if
@@ -300,7 +305,8 @@ program ereaxff_mixed_baoab_main
   pimd_mass_amu = quantum_masses_amu(1)
   masses = [pimd_mass_amu, pimd_mass_amu, pimd_mass_amu]
 
-  call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess, policy_arg, summary)
+  call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess, policy_arg, summary, start_step, &
+      "initial_force")
   output_stride = 1
   if (config_mode) output_stride = max(1, cfg%simulation%output_stride)
 
@@ -327,6 +333,7 @@ program ereaxff_mixed_baoab_main
   do while (step < steps)
     call mixed_group_baoab_step(positions_A, classical_velocities, q_nm, v_nm, assignment, groups, quantum_indices, &
         quantum_bead_counts, state, rp, dt_fs, adapter, charge_memory, solver_guess, policy_arg, summary, rng, &
+        step, &
         quantum_thermostats, quantum_heat_eV, classical_heat_eV)
     step = step + 1
     if (mod(step, output_stride) == 0 .or. step == steps) call write_step_outputs(step)
@@ -346,6 +353,8 @@ program ereaxff_mixed_baoab_main
   write(*,'(a,i0)') "pimd_count = ", count_particles_with_dynamics(assignment, dynamics_pimd)
   write(*,'(a,es12.4)') "classical_thermostat_heat_eV = ", classical_heat_eV
   write(*,'(a,es12.4)') "quantum_thermostat_heat_eV = ", sum(quantum_heat_eV)
+
+  call oracle_adapter_shutdown(adapter)
 
 contains
 
@@ -749,6 +758,7 @@ contains
 
   subroutine mixed_group_baoab_step(positions_A, classical_velocities, q_nm, v_nm, assignment, groups_in, quantum_indices, &
       quantum_bead_counts, state_in, rp_in, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, rng, &
+      step_index, &
       quantum_thermostats, quantum_heat_eV, classical_heat_eV)
     real(dp), intent(inout) :: positions_A(:, :, :)
     real(dp), intent(inout) :: classical_velocities(:, :)
@@ -767,6 +777,7 @@ contains
     character(len=*), intent(in) :: charge_policy
     type(oracle_bead_summary), intent(inout) :: summary
     type(rng_state), intent(inout) :: rng
+    integer, intent(in), optional :: step_index
     type(pile_l_thermostat_state), intent(inout) :: quantum_thermostats(:)
     real(dp), intent(inout) :: quantum_heat_eV(:)
     real(dp), intent(inout) :: classical_heat_eV
@@ -784,7 +795,12 @@ contains
     end do
 
     call replicate_classical_positions(positions_A, assignment, quantum_indices)
-    call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+    if (present(step_index)) then
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
+          step_index, "group_pre_force")
+    else
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+    end if
 
     do i = 1, state_in%nparticles
       if (any(quantum_indices == i)) cycle
@@ -816,13 +832,18 @@ contains
 
     call mixed_baoab_quantum_step(positions_A, q_nm, v_nm, quantum_indices, quantum_masses, rp_in, &
         quantum_bead_counts, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, &
-        quantum_thermostats, rng, state_in)
+        quantum_thermostats, rng, state_in, step_index)
     do q = 1, size(quantum_indices)
       quantum_heat_eV(q) = quantum_thermostats(q)%heat_eV
     end do
 
     call replicate_classical_positions(positions_A, assignment, quantum_indices)
-    call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+    if (present(step_index)) then
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
+          step_index, "group_post_force")
+    else
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+    end if
 
     do i = 1, state_in%nparticles
       if (any(quantum_indices == i)) cycle
