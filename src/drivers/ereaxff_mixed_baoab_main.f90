@@ -317,8 +317,10 @@ program ereaxff_mixed_baoab_main
   write(spread_unit,'(a)') "# step centroid_x centroid_y centroid_z bead_rms_spread_A"
   write(heat_unit,'(a)') "# step thermostat_heat_eV classical_heat_eV quantum_heat_eV"
   write(carbon_temp_unit,'(a)') "# step carbon_temperature_K carbon_ke_eV"
-  write(electron_temp_unit,'(a)') "# step electron_temperature_K electron_ke_eV"
-  write(electron_mode_temp_unit,'(a)') "# step mode mode_temperature_K mode_ke_eV"
+  write(electron_temp_unit,'(a)') &
+      "# step electron_temperature_K raw_ring_polymer_temperature_K electron_ke_eV"
+  write(electron_mode_temp_unit,'(a)') &
+      "# step mode mode_temperature_K raw_ring_polymer_temperature_K mode_ke_eV"
 
   if (mod(start_step, output_stride) == 0 .or. start_step == steps) call write_step_outputs(start_step)
   step = start_step
@@ -546,7 +548,7 @@ contains
     v_nm_out = 0.0_dp
     do q = 1, size(quantum_indices)
       group_index = assignment_in%group_index(quantum_indices(q))
-      kBT_eV = boltzmann_eV_per_K * groups_in(group_index)%temperature_K
+      kBT_eV = boltzmann_eV_per_K * groups_in(group_index)%temperature_K * real(quantum_bead_counts(q), dp)
       sigma = maxwell_velocity_sigma(kBT_eV, state_in%mass_amu(quantum_indices(q)))
       do mode = 1, quantum_bead_counts(q)
         do coord = 1, size(v_nm_out, 1)
@@ -652,7 +654,8 @@ contains
   subroutine write_temperature_diagnostics(step_in, carbon_unit, electron_unit, mode_unit)
     integer, intent(in) :: step_in, carbon_unit, electron_unit, mode_unit
     real(dp) :: carbon_ke_eV, carbon_temp_K
-    real(dp) :: electron_ke_eV, electron_temp_K, mode_ke_eV, mode_temp_K
+    real(dp) :: electron_ke_eV, electron_temp_K, raw_electron_temp_K
+    real(dp) :: mode_ke_eV, mode_temp_K, raw_mode_temp_K
     integer :: i, mode, carbon_count
 
     carbon_ke_eV = 0.0_dp
@@ -675,14 +678,16 @@ contains
     do mode = 1, primary_beads
       electron_ke_eV = electron_ke_eV + kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
     end do
-    electron_temp_K = 2.0_dp * electron_ke_eV / (3.0_dp * real(primary_beads, dp) * boltzmann_eV_per_K)
+    raw_electron_temp_K = 2.0_dp * electron_ke_eV / (3.0_dp * real(primary_beads, dp) * boltzmann_eV_per_K)
+    electron_temp_K = raw_electron_temp_K / real(primary_beads, dp)
 
     write(carbon_unit,'(i8,2(1x,es22.14))') step_in, carbon_temp_K, carbon_ke_eV
-    write(electron_unit,'(i8,2(1x,es22.14))') step_in, electron_temp_K, electron_ke_eV
+    write(electron_unit,'(i8,3(1x,es22.14))') step_in, electron_temp_K, raw_electron_temp_K, electron_ke_eV
     do mode = 1, primary_beads
       mode_ke_eV = kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
-      mode_temp_K = 2.0_dp * mode_ke_eV / (3.0_dp * boltzmann_eV_per_K)
-      write(mode_unit,'(i8,1x,i8,2(1x,es22.14))') step_in, mode, mode_temp_K, mode_ke_eV
+      raw_mode_temp_K = 2.0_dp * mode_ke_eV / (3.0_dp * boltzmann_eV_per_K)
+      mode_temp_K = raw_mode_temp_K / real(primary_beads, dp)
+      write(mode_unit,'(i8,1x,i8,3(1x,es22.14))') step_in, mode, mode_temp_K, raw_mode_temp_K, mode_ke_eV
     end do
   end subroutine write_temperature_diagnostics
 
@@ -719,7 +724,7 @@ contains
     if (trim(thermostat_name) == "pile_g") error stop "init_quantum_thermostat: PILE-G requested but not implemented"
     if (trim(thermostat_name) /= "pile_l") error stop "init_quantum_thermostat: unsupported thermostat for PIMD group"
     if (centroid_gamma_fs_inv < 0.0_dp) error stop "init_quantum_thermostat: centroid gamma must be non-negative"
-    call pile_l_init(state_inout, temperature_K, centroid_gamma_fs_inv, 1.0_dp, dt_fs, omega_k)
+    call pile_l_init(state_inout, temperature_K * real(size(omega_k), dp), centroid_gamma_fs_inv, 1.0_dp, dt_fs, omega_k)
   end subroutine init_quantum_thermostat
 
   real(dp) function get_pimd_group_temperature(groups_in, assignment_in, particle_index) result(temperature_out)

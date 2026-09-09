@@ -58,6 +58,7 @@ contains
     adapter%v1_root = trim(v1_root)
     adapter%v2_root = trim(v2_root)
     adapter%work_root = trim(work_root)
+    call ensure_workdir(trim(work_root))
     if (present(smoke_binary) .and. len_trim(smoke_binary) > 0) then
       adapter%smoke_binary = trim(smoke_binary)
     else
