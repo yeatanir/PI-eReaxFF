@@ -188,6 +188,20 @@ assert abs(response["forces_eV_per_A"][0][1][0] + 0.03734168384345882) < 1.0e-12
 import sys
 sys.path.insert(0, "projects/jamil_replication/fast_backend")
 from jax_force_kernel import evaluate_reaxff_shielded_coulomb_case
+from jax_force_kernel import evaluate_reaxff_corrected_bond_nonbonded_valence_case
+from jax_force_kernel import parse_ffield_coulomb_parameters
+
+parameters = parse_ffield_coulomb_parameters(Path(case["source_call_dir"]) / "ffield")
+assert len(parameters["angle_params"]) == 0
+assert len(parameters["torsion_params"]) == 0
+assert len(parameters["hydrogen_bond_params"]) == 0
+real_dataset = Path("build/jamil_replication/fast_backend/oracle_labeled_p4_latest.jsonl")
+if real_dataset.exists():
+    real_case = json.loads(real_dataset.read_text().splitlines()[0])
+    real_parameters = parse_ffield_coulomb_parameters(Path(real_case["source_call_dir"]) / "ffield")
+    assert len(real_parameters["angle_params"]) == 101
+    assert len(real_parameters["torsion_params"]) == 56
+    assert len(real_parameters["hydrogen_bond_params"]) == 0
 
 eps = 1.0e-5
 case_plus = json.loads(json.dumps(case))
@@ -220,6 +234,7 @@ completed = subprocess.run(
 response = json.loads(completed.stdout)
 assert response["status"] == 0
 assert response["kernel"] == ["reaxff_nonbonded_no_inner_shielded"]
+assert set(response["energy_terms_eV"]) == {"coulomb", "vdw"}
 assert abs(response["energy_eV"][0] + 1.0453112428163907) < 1.0e-12
 assert abs(response["forces_eV_per_A"][0][0][0] - 0.02335580645549877) < 1.0e-12
 assert abs(response["forces_eV_per_A"][0][1][0] + 0.02335580645549877) < 1.0e-12
@@ -312,6 +327,7 @@ completed = subprocess.run(
 response = json.loads(completed.stdout)
 assert response["status"] == 0
 assert response["kernel"] == ["reaxff_corrected_bond"]
+assert set(response["energy_terms_eV"]) == {"bond"}
 assert abs(response["energy_eV"][0] + 77.82789596632907) < 1.0e-10
 assert abs(response["forces_eV_per_A"][0][1][0] - 6.588497625294385) < 1.0e-10
 assert abs(response["forces_eV_per_A"][0][7][0] + 2.9441751399842717) < 1.0e-10
@@ -348,6 +364,9 @@ completed = subprocess.run(
 response = json.loads(completed.stdout)
 assert response["status"] == 0
 assert response["kernel"] == ["reaxff_corrected_bond_nonbonded"]
+assert set(response["energy_terms_eV"]) == {"bond", "coulomb", "vdw"}
+term_sum = sum(response["energy_terms_eV"][key][0] for key in response["energy_terms_eV"])
+assert abs(term_sum - response["energy_eV"][0]) < 1.0e-12
 assert abs(response["energy_eV"][0] + 62.15205963429547) < 1.0e-10
 assert abs(response["forces_eV_per_A"][0][1][0] - 11.077932259015485) < 1.0e-10
 assert abs(response["forces_eV_per_A"][0][7][0] - 0.12878014525015002) < 1.0e-10
@@ -376,6 +395,117 @@ assert response["status"] == 0
 assert response["kernel"] == ["oracle_replay"]
 assert response["energy_eV"] == [-0.43364, -0.43364]
 assert response["forces_eV_per_A"][0] == [[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
+
+if real_dataset.exists():
+    real_case = json.loads(real_dataset.read_text().splitlines()[0])
+    angle_case = json.loads(json.dumps(real_case))
+    angle = 120.0 * math.pi / 180.0
+    angle_case["atom_types"] = ["C", "C", "C"]
+    angle_case["positions_A"] = [[0.0, 0.0, 0.0], [r, 0.0, 0.0], [r + r * math.cos(angle), r * math.sin(angle), 0.0]]
+    angle_case["charge_constraints"]["fixed_charges"] = [0.0] * 3
+    angle_case["charge_in"] = [0.0] * 3
+    angle_case["solver_guess_in"] = [0.0] * 3
+    angle_case["crystx"] = None
+    completed = subprocess.run(
+        [
+            ".venv-fast/bin/python",
+            "projects/jamil_replication/fast_backend/jax_backend.py",
+            "--allow-unvalidated",
+        ],
+        input=json.dumps(
+            {
+                "command": "force_batch",
+                "force_kernel": "reaxff_corrected_bond_nonbonded_valence",
+                "cases": [angle_case],
+            }
+        ),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    response = json.loads(completed.stdout)
+    assert response["kernel"] == ["reaxff_corrected_bond_nonbonded_valence"]
+    assert set(response["energy_terms_eV"]) == {
+        "angle_conjugation",
+        "bond",
+        "coulomb",
+        "electron",
+        "penalty",
+        "torsion",
+        "torsion_conjugation",
+        "valence",
+        "vdw",
+    }
+    assert abs(response["energy_terms_eV"]["valence"][0] - 4.930837527913495) < 1.0e-10
+    assert abs(response["energy_terms_eV"]["penalty"][0] - 0.04994792351223957) < 1.0e-10
+    assert abs(response["energy_terms_eV"]["electron"][0]) < 1.0e-12
+    assert abs(response["energy_eV"][0] + 10.791805565593878) < 1.0e-10
+    assert abs(response["forces_eV_per_A"][0][2][1] + 12.263151967963509) < 1.0e-10
+
+    angle_eps = 1.0e-6
+    angle_plus = json.loads(json.dumps(angle_case))
+    angle_minus = json.loads(json.dumps(angle_case))
+    angle_plus["positions_A"][2][1] += angle_eps
+    angle_minus["positions_A"][2][1] -= angle_eps
+    e_plus = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(angle_plus)["energy_eV"])
+    e_minus = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(angle_minus)["energy_eV"])
+    fd_force = -(e_plus - e_minus) / (2.0 * angle_eps)
+    analytic_force = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(angle_case)["forces_eV_per_A"][2][1])
+    assert abs(fd_force - analytic_force) < 1.0e-8
+
+    torsion_case = json.loads(json.dumps(real_case))
+    torsion_case["atom_types"] = ["C", "C", "C", "C"]
+    torsion_case["positions_A"] = [
+        [0.0, 0.0, 0.0],
+        [1.4, 0.0, 0.0],
+        [2.1, 1.2124355653, 0.0],
+        [3.4, 1.4, 0.7],
+    ]
+    torsion_case["charge_constraints"]["fixed_charges"] = [0.0] * 4
+    torsion_case["charge_in"] = [0.0] * 4
+    torsion_case["solver_guess_in"] = [0.0] * 4
+    torsion_case["crystx"] = None
+    torsion_output = evaluate_reaxff_corrected_bond_nonbonded_valence_case(torsion_case)
+    torsion_terms = {key: float(value) for key, value in torsion_output["energy_terms_eV"].items()}
+    assert abs(torsion_terms["torsion"] - 0.13018736146294974) < 1.0e-12
+    assert abs(torsion_terms["torsion_conjugation"] + 0.09248999162654188) < 1.0e-12
+    assert abs(sum(torsion_terms.values()) - float(torsion_output["energy_eV"])) < 1.0e-12
+    assert abs(float(torsion_output["energy_eV"]) + 13.114431980404557) < 1.0e-12
+
+    torsion_eps = 1.0e-6
+    torsion_plus = json.loads(json.dumps(torsion_case))
+    torsion_minus = json.loads(json.dumps(torsion_case))
+    torsion_plus["positions_A"][3][2] += torsion_eps
+    torsion_minus["positions_A"][3][2] -= torsion_eps
+    e_plus = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(torsion_plus)["energy_eV"])
+    e_minus = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(torsion_minus)["energy_eV"])
+    fd_force = -(e_plus - e_minus) / (2.0 * torsion_eps)
+    analytic_force = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(torsion_case)["forces_eV_per_A"][3][2])
+    assert abs(fd_force - analytic_force) < 1.0e-8
+
+electron_case = json.loads(json.dumps(case))
+electron_case["atom_types"] = ["C", "El"]
+electron_case["positions_A"] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+electron_case["charge_constraints"]["fixed_charges"] = [0.0, 0.0]
+electron_case["charge_in"] = [0.0, 0.0]
+electron_case["solver_guess_in"] = [0.0, 0.0]
+electron_case["crystx"] = None
+electron_output = evaluate_reaxff_corrected_bond_nonbonded_valence_case(electron_case)
+electron_terms = {key: float(value) for key, value in electron_output["energy_terms_eV"].items()}
+assert abs(electron_terms["electron"] + 0.2326373860870282) < 1.0e-12
+assert abs(sum(electron_terms.values()) - float(electron_output["energy_eV"])) < 1.0e-12
+assert abs(float(electron_output["energy_eV"]) + 0.2249949320658194) < 1.0e-12
+
+electron_eps = 1.0e-6
+electron_plus = json.loads(json.dumps(electron_case))
+electron_minus = json.loads(json.dumps(electron_case))
+electron_plus["positions_A"][1][0] += electron_eps
+electron_minus["positions_A"][1][0] -= electron_eps
+e_plus = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(electron_plus)["energy_eV"])
+e_minus = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(electron_minus)["energy_eV"])
+fd_force = -(e_plus - e_minus) / (2.0 * electron_eps)
+analytic_force = float(evaluate_reaxff_corrected_bond_nonbonded_valence_case(electron_case)["forces_eV_per_A"][1][0])
+assert abs(fd_force - analytic_force) < 1.0e-8
 PY
 else
   python3 projects/jamil_replication/fast_backend/jax_backend.py \

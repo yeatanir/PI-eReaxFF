@@ -203,6 +203,7 @@ def evaluate_from_stdin(allow_unvalidated: bool) -> int:
             "requested_force_kernel": force_kernel,
             "fingerprints": batch["fingerprints"],
             "energy_eV": batch["energy_eV"].tolist(),
+            "energy_terms_eV": {key: value.tolist() for key, value in batch.get("energy_terms_eV", {}).items()},
             "forces_eV_per_A": batch["forces_eV_per_A"].tolist(),
             "case_status": batch["status"],
         }

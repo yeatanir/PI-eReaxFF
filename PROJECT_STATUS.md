@@ -1,6 +1,6 @@
 # Project Status
 
-Generated: 2026-05-03
+Generated: 2026-09-10
 
 ## Inputs Provided
 
@@ -97,6 +97,20 @@ Generated: 2026-05-03
 - [x] Add structural stress/edge-case test suite.
 - [x] Add negative overlapping-group failure test.
 - [x] Connect eReaxFF oracle adapter to legacy V2 oracle.
+- [x] Add gated JAX fast-backend dataset, self-test, and force-batch entrypoint.
+- [x] Add JAX fixed-charge, shielded-Coulomb, no-inner-wall vdW, uncorrected
+      bond, corrected-bond, and corrected-bond/nonbonded kernels.
+- [x] Add named `energy_terms_eV` reporting for current JAX force kernels.
+- [x] Parse Jamil ffield angle, torsion, and hydrogen-bond parameter sections.
+- [x] Add diagnostic JAX valence-angle (`ev`), angle penalty (`epen`),
+      angle-conjugation (`ecoa`), and explicit electron pair (`eelect`) terms.
+- [x] Add diagnostic JAX torsion (`et`) and torsion-conjugation (`eco`)
+      formulas.
+- [ ] Port hydrogen-bond (`ehb`) formulas when using an ffield with active
+      hydrogen-bond records.
+- [ ] Reconstruct dynamic lone-pair/over-under/electron state before porting
+      `lonpar`/`ovcor` parity paths.
+- [ ] Add a JAX ACKS2 charge solver and wire it into batched force evaluation.
 
 ## First Test Command
 
@@ -227,3 +241,16 @@ The structural stress suite covers normal-mode transforms through `P=128`,
 repeated ring-polymer reinitialization, a 1024-particle/32-bead force-manager
 case, 2048-particle/32-bead charge memory, 10,000-particle group assignment, and
 overlapping-group rejection.
+
+The JAX fast backend is now a gated development path rather than a production
+replacement for the Fortran oracle.  It reports named energy slices in
+`energy_terms_eV` for current source-derived kernels and has regression coverage
+for corrected bond/nonbonded decomposition, real C-C-C valence-angle energy and
+force finite differences, a nonzero C-C-C-C torsion/conjugation fixture, and a
+nonzero C-El explicit electron pair term.  The current diagnostic aggregate
+includes `bond`, `coulomb`, `vdw`, `valence`, `penalty`,
+`angle_conjugation`, `torsion`, `torsion_conjugation`, and `electron`.  The
+torsion implementation is dense and intentionally fails above 64 atoms until a
+sparse topology kernel is added.  The exact Fortran oracle remains the truth
+source until the remaining hydrogen-bond, dynamic lone-pair/overcoordination,
+and ACKS2 paths are ported and validated.

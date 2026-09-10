@@ -94,7 +94,9 @@ first working mixed RPMD/PIMD eReaxFF dynamics boundary:
 - optional one-time initial PIMD normal-mode velocity rescaling for small
   stochastic systems;
 - force-off mixed BAOAB diagnostics for separating thermostat/free-ring
-  behavior from eReaxFF force feedback.
+  behavior from eReaxFF force feedback;
+- gated JAX fast-backend kernels with named energy-contribution outputs for
+  current source-derived force slices.
 
 ## Build And Test
 
@@ -223,7 +225,29 @@ The fast-backend work has started behind a gated interface:
   oracle readiness checks;
 - the first JAX charge kernel reproduces the current Jamil `icharg=8`
   fixed-`MOLCHARGE` charge path in batched form;
-- the first JAX force path is strict oracle-label replay for protocol and
-  parity testing only; physics force evaluation still fails closed;
+- the JAX force path now includes strict oracle-label replay plus
+  source-derived kernels for shielded Coulomb, no-inner-wall shielded vdW,
+  uncorrected bond, corrected bond, corrected bond plus nonbonded, and a
+  diagnostic corrected-bond/nonbonded/valence/torsion/electron aggregate;
+- `force_batch` responses include `energy_terms_eV`, with columns such as
+  `bond`, `coulomb`, `vdw`, `valence`, `penalty`, `angle_conjugation`, and
+  `electron` when those slices are active in the selected kernel;
+- the ffield parser now reads atom, bond, off-diagonal, angle, torsion, and
+  hydrogen-bond parameter sections from the Jamil source ffield.  The current
+  Jamil C/El ffield has angle and torsion parameter records but no hydrogen-
+  bond records;
+- valence-angle energy (`ev`), double-bond angle penalty (`epen`),
+  angle-conjugation (`ecoa`), torsion (`et`), torsion-conjugation (`eco`), and
+  explicit electron pair energy (`eelect`) are implemented in the diagnostic JAX
+  aggregate with force/finite-difference regression checks.  The torsion path is
+  currently dense and fail-closed above 64 atoms until a sparse topology kernel
+  is added;
 - the force-provider base now has a batched result type so future backends can
   evaluate all beads in one compiled/vectorized request.
+
+Remaining fast-backend parity work is still nontrivial.  Hydrogen-bond energy
+(`ehb`) is parsed but absent from the current Jamil C/El ffield; lone-pair and
+over/under-coordination terms (`elp`, `ea`) require reconstructing the legacy
+dynamic electron/lone-pair state; the ACKS2 charge solver is still not a JAX
+kernel.  Until those are validated, the exact Fortran oracle remains the
+production truth source.
