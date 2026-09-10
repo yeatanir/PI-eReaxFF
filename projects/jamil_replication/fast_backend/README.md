@@ -9,8 +9,13 @@ pass oracle-dataset parity before it is used for production dynamics.
 ## Current Contract
 
 - `force_provider.type: ereaxff_oracle` remains the default exact path.
-- `force_provider.type: fast_jax_oracle` is accepted by config parsing but the
-  mixed driver stops immediately until the backend is validated and connected.
+- `force_provider.type: fast_jax_oracle` launches the persistent JAX worker
+  from the mixed BAOAB driver when `fast_backend_allow_unvalidated: true` is
+  set explicitly.
+- The connected fast path is currently guarded to the Jamil electron-only
+  C/El, fixed-`MOLCHARGE`, orthorhombic-cell target.  It batches all beads in
+  one JAX force call and writes the same `.xyz`, energy, charge, restart, and
+  compatibility outputs as the oracle driver path.
 - `build_oracle_dataset.py` converts existing restart/timing outputs into
   JSONL reference cases for fast-backend development.
 
@@ -128,6 +133,22 @@ backend can evaluate it in batches with:
 Full dynamic ACKS2 matrix construction/solve is still intentionally
 unimplemented and will fail closed until it has oracle labels that exercise
 nonzero solver state.
+
+The mixed driver can exercise the current Jamil fast path with:
+
+```yaml
+force_provider:
+  type: fast_jax_oracle
+  fast_backend_command: ".venv-fast/bin/python projects/jamil_replication/fast_backend/jax_live_worker.py"
+  fast_backend_model: "reaxff_corrected_bond_nonbonded_valence"
+  fast_backend_allow_unvalidated: true
+```
+
+Run the end-to-end smoke test with:
+
+```sh
+make test_32_fast_jax_driver_smoke
+```
 
 ## Force Kernel Status
 

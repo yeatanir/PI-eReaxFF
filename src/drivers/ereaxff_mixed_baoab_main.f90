@@ -12,7 +12,9 @@ program ereaxff_mixed_baoab_main
   use ereaxff_charge_coupling_policy, only: charge_memory_state, init_charge_memory, &
       charge_policy_bead_local_acks2, charge_policy_is_valid, max_charge_difference_across_beads
   use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init, oracle_adapter_shutdown
-  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads, evaluate_zero_oracle_beads
+  use ereaxff_fast_jax_adapter, only: fast_jax_adapter_state, fast_jax_adapter_init, fast_jax_adapter_shutdown
+  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads, evaluate_zero_oracle_beads, &
+      evaluate_fast_jax_beads
   use ereaxff_mixed_baoab_restart, only: mixed_baoab_restart_state, write_mixed_baoab_restart, &
       read_mixed_baoab_restart
   use ereaxff_mixed_restart, only: write_charge_by_bead_summary, write_charge_centroid_summary, &
@@ -39,6 +41,7 @@ program ereaxff_mixed_baoab_main
   type(particle_group_assignment) :: assignment
   type(ring_polymer_state), allocatable :: rp(:)
   type(oracle_adapter_state) :: adapter
+  type(fast_jax_adapter_state) :: fast_adapter
   type(charge_memory_state) :: charge_memory
   type(oracle_bead_summary) :: summary
   type(mixed_baoab_restart_state) :: restart_state
@@ -67,7 +70,7 @@ program ereaxff_mixed_baoab_main
   integer :: pimd_count, output_stride, nquantum, q, primary_quantum, primary_beads
   real(dp) :: temperature_K, dt_fs, pimd_mass_amu
   type(rng_state) :: rng
-  logical :: config_mode, exists, force_off_mode, exact_oracle_mode
+  logical :: config_mode, exists, force_off_mode, exact_oracle_mode, fast_backend_mode
   logical :: output_centroid_xyz, output_beads_xyz
 
   call get_command_argument(1, arg1)
@@ -112,8 +115,9 @@ program ereaxff_mixed_baoab_main
   if (.not. charge_policy_is_valid(policy_arg)) error stop "ereaxff_mixed_baoab_main: invalid charge policy"
   force_off_mode = config_mode .and. trim(cfg%force_provider%provider_type) == "dummy"
   exact_oracle_mode = .not. config_mode .or. trim(cfg%force_provider%provider_type) == "ereaxff_oracle"
-  if (config_mode .and. trim(cfg%force_provider%provider_type) == "fast_jax_oracle") then
-    error stop "ereaxff_mixed_baoab_main: fast_jax_oracle is configured but the validated fast backend is not implemented"
+  fast_backend_mode = config_mode .and. trim(cfg%force_provider%provider_type) == "fast_jax_oracle"
+  if (config_mode .and. .not. force_off_mode .and. .not. exact_oracle_mode .and. .not. fast_backend_mode) then
+    error stop "ereaxff_mixed_baoab_main: unsupported force provider type"
   end if
   call get_environment_variable("EREAXFF_V1_ROOT", v1_root)
   call get_environment_variable("EREAXFF_V2_ROOT", v2_root)
@@ -293,7 +297,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a,3(1x,es12.4))') "electron_start_A:", state%position_A(:, quantum_indices(1))
 
   call init_charge_memory(charge_memory, nparticles, beads, policy_arg)
-  if (config_mode .and. .not. force_off_mode) then
+  if (config_mode .and. exact_oracle_mode) then
     adapter_work_root = join_path(output_dir, "adapter_work")
     if (len_trim(cfg%force_provider%work_root) > 0) adapter_work_root = trim(cfg%force_provider%work_root)
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), trim(adapter_work_root), &
@@ -310,6 +314,13 @@ program ereaxff_mixed_baoab_main
         persistent_worker_binary=trim(cfg%force_provider%persistent_worker_binary))
   else if (exact_oracle_mode) then
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
+  else if (fast_backend_mode) then
+    adapter_work_root = join_path(output_dir, "fast_jax_work")
+    if (len_trim(cfg%force_provider%work_root) > 0) adapter_work_root = trim(cfg%force_provider%work_root)
+    call fast_jax_adapter_init(fast_adapter, state, trim(adapter_work_root), &
+        trim(cfg%force_provider%fast_backend_command), &
+        join_path(v1_root, trim(cfg%force_provider%ffield)), trim(geometry_path), &
+        trim(cfg%force_provider%fast_backend_model), cfg%force_provider%fast_backend_allow_unvalidated)
   end if
   primary_quantum = quantum_indices(1)
   primary_beads = quantum_bead_counts(1)
@@ -372,7 +383,8 @@ program ereaxff_mixed_baoab_main
   step = start_step
   do while (step < steps)
     call mixed_group_baoab_step(positions_A, classical_velocities, q_nm, v_nm, assignment, groups, quantum_indices, &
-        quantum_bead_counts, state, rp, dt_fs, adapter, charge_memory, solver_guess, policy_arg, summary, rng, &
+        quantum_bead_counts, state, rp, dt_fs, adapter, fast_adapter, fast_backend_mode, charge_memory, solver_guess, &
+        policy_arg, summary, rng, &
         step, &
         quantum_thermostats, quantum_heat_eV, classical_heat_eV, force_off_mode)
     step = step + 1
@@ -398,6 +410,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a,es12.4)') "quantum_thermostat_heat_eV = ", sum(quantum_heat_eV)
 
   if (exact_oracle_mode) call oracle_adapter_shutdown(adapter)
+  if (fast_backend_mode) call fast_jax_adapter_shutdown(fast_adapter)
 
 contains
 
@@ -790,6 +803,8 @@ contains
 
     if (force_off_mode) then
       call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess, summary)
+    else if (fast_backend_mode) then
+      call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess, policy_arg, summary)
     else
       call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess, policy_arg, summary, step_index, &
           stage_label)
@@ -928,8 +943,8 @@ contains
   end function get_pimd_group_centroid_gamma
 
   subroutine mixed_group_baoab_step(positions_A, classical_velocities, q_nm, v_nm, assignment, groups_in, quantum_indices, &
-      quantum_bead_counts, state_in, rp_in, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, rng, &
-      step_index, &
+      quantum_bead_counts, state_in, rp_in, dt_fs, adapter, fast_adapter, use_fast_backend, charge_memory, &
+      solver_guess_by_bead, charge_policy, summary, rng, step_index, &
       quantum_thermostats, quantum_heat_eV, classical_heat_eV, force_off_mode)
     real(dp), intent(inout) :: positions_A(:, :, :)
     real(dp), intent(inout) :: classical_velocities(:, :)
@@ -943,6 +958,8 @@ contains
     type(ring_polymer_state), intent(in) :: rp_in(:)
     real(dp), intent(in) :: dt_fs
     type(oracle_adapter_state), intent(inout) :: adapter
+    type(fast_jax_adapter_state), intent(inout) :: fast_adapter
+    logical, intent(in) :: use_fast_backend
     type(charge_memory_state), intent(inout) :: charge_memory
     real(dp), intent(inout) :: solver_guess_by_bead(:, :)
     character(len=*), intent(in) :: charge_policy
@@ -970,6 +987,8 @@ contains
     if (present(step_index)) then
       if (force_off_mode) then
         call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else if (use_fast_backend) then
+        call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
       else
         call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
             step_index, "group_pre_force")
@@ -977,6 +996,8 @@ contains
     else
       if (force_off_mode) then
         call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else if (use_fast_backend) then
+        call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
       else
         call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
       end if
@@ -1011,7 +1032,8 @@ contains
     end do
 
     call mixed_baoab_quantum_step(positions_A, q_nm, v_nm, quantum_indices, quantum_masses, rp_in, &
-        quantum_bead_counts, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, &
+        quantum_bead_counts, dt_fs, adapter, fast_adapter, use_fast_backend, charge_memory, solver_guess_by_bead, &
+        charge_policy, summary, &
         quantum_thermostats, rng, state_in, step_index, force_off_mode)
     do q = 1, size(quantum_indices)
       quantum_heat_eV(q) = quantum_thermostats(q)%heat_eV
@@ -1021,6 +1043,8 @@ contains
     if (present(step_index)) then
       if (force_off_mode) then
         call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else if (use_fast_backend) then
+        call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
       else
         call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
             step_index, "group_post_force")
@@ -1028,6 +1052,8 @@ contains
     else
       if (force_off_mode) then
         call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else if (use_fast_backend) then
+        call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
       else
         call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
       end if

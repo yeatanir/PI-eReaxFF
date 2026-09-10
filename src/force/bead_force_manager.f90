@@ -8,6 +8,7 @@ module ereaxff_bead_force_manager
   use ereaxff_dummy_force_provider, only: dummy_force_provider_state, dummy_force_provider_evaluate
   use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_result, oracle_adapter_eval, &
       oracle_adapter_ensure_workers, oracle_adapter_worker_state
+  use ereaxff_fast_jax_adapter, only: fast_jax_adapter_state, fast_jax_batch_result, fast_jax_adapter_eval_batch
   implicit none
   private
 
@@ -47,6 +48,7 @@ module ereaxff_bead_force_manager
   public :: evaluate_dummy_beads
   public :: evaluate_zero_oracle_beads
   public :: evaluate_oracle_beads
+  public :: evaluate_fast_jax_beads
   public :: average_forces_over_beads
 
 contains
@@ -250,6 +252,38 @@ contains
           result, step_value, call_base, dispatch_mode, stage_value, clock_base, clock_rate)
     end if
   end subroutine evaluate_oracle_beads
+
+  subroutine evaluate_fast_jax_beads(provider, positions_A, charge_memory, solver_guess_by_bead, &
+      charge_policy, summary)
+    type(fast_jax_adapter_state), intent(inout) :: provider
+    real(dp), intent(in) :: positions_A(:, :, :)
+    type(charge_memory_state), intent(inout) :: charge_memory
+    real(dp), intent(inout) :: solver_guess_by_bead(:, :)
+    character(len=*), intent(in) :: charge_policy
+    type(oracle_bead_summary), intent(inout) :: summary
+    type(fast_jax_batch_result) :: result
+    integer :: bead, p
+
+    if (.not. charge_policy_is_valid(charge_policy)) then
+      error stop "evaluate_fast_jax_beads: invalid charge policy"
+    end if
+    if (.not. charge_policy_uses_bead_local_memory(charge_policy)) then
+      error stop "evaluate_fast_jax_beads: fast backend currently supports only bead-local charge memory"
+    end if
+    call evaluate_oracle_shapes(positions_A, solver_guess_by_bead, charge_memory, summary)
+    p = size(positions_A, 3)
+    call fast_jax_adapter_eval_batch(provider, positions_A, charge_memory%charges_by_bead, solver_guess_by_bead, result)
+    do bead = 1, p
+      summary%bead_energies_eV(bead) = result%bead_energies_eV(bead)
+      summary%scaled_forces_eV_per_A(:, :, bead) = result%forces_eV_per_A(:, :, bead) / real(p, dp)
+      summary%bead_charges(:, bead) = result%charges(:, bead)
+      summary%bead_solver_guess(:, bead) = result%solver_guess(:, bead)
+      summary%bead_status(bead) = result%bead_status(bead)
+      call set_bead_charges(charge_memory, bead, result%charges(:, bead))
+      solver_guess_by_bead(:, bead) = result%solver_guess(:, bead)
+    end do
+    summary%pimd_potential_eV = sum(summary%bead_energies_eV) / real(p, dp)
+  end subroutine evaluate_fast_jax_beads
 
   subroutine average_forces_over_beads(bead_forces, mean_forces)
     real(dp), intent(in) :: bead_forces(:, :, :)

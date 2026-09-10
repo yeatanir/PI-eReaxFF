@@ -5,10 +5,12 @@ module ereaxff_mixed_baoab_integrator
   use ereaxff_normal_modes, only: bead_to_nm, nm_to_bead
   use ereaxff_free_ring_propagator, only: exact_free_propagation
   use ereaxff_charge_coupling_policy, only: charge_memory_state
-  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads, evaluate_zero_oracle_beads
+  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads, evaluate_zero_oracle_beads, &
+      evaluate_fast_jax_beads
   use ereaxff_rng, only: rng_state
   use ereaxff_thermostat_pile_l, only: pile_l_thermostat_state, pile_l_step
   use ereaxff_oracle_adapter, only: oracle_adapter_state
+  use ereaxff_fast_jax_adapter, only: fast_jax_adapter_state
   use ereaxff_system_state, only: system_state, wrap_position_into_cell
   implicit none
   private
@@ -18,8 +20,8 @@ module ereaxff_mixed_baoab_integrator
 contains
 
   subroutine mixed_baoab_quantum_step(positions_A, q_nm, v_nm, quantum_indices, quantum_masses_amu, &
-      rp, quantum_bead_counts, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, &
-      quantum_thermostats, rng, state_in, step_index, force_off)
+      rp, quantum_bead_counts, dt_fs, adapter, fast_adapter, use_fast_backend, charge_memory, solver_guess_by_bead, &
+      charge_policy, summary, quantum_thermostats, rng, state_in, step_index, force_off)
     real(dp), intent(inout) :: positions_A(:, :, :)
     real(dp), intent(inout) :: q_nm(:, :, :)
     real(dp), intent(inout) :: v_nm(:, :, :)
@@ -28,6 +30,8 @@ contains
     type(ring_polymer_state), intent(in) :: rp(:)
     integer, intent(in) :: quantum_bead_counts(:)
     type(oracle_adapter_state), intent(inout) :: adapter
+    type(fast_jax_adapter_state), intent(inout) :: fast_adapter
+    logical, intent(in) :: use_fast_backend
     type(charge_memory_state), intent(inout) :: charge_memory
     real(dp), intent(inout) :: solver_guess_by_bead(:, :)
     character(len=*), intent(in) :: charge_policy
@@ -69,6 +73,8 @@ contains
 
     if (force_off_value) then
       call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+    else if (use_fast_backend) then
+      call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
     else
       call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
           charge_policy, summary, step_value, "quantum_pre_force")
@@ -94,6 +100,8 @@ contains
 
     if (force_off_value) then
       call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+    else if (use_fast_backend) then
+      call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
     else
       call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
           charge_policy, summary, step_value, "quantum_post_force")
