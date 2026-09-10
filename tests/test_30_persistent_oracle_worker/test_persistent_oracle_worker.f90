@@ -13,11 +13,12 @@ program test_persistent_oracle_worker
   integer, parameter :: p = 2
   type(system_state) :: state
   real(dp) :: positions(ndim, nparticles, p)
-  type(oracle_bead_summary) :: external_summary, persistent_summary
-  type(charge_memory_state) :: external_memory, persistent_memory
+  type(oracle_bead_summary) :: external_summary, persistent_summary, pool_summary
+  type(charge_memory_state) :: external_memory, persistent_memory, pool_memory
   character(len=512) :: v1_root, v2_root, work_root, smoke_binary, worker_binary, geo_path
   real(dp) :: external_solver(nparticles, p)
   real(dp) :: persistent_solver(nparticles, p)
+  real(dp) :: pool_solver(nparticles, p)
 
   call get_environment_variable("EREAXFF_V1_ROOT", v1_root)
   call get_environment_variable("EREAXFF_V2_ROOT", v2_root)
@@ -37,6 +38,8 @@ program test_persistent_oracle_worker
   geo_path = trim(work_root) // "/external/adapter_call_0001/geo"
   call run_mode("persistent_worker", "serial", 1, trim(work_root) // "/persistent", state, positions, v1_root, v2_root, &
       smoke_binary, worker_binary, persistent_memory, persistent_solver, persistent_summary, trim(geo_path))
+  call run_mode("persistent_worker_pool", "bounded_pool", 2, trim(work_root) // "/pool", state, positions, v1_root, v2_root, &
+      smoke_binary, worker_binary, pool_memory, pool_solver, pool_summary, trim(geo_path))
 
   call assert_close("energy", external_summary%pimd_potential_eV, persistent_summary%pimd_potential_eV, 1.0e-4_dp)
   call assert_close("forces", maxval(abs(external_summary%scaled_forces_eV_per_A - persistent_summary%scaled_forces_eV_per_A)), &
@@ -46,9 +49,18 @@ program test_persistent_oracle_worker
       0.0_dp, 1.0e-5_dp)
   call assert_close("memory", maxval(abs(external_memory%charges_by_bead - persistent_memory%charges_by_bead)), &
       0.0_dp, 1.0e-5_dp)
+  call assert_close("pool energy", persistent_summary%pimd_potential_eV, pool_summary%pimd_potential_eV, 1.0e-4_dp)
+  call assert_close("pool forces", maxval(abs(persistent_summary%scaled_forces_eV_per_A - pool_summary%scaled_forces_eV_per_A)), &
+      0.0_dp, 1.0e-5_dp)
+  call assert_close("pool charges", maxval(abs(persistent_summary%bead_charges - pool_summary%bead_charges)), 0.0_dp, 1.0e-5_dp)
+  call assert_close("pool solver", maxval(abs(persistent_summary%bead_solver_guess - pool_summary%bead_solver_guess)), &
+      0.0_dp, 1.0e-5_dp)
+  call assert_close("pool memory", maxval(abs(persistent_memory%charges_by_bead - pool_memory%charges_by_bead)), &
+      0.0_dp, 1.0e-5_dp)
   call assert_true("persistent energy finite", ieee_is_finite(persistent_summary%pimd_potential_eV))
   call assert_true("persistent forces finite", all(ieee_is_finite(persistent_summary%scaled_forces_eV_per_A)))
   call assert_true("persistent timing log", file_exists(trim(work_root) // "/persistent/persistent_oracle_timing.log"))
+  call assert_true("pool timing log", file_exists(trim(work_root) // "/pool/persistent_oracle_timing.log"))
 
   write(*,'(a)') "test_30_persistent_oracle_worker: PASS"
   write(*,'(a,es24.15)') "  energy_eV = ", persistent_summary%pimd_potential_eV

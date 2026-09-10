@@ -36,6 +36,16 @@ module ereaxff_oracle_adapter
     character(len=:), allocatable :: persistent_done_path
     character(len=:), allocatable :: persistent_pid_path
     character(len=:), allocatable :: persistent_log_path
+    character(len=512), allocatable :: persistent_pool_roots(:)
+    character(len=512), allocatable :: persistent_pool_request_paths(:)
+    character(len=512), allocatable :: persistent_pool_response_paths(:)
+    character(len=512), allocatable :: persistent_pool_ready_paths(:)
+    character(len=512), allocatable :: persistent_pool_shutdown_paths(:)
+    character(len=512), allocatable :: persistent_pool_done_paths(:)
+    character(len=512), allocatable :: persistent_pool_pid_paths(:)
+    character(len=512), allocatable :: persistent_pool_log_paths(:)
+    integer, allocatable :: persistent_pool_request_counts(:)
+    logical, allocatable :: persistent_pool_started(:)
     integer :: max_workers = 1
     integer :: stagger_launch_ms = 0
     integer :: timeout_s = 90
@@ -57,6 +67,7 @@ module ereaxff_oracle_adapter
 
   public :: oracle_adapter_init
   public :: oracle_adapter_eval
+  public :: oracle_adapter_ensure_workers
   public :: oracle_adapter_shutdown
   public :: oracle_adapter_worker_state
   public :: oracle_adapter_smoke
@@ -183,7 +194,7 @@ contains
     else
       adapter%persistent_worker_start_timeout_s = 60
     end if
-    if (trim(adapter%backend_mode) == "persistent_worker") then
+    if (trim(adapter%backend_mode) == "persistent_worker" .or. trim(adapter%backend_mode) == "persistent_worker_pool") then
       adapter%timing_log_path = trim(work_root) // "/persistent_oracle_timing.log"
       adapter%persistent_worker_root = trim(work_root) // "/persistent_worker"
       adapter%persistent_request_path = trim(adapter%persistent_worker_root) // "/persistent_request.in"
@@ -193,6 +204,9 @@ contains
       adapter%persistent_done_path = trim(adapter%persistent_worker_root) // "/persistent_worker.done"
       adapter%persistent_pid_path = trim(adapter%persistent_worker_root) // "/persistent_worker.pid"
       adapter%persistent_log_path = trim(adapter%persistent_worker_root) // "/persistent_worker.log"
+      if (trim(adapter%backend_mode) == "persistent_worker_pool") then
+        call init_persistent_worker_pool(adapter)
+      end if
     else
       adapter%timing_log_path = trim(work_root) // "/oracle_timing.log"
       adapter%persistent_worker_root = ""
@@ -204,7 +218,7 @@ contains
       adapter%persistent_pid_path = ""
       adapter%persistent_log_path = ""
     end if
-    if (trim(adapter%backend_mode) == "persistent_worker") then
+    if (trim(adapter%backend_mode) == "persistent_worker" .or. trim(adapter%backend_mode) == "persistent_worker_pool") then
       call ensure_workdir(trim(adapter%persistent_worker_root))
       call write_text_file(trim(adapter%persistent_worker_root) // "/persistent_init.marker", "persistent_backend_init")
     end if
@@ -217,12 +231,18 @@ contains
     type(oracle_adapter_state), intent(inout) :: adapter
 
     if (.not. adapter%initialized) return
-    if (trim(adapter%backend_mode) /= "persistent_worker") return
-    if (.not. adapter%persistent_worker_started) return
-    call remove_file(trim(adapter%persistent_done_path))
-    call write_text_file(trim(adapter%persistent_shutdown_path), "shutdown")
-    call wait_for_file(trim(adapter%persistent_done_path), adapter%persistent_worker_start_timeout_s * 1000)
-    adapter%persistent_worker_started = .false.
+    select case (trim(adapter%backend_mode))
+    case ("persistent_worker")
+      if (.not. adapter%persistent_worker_started) return
+      call remove_file(trim(adapter%persistent_done_path))
+      call write_text_file(trim(adapter%persistent_shutdown_path), "shutdown")
+      call wait_for_file(trim(adapter%persistent_done_path), adapter%persistent_worker_start_timeout_s * 1000)
+      adapter%persistent_worker_started = .false.
+    case ("persistent_worker_pool")
+      call shutdown_persistent_worker_pool(adapter)
+    case default
+      return
+    end select
   end subroutine oracle_adapter_shutdown
 
   pure function oracle_adapter_worker_state(adapter) result(state)
@@ -235,6 +255,8 @@ contains
       else
         state = "reused"
       end if
+    else if (trim(adapter%backend_mode) == "persistent_worker_pool") then
+      state = "pool"
     else
       state = "external"
     end if
@@ -251,6 +273,7 @@ contains
     integer, intent(in), optional :: call_slot
     character(len=shell_path_len) :: work_dir
     integer :: bead_value, status, natom
+    integer :: request_value
     real(dp) :: energy_kcal, max_force, charge_sum
     character(len=512) :: summary_line
 
@@ -269,15 +292,22 @@ contains
 
     if (present(call_slot)) then
       if (call_slot < 1) error stop "oracle_adapter_eval: call_slot must be positive"
+      request_value = call_slot
       work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(call_slot, 4)
     else
       adapter%call_count = adapter%call_count + 1
+      request_value = adapter%call_count
       work_dir = trim(adapter%work_root) // "/adapter_call_" // pad_int(adapter%call_count, 4)
     end if
 
     if (trim(adapter%backend_mode) == "persistent_worker") then
       call persistent_worker_eval(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
-          energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+          energy_kcal, max_force, charge_sum, natom, status, summary_line, result, 1)
+    else if (trim(adapter%backend_mode) == "persistent_worker_pool") then
+      if (.not. present(call_slot)) error stop "oracle_adapter_eval: persistent worker pool requires call_slot"
+      call persistent_worker_eval(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
+          energy_kcal, max_force, charge_sum, natom, status, summary_line, result, pool_worker_id(adapter, call_slot), &
+          request_value)
     else
       call oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_value, &
           work_dir, energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
@@ -295,6 +325,12 @@ contains
       result%diagnostic = "legacy oracle status=" // trim(adjustl(itoa(status)))
     end if
   end subroutine oracle_adapter_eval
+
+  subroutine oracle_adapter_ensure_workers(adapter)
+    type(oracle_adapter_state), intent(inout) :: adapter
+
+    call ensure_persistent_worker(adapter)
+  end subroutine oracle_adapter_ensure_workers
 
   subroutine oracle_adapter_smoke(adapter, positions_A, charge_in, solver_guess_in, bead_id, work_dir, &
       energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
@@ -338,42 +374,145 @@ contains
         "oracle_adapter_eval", energy_kcal, max_force, charge_sum, status, natom, bead_id
   end subroutine oracle_adapter_smoke
 
-  subroutine ensure_persistent_worker(adapter)
+  subroutine init_persistent_worker_pool(adapter)
     type(oracle_adapter_state), intent(inout) :: adapter
+    integer :: worker
+
+    if (adapter%max_workers < 1) error stop "init_persistent_worker_pool: max_workers must be positive"
+    allocate(adapter%persistent_pool_roots(adapter%max_workers))
+    allocate(adapter%persistent_pool_request_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_response_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_ready_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_shutdown_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_done_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_pid_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_log_paths(adapter%max_workers))
+    allocate(adapter%persistent_pool_request_counts(adapter%max_workers))
+    allocate(adapter%persistent_pool_started(adapter%max_workers))
+    adapter%persistent_pool_request_counts = 0
+    adapter%persistent_pool_started = .false.
+    do worker = 1, adapter%max_workers
+      adapter%persistent_pool_roots(worker) = trim(adapter%work_root) // "/persistent_worker_" // trim(pad_int(worker, 3))
+      adapter%persistent_pool_request_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_request.in"
+      adapter%persistent_pool_response_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_response.ready"
+      adapter%persistent_pool_ready_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_worker.ready"
+      adapter%persistent_pool_shutdown_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_shutdown.flag"
+      adapter%persistent_pool_done_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_worker.done"
+      adapter%persistent_pool_pid_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_worker.pid"
+      adapter%persistent_pool_log_paths(worker) = trim(adapter%persistent_pool_roots(worker)) // "/persistent_worker.log"
+    end do
+  end subroutine init_persistent_worker_pool
+
+  integer pure function pool_worker_id(adapter, call_slot) result(worker_id)
+    type(oracle_adapter_state), intent(in) :: adapter
+    integer, intent(in) :: call_slot
+
+    if (adapter%max_workers < 1) error stop "pool_worker_id: max_workers must be positive"
+    worker_id = mod(call_slot - 1, adapter%max_workers) + 1
+  end function pool_worker_id
+
+  subroutine ensure_persistent_worker(adapter, worker_id)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    integer, intent(in), optional :: worker_id
     integer :: timeout_ms
 
+    if (trim(adapter%backend_mode) == "persistent_worker_pool") then
+      if (present(worker_id)) then
+        call ensure_persistent_worker_slot(adapter, worker_id)
+      else
+        call ensure_persistent_worker_pool(adapter)
+      end if
+      return
+    end if
     if (trim(adapter%backend_mode) /= "persistent_worker") return
     if (adapter%persistent_worker_started) return
 
     call ensure_workdir(trim(adapter%persistent_worker_root))
     call write_text_file(trim(adapter%persistent_worker_root) // "/ensure_called.txt", "ensure_persistent_worker")
-    call start_persistent_worker(adapter)
+    call cleanup_persistent_worker_files(trim(adapter%persistent_request_path), trim(adapter%persistent_response_path), &
+        trim(adapter%persistent_ready_path), trim(adapter%persistent_shutdown_path), trim(adapter%persistent_done_path))
+    call start_persistent_worker(adapter, trim(adapter%persistent_worker_root))
     timeout_ms = adapter%persistent_worker_start_timeout_s * 1000
     call wait_for_file(trim(adapter%persistent_ready_path), timeout_ms)
     adapter%persistent_worker_started = .true.
   end subroutine ensure_persistent_worker
 
-  subroutine start_persistent_worker(adapter)
+  subroutine ensure_persistent_worker_pool(adapter)
     type(oracle_adapter_state), intent(inout) :: adapter
+    integer :: worker
+    integer :: timeout_ms
+
+    timeout_ms = adapter%persistent_worker_start_timeout_s * 1000
+    do worker = 1, adapter%max_workers
+      if (.not. allocated(adapter%persistent_pool_started)) error stop "ensure_persistent_worker_pool: pool not initialized"
+      if (adapter%persistent_pool_started(worker)) cycle
+      call ensure_workdir(trim(adapter%persistent_pool_roots(worker)))
+      call write_text_file(trim(adapter%persistent_pool_roots(worker)) // "/ensure_called.txt", "ensure_persistent_worker_pool")
+      call cleanup_persistent_worker_files(trim(adapter%persistent_pool_request_paths(worker)), &
+          trim(adapter%persistent_pool_response_paths(worker)), trim(adapter%persistent_pool_ready_paths(worker)), &
+          trim(adapter%persistent_pool_shutdown_paths(worker)), trim(adapter%persistent_pool_done_paths(worker)))
+      call start_persistent_worker(adapter, trim(adapter%persistent_pool_roots(worker)))
+    end do
+    do worker = 1, adapter%max_workers
+      if (adapter%persistent_pool_started(worker)) cycle
+      call wait_for_file(trim(adapter%persistent_pool_ready_paths(worker)), timeout_ms)
+      adapter%persistent_pool_started(worker) = .true.
+    end do
+  end subroutine ensure_persistent_worker_pool
+
+  subroutine ensure_persistent_worker_slot(adapter, worker_id)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    integer, intent(in) :: worker_id
+    integer :: timeout_ms
+
+    if (.not. allocated(adapter%persistent_pool_started)) error stop "ensure_persistent_worker_slot: pool not initialized"
+    if (worker_id < 1 .or. worker_id > size(adapter%persistent_pool_started)) then
+      error stop "ensure_persistent_worker_slot: worker id out of range"
+    end if
+    if (adapter%persistent_pool_started(worker_id)) return
+    call ensure_workdir(trim(adapter%persistent_pool_roots(worker_id)))
+    call write_text_file(trim(adapter%persistent_pool_roots(worker_id)) // "/ensure_called.txt", "ensure_persistent_worker_slot")
+    call cleanup_persistent_worker_files(trim(adapter%persistent_pool_request_paths(worker_id)), &
+        trim(adapter%persistent_pool_response_paths(worker_id)), trim(adapter%persistent_pool_ready_paths(worker_id)), &
+        trim(adapter%persistent_pool_shutdown_paths(worker_id)), trim(adapter%persistent_pool_done_paths(worker_id)))
+    call start_persistent_worker(adapter, trim(adapter%persistent_pool_roots(worker_id)))
+    timeout_ms = adapter%persistent_worker_start_timeout_s * 1000
+    call wait_for_file(trim(adapter%persistent_pool_ready_paths(worker_id)), timeout_ms)
+    adapter%persistent_pool_started(worker_id) = .true.
+  end subroutine ensure_persistent_worker_slot
+
+  subroutine start_persistent_worker(adapter, worker_root)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    character(len=*), intent(in) :: worker_root
     character(len=shell_path_len) :: launch_script
     integer :: unit, exitstat, ios
 
-    launch_script = trim(adapter%persistent_worker_root) // "/persistent_launch.sh"
+    launch_script = trim(worker_root) // "/persistent_launch.sh"
     open(newunit=unit, file=trim(launch_script), status="replace", action="write", iostat=ios)
     if (ios /= 0) error stop "start_persistent_worker: unable to write launch script"
     write(unit,'(a)') "#!/usr/bin/env sh"
     write(unit,'(a)') "set -eu"
-    write(unit,'(a)') "cd '" // trim(adapter%persistent_worker_root) // "'"
+    write(unit,'(a)') "cd '" // trim(worker_root) // "'"
     write(unit,'(a)') "nohup '" // trim(adapter%persistent_worker_binary) // "' '" // trim(adapter%control_path) // "' '" // &
         trim(adapter%ffield_path) // "' '" // trim(adapter%iopt_path) // "' '" // trim(adapter%geo_path) // "' '" // &
-        trim(adapter%timing_log_path) // "' '" // trim(adapter%persistent_worker_root) // "' '" // &
+        "../persistent_oracle_timing.log' '.' '" // &
         trim(adapter%smoke_binary) // "' '" // trim(adapter%make_geo_script) // "' > '" // &
-        trim(adapter%persistent_log_path) // "' 2>&1 &"
-    write(unit,'(a)') "echo $! > '" // trim(adapter%persistent_pid_path) // "'"
+        "persistent_worker.log' 2>&1 &"
+    write(unit,'(a)') "echo $! > 'persistent_worker.pid'"
     close(unit)
     call execute_command_line("sh '" // trim(launch_script) // "'", wait=.true., exitstat=exitstat)
     if (exitstat /= 0) error stop "start_persistent_worker: unable to launch worker"
   end subroutine start_persistent_worker
+
+  subroutine cleanup_persistent_worker_files(request_path, response_path, ready_path, shutdown_path, done_path)
+    character(len=*), intent(in) :: request_path, response_path, ready_path, shutdown_path, done_path
+
+    call remove_file(trim(request_path))
+    call remove_file(trim(response_path))
+    call remove_file(trim(ready_path))
+    call remove_file(trim(shutdown_path))
+    call remove_file(trim(done_path))
+  end subroutine cleanup_persistent_worker_files
 
   subroutine write_persistent_request(path, request_id, bead_id, stage_label, positions_A, charge_in, &
       solver_guess_in)
@@ -412,6 +551,23 @@ contains
       elapsed_ms = elapsed_ms + 25
     end do
   end subroutine wait_for_file
+
+  subroutine shutdown_persistent_worker_pool(adapter)
+    type(oracle_adapter_state), intent(inout) :: adapter
+    integer :: worker
+
+    if (.not. allocated(adapter%persistent_pool_started)) return
+    do worker = 1, size(adapter%persistent_pool_started)
+      if (.not. adapter%persistent_pool_started(worker)) cycle
+      call remove_file(trim(adapter%persistent_pool_done_paths(worker)))
+      call write_text_file(trim(adapter%persistent_pool_shutdown_paths(worker)), "shutdown")
+    end do
+    do worker = 1, size(adapter%persistent_pool_started)
+      if (.not. adapter%persistent_pool_started(worker)) cycle
+      call wait_for_file(trim(adapter%persistent_pool_done_paths(worker)), adapter%persistent_worker_start_timeout_s * 1000)
+      adapter%persistent_pool_started(worker) = .false.
+    end do
+  end subroutine shutdown_persistent_worker_pool
 
   logical function file_exists(path) result(exists)
     character(len=*), intent(in) :: path
@@ -462,7 +618,7 @@ contains
   end subroutine wait_milliseconds
 
   subroutine persistent_worker_eval(adapter, positions_A, charge_in, solver_guess_in, bead_id, &
-      energy_kcal, max_force, charge_sum, natom, status, summary_line, result)
+      energy_kcal, max_force, charge_sum, natom, status, summary_line, result, worker_id, request_slot)
     type(oracle_adapter_state), intent(inout) :: adapter
     real(dp), intent(in) :: positions_A(:, :)
     real(dp), intent(in) :: charge_in(:)
@@ -472,19 +628,42 @@ contains
     integer, intent(out) :: natom, status
     character(len=*), intent(out) :: summary_line
     type(oracle_adapter_result), intent(inout) :: result
+    integer, intent(in), optional :: worker_id
+    integer, intent(in), optional :: request_slot
     integer :: request_id, response_id, response_ios, start_count, end_count, clock_rate
+    integer :: worker
     character(len=64) :: stage_label, worker_state
-    character(len=512) :: request_path, response_path, persistent_work_dir, summary_path, forces_path
+    character(len=512) :: request_path, response_path, persistent_work_dir, summary_path, forces_path, worker_root
     character(len=512) :: completion_path
 
-    call ensure_persistent_worker(adapter)
+    worker = 1
+    if (present(worker_id)) worker = worker_id
+    call ensure_persistent_worker(adapter, worker)
 
-    request_id = adapter%persistent_worker_request_count + 1
-    adapter%persistent_worker_request_count = request_id
-    stage_label = "persistent_worker"
-    request_path = trim(adapter%persistent_request_path)
-    response_path = trim(adapter%persistent_response_path)
-    persistent_work_dir = trim(adapter%persistent_worker_root) // "/adapter_call_" // trim(pad_int(request_id, 4))
+    if (trim(adapter%backend_mode) == "persistent_worker_pool") then
+      if (.not. allocated(adapter%persistent_pool_request_counts)) error stop "persistent_worker_eval: pool not initialized"
+      if (worker < 1 .or. worker > size(adapter%persistent_pool_request_counts)) then
+        error stop "persistent_worker_eval: worker out of range"
+      end if
+      if (present(request_slot)) then
+        request_id = request_slot
+      else
+        request_id = adapter%persistent_pool_request_counts(worker) + 1
+      end if
+      adapter%persistent_pool_request_counts(worker) = request_id
+      stage_label = "persistent_worker_pool"
+      worker_root = trim(adapter%persistent_pool_roots(worker))
+      request_path = trim(adapter%persistent_pool_request_paths(worker))
+      response_path = trim(adapter%persistent_pool_response_paths(worker))
+    else
+      request_id = adapter%persistent_worker_request_count + 1
+      adapter%persistent_worker_request_count = request_id
+      stage_label = "persistent_worker"
+      worker_root = trim(adapter%persistent_worker_root)
+      request_path = trim(adapter%persistent_request_path)
+      response_path = trim(adapter%persistent_response_path)
+    end if
+    persistent_work_dir = trim(worker_root) // "/adapter_call_" // trim(pad_int(request_id, 4))
     summary_path = trim(persistent_work_dir) // "/phase4_single_point_oracle.out"
     forces_path = trim(persistent_work_dir) // "/single_point_forces.out"
     completion_path = trim(persistent_work_dir) // "/persistent_request.done"
@@ -517,12 +696,19 @@ contains
     if (status /= 0) then
       result%diagnostic = "legacy oracle status=" // trim(adjustl(itoa(status)))
     end if
-    if (adapter%persistent_worker_request_count == 1) then
+    if (trim(adapter%backend_mode) == "persistent_worker_pool") then
+      if (adapter%persistent_pool_request_counts(worker) == 1) then
+        worker_state = "startup"
+      else
+        worker_state = "reused"
+      end if
+    else if (adapter%persistent_worker_request_count == 1) then
       worker_state = "startup"
     else
       worker_state = "reused"
     end if
-    summary_line = "persistent_worker " // trim(worker_state) // " request=" // trim(itoa(request_id))
+    summary_line = trim(stage_label) // " " // trim(worker_state) // " worker=" // trim(itoa(worker)) // &
+        " request=" // trim(itoa(request_id))
   end subroutine persistent_worker_eval
 
   subroutine parse_single_point_summary(path, energy_kcal, max_force, charge_sum, status, natom)
@@ -769,6 +955,7 @@ contains
     character(len=shell_path_len) :: cmd
     integer :: exitstat
 
+    if (len_trim(path) == 0) error stop "ensure_workdir: empty path"
     cmd = "mkdir -p " // shell_quote(path)
     call run_shell(cmd, exitstat)
     if (exitstat /= 0) error stop "ensure_workdir: unable to create working directory"

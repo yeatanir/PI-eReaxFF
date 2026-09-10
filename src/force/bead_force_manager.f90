@@ -7,7 +7,7 @@ module ereaxff_bead_force_manager
   use ereaxff_harmonic_force_provider, only: harmonic_force_provider_state, harmonic_force_provider_evaluate
   use ereaxff_dummy_force_provider, only: dummy_force_provider_state, dummy_force_provider_evaluate
   use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_result, oracle_adapter_eval, &
-      oracle_adapter_worker_state
+      oracle_adapter_ensure_workers, oracle_adapter_worker_state
   implicit none
   private
 
@@ -138,6 +138,7 @@ contains
       allocate(batch_elapsed(p))
       call_base = provider%call_count
       provider%call_count = provider%call_count + p
+      if (trim(provider%backend_mode) == "persistent_worker_pool") call oracle_adapter_ensure_workers(provider)
       do bead = 1, p
         bead_providers(bead) = provider
       end do
@@ -337,6 +338,9 @@ contains
 
     if (allocated(provider%backend_mode) .and. trim(provider%backend_mode) == "persistent_worker") then
       mode = "serial"
+      return
+    else if (allocated(provider%backend_mode) .and. trim(provider%backend_mode) == "persistent_worker_pool") then
+      mode = "bounded_pool"
       return
     end if
     if (allocated(provider%dispatch_mode) .and. len_trim(provider%dispatch_mode) > 0) then

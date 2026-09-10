@@ -118,6 +118,36 @@ Production-only validation traffic is already controlled by `repeatability_check
 
 The timing log now records `stage_kind` and `stage_label` for each call, so the 80-call trace is visible in `oracle_timing.log` as a stage-by-stage series instead of a single undifferentiated bead-local batch.
 
+## 2026-09-09 Persistent Worker Pool
+
+Added an exact `persistent_worker_pool` backend. Each pool slot is an independent persistent worker process with its own initialized legacy ReaxFF COMMON state, so bead-local PIMD force calls can run concurrently without sharing thread-unsafe ReaxFF state.
+
+Use:
+
+```yaml
+oracle_backend_mode: persistent_worker_pool
+persistent_worker_binary: "/Users/yeatanir/PhD/eReaxFF PIMD/ereaxff_pimd_modular/build/persistent_oracle_worker"
+oracle_dispatch_mode: bounded_pool
+oracle_max_workers: 4
+oracle_timing_log: true
+repeatability_check: false
+```
+
+P=4/one-step verification:
+
+- Command:
+  `env OMP_NUM_THREADS=4 ./build/ereaxff_mixed_baoab_main projects/jamil_replication/config_jamil_112c_113el_p4_pool_verify.yaml build/jamil_replication/verify_p4_pool_steps1/out`
+- Result: passed one 0.1 fs step with 20 oracle requests and four workers shut down cleanly.
+- Parallel worker initialization took about `34.3 s` before the first batch.
+- Exact four-bead batches took `19.5-20.5 s` each on the 225-particle Jamil system.
+- Final carbon temperature: `292.973 K`.
+- Final electron physical temperature: `316.700 K`; raw ring-polymer temperature: `1266.801 K`, matching the expected P=4 scaling.
+- Thermostat heat after one step:
+  - classical Berendsen: `-1.01771946427576E-04 eV`
+  - electron PILE: `1.43071183013831 eV`
+
+This is the first real throughput win: the previous direct single-worker P=4 timing was about four serial bead calls per force stage, while the pool now makes each P=4 force stage cost close to one 225-particle direct call.
+
 ## 2026-05-08 Partial Dispatch Sweep
 
 I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.

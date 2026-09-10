@@ -1,0 +1,66 @@
+simulation:
+  dt_fs: 0.1
+  steps: 1
+  seed: 13579
+  integrator: baoab
+  output_stride: 1
+  restart_stride: 1
+
+force_provider:
+  type: ereaxff_oracle
+  v1_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V1"
+  v2_path: "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V2"
+  ffield: "../V2/tests/regression/test_trackB2_geometry_check/work/excess/ffield"
+  geo: "geo"
+  control: "../V2/tests/regression/test_trackB2_geometry_check/work/excess/control"
+  iopt: "tests/reference/iopt"
+  smoke_binary: "/Users/yeatanir/PhD/eReaxFF PIMD/ereaxff_pimd_modular/build/oracle_single_point_force_export"
+  oracle_backend_mode: persistent_worker_pool
+  persistent_worker_binary: "/Users/yeatanir/PhD/eReaxFF PIMD/ereaxff_pimd_modular/build/persistent_oracle_worker"
+  oracle_dispatch_mode: bounded_pool
+  oracle_max_workers: 4
+  oracle_timing_log: true
+  oracle_stagger_launch_ms: 0
+  oracle_fail_fast: true
+  oracle_timeout_s: 120
+  repeatability_check: false
+
+ring_polymer:
+  convention: standard_ipi
+  default_beads: 1
+  propagator: exact
+
+charge_coupling:
+  mode: bead_local_acks2
+  charge_tolerance: 1.0e-8
+
+geometry:
+  template: user_geo_structure
+  structure_path: ""
+  geo_path: "/Users/yeatanir/PhD/eReaxFF PIMD/ereaxff_pimd_modular/projects/jamil_replication/geometries/jamil_graphene_112c_113el.geo"
+  periodic: true
+  crystx: [17.22871, 17.05200, 20.00000, 90.00000, 90.00000, 90.00000]
+
+groups:
+  - name: graphene_carbons
+    selector: "element == C"
+    dynamics: classical
+    mobile: true
+    thermostat: berendsen
+    temperature_K: 300.0
+    tau_fs: 100.0
+
+  - name: paired_and_excess_electrons
+    selector: "element == El"
+    dynamics: pimd
+    beads: 4
+    thermostat: pile_l
+    temperature_K: 300.0
+    centroid_gamma_fs_inv: 0.001
+    mass_amu: 1.0
+
+output:
+  centroid_xyz: true
+  beads_xyz: true
+  reaxff_compat: true
+  diagnostics: true

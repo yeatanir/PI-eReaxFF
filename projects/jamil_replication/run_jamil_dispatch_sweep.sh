@@ -24,40 +24,41 @@ fi
 mkdir -p "$SWEEP_ROOT"
 
 declare -a cases=(
-  "omp1_w1|1|bounded_pool|1"
-  "omp1_w2|1|bounded_pool|2"
-  "omp1_w4|1|bounded_pool|4"
-  "omp1_w6|1|bounded_pool|6"
-  "omp1_w8|1|bounded_pool|8"
+  "pool_omp1_w1|persistent_worker_pool|1|bounded_pool|1"
+  "pool_omp1_w2|persistent_worker_pool|1|bounded_pool|2"
+  "pool_omp1_w4|persistent_worker_pool|1|bounded_pool|4"
+  "pool_omp1_w6|persistent_worker_pool|1|bounded_pool|6"
+  "pool_omp1_w8|persistent_worker_pool|1|bounded_pool|8"
 )
 
 if [[ "${JAMIL_DISPATCH_SKIP_W1:-0}" == "1" ]]; then
   cases=(
-    "omp1_w2|1|bounded_pool|2"
-    "omp1_w4|1|bounded_pool|4"
-    "omp1_w6|1|bounded_pool|6"
-    "omp1_w8|1|bounded_pool|8"
+    "pool_omp1_w2|persistent_worker_pool|1|bounded_pool|2"
+    "pool_omp1_w4|persistent_worker_pool|1|bounded_pool|4"
+    "pool_omp1_w6|persistent_worker_pool|1|bounded_pool|6"
+    "pool_omp1_w8|persistent_worker_pool|1|bounded_pool|8"
   )
 fi
 
 if [[ "${JAMIL_INCLUDE_OMP2:-0}" == "1" ]]; then
   cases+=(
-    "omp2_w2|2|bounded_pool|2"
-    "omp2_w4|2|bounded_pool|4"
+    "pool_omp2_w2|persistent_worker_pool|2|bounded_pool|2"
+    "pool_omp2_w4|persistent_worker_pool|2|bounded_pool|4"
   )
 fi
 
 if [[ "${JAMIL_INCLUDE_OPENMP_ALL:-0}" == "1" ]]; then
   cases+=(
-    "omp1_openmp_all|1|openmp_all|1"
+    "external_omp1_openmp_all|external_process|1|openmp_all|1"
   )
 fi
 
 run_case() {
   local case_name="$1"
-  local omp_threads="$2"
-  local dispatch_mode="$3"
-  local max_workers="$4"
+  local backend_mode="$2"
+  local omp_threads="$3"
+  local dispatch_mode="$4"
+  local max_workers="$5"
   local case_dir="$SWEEP_ROOT/$case_name"
   local out_dir="$case_dir/out"
   local cfg="$case_dir/config.yaml"
@@ -68,7 +69,7 @@ run_case() {
 
   mkdir -p "$case_dir" "$out_dir"
 
-  python3 - "$BASE_CFG" "$cfg" "$dispatch_mode" "$max_workers" <<'PY'
+  python3 - "$BASE_CFG" "$cfg" "$backend_mode" "$dispatch_mode" "$max_workers" <<'PY'
 from __future__ import annotations
 
 import pathlib
@@ -77,13 +78,15 @@ import sys
 
 src = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 dst = pathlib.Path(sys.argv[2])
-dispatch_mode = sys.argv[3]
-max_workers = sys.argv[4]
+backend_mode = sys.argv[3]
+dispatch_mode = sys.argv[4]
+max_workers = sys.argv[5]
 
 def replace(pattern: str, value: str, text: str) -> str:
     return re.sub(pattern, value, text, flags=re.M)
 
 text = src
+text = replace(r"^  oracle_backend_mode:.*$", f"  oracle_backend_mode: {backend_mode}", text)
 text = replace(r"^  oracle_dispatch_mode:.*$", f"  oracle_dispatch_mode: {dispatch_mode}", text)
 text = replace(r"^  oracle_max_workers:.*$", f"  oracle_max_workers: {max_workers}", text)
 text = replace(r"^  oracle_timing_log:.*$", "  oracle_timing_log: true", text)
@@ -232,12 +235,12 @@ else:
     print(json.loads(path.read_text(encoding="utf-8"))["note"])
 PY
 )"
-  echo "$case_name $omp_threads $dispatch_mode $max_workers wall_s=$wall_s status=$status note=$note"
+  echo "$case_name $backend_mode $omp_threads $dispatch_mode $max_workers wall_s=$wall_s status=$status note=$note"
 }
 
 for spec in "${cases[@]}"; do
-  IFS='|' read -r case_name omp_threads dispatch_mode max_workers <<<"$spec"
-  run_case "$case_name" "$omp_threads" "$dispatch_mode" "$max_workers" || true
+  IFS='|' read -r case_name backend_mode omp_threads dispatch_mode max_workers <<<"$spec"
+  run_case "$case_name" "$backend_mode" "$omp_threads" "$dispatch_mode" "$max_workers" || true
 done
 
 "$SUMMARY_SCRIPT" "$SWEEP_ROOT" "$FINAL_SUMMARY"
