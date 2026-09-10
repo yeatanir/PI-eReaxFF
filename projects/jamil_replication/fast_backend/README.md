@@ -70,6 +70,14 @@ Run the first JAX-side labeled readiness gate:
   --dataset build/jamil_replication/fast_backend/oracle_labeled_p4.jsonl
 ```
 
+Compare unvalidated JAX energy contributions against labeled legacy terms:
+
+```sh
+.venv-fast/bin/python projects/jamil_replication/fast_backend/compare_energy_terms.py \
+  --dataset build/jamil_replication/fast_backend/oracle_labeled_p4_terms_latest.jsonl \
+  --output build/jamil_replication/fast_backend/term_compare_p4_latest.json
+```
+
 The entrypoint currently fails closed for force evaluation.  That is deliberate:
 the exact oracle dataset and charge parity have to exist before a JAX/native
 force kernel can be accepted as a dynamics backend.
