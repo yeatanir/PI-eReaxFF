@@ -12,6 +12,7 @@ module ereaxff_input_config
     integer :: output_stride = 1
     integer :: restart_stride = 0
     character(len=512) :: output_dir = ""
+    logical :: rescale_initial_pimd_velocities = .false.
   end type simulation_config
 
   type, public :: force_provider_config
@@ -259,6 +260,8 @@ contains
       read(value, *) sim%restart_stride
     case ("output_dir")
       sim%output_dir = strip_quotes(value)
+    case ("rescale_initial_pimd_velocities")
+      call parse_logical(value, sim%rescale_initial_pimd_velocities)
     case default
       error stop "parse_simulation_line: unsupported key"
     end select

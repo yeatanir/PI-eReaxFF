@@ -46,6 +46,10 @@ text = replace(r"^  dt_fs:.*$", f"  dt_fs: {dt_fs}", text)
 text = replace(r"^  steps:.*$", f"  steps: {steps}", text)
 text = replace(r"^  output_stride:.*$", "  output_stride: 1", text)
 text = replace(r"^  restart_stride:.*$", "  restart_stride: 0", text)
+if "rescale_initial_pimd_velocities:" in text:
+    text = replace(r"^  rescale_initial_pimd_velocities:.*$", "  rescale_initial_pimd_velocities: true", text)
+else:
+    text = replace(r"^  restart_stride:.*$", "  restart_stride: 0\n  rescale_initial_pimd_velocities: true", text)
 text = replace(r"^  output_dir:.*$", f"  output_dir: \"{out}\"", text)
 text = replace(r"^  type:.*$", "  type: dummy", text)
 text = replace(r"^  default_beads:.*$", f"  default_beads: {p}", text)

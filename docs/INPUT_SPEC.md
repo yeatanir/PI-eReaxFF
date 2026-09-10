@@ -5,7 +5,7 @@ may be used temporarily during early Fortran development, but the user-facing
 schema should retain these sections:
 
 - `simulation`: timestep, steps, seed, integrator, output stride, restart
-  stride;
+  stride, and optional initial PIMD velocity rescaling;
 - `force_provider`: provider type and eReaxFF input paths;
 - `ring_polymer`: convention, bead count, propagator;
 - `charge_coupling`: mode and tolerances;
@@ -29,7 +29,7 @@ next layer to standardize once the mixed dynamics boundary is stable.
 The Fortran input parser currently accepts:
 
 - `simulation`: `dt_fs`, `steps`, `seed`, `integrator`, `output_stride`,
-  `restart_stride`, `output_dir`;
+  `restart_stride`, `output_dir`, `rescale_initial_pimd_velocities`;
 - `force_provider`: `type`, `v1_path`, `v2_path`, `work_root`, `ffield`,
   `geo`, `control`, `iopt`, `smoke_binary`, `repeat_binary`,
   `make_geo_script`, `timeout_runner`, `repeatability_check`;
@@ -54,6 +54,13 @@ false` and point `force_provider.smoke_binary` at
 `build/oracle_single_point_force_export` after building it with
 `make oracle_single_point_force_export`.  Regression configs should leave
 `repeatability_check` at its default `true`.
+
+For small PIMD systems where an unlucky initial Maxwell draw can dominate
+one-step temperature diagnostics, set
+`simulation.rescale_initial_pimd_velocities: true`.  This rescales the initial
+normal-mode velocities once so the centroid mode and the collective internal
+modes start at the target extended kinetic temperature.  It does not clamp
+velocities after initialization.
 
 ## Current Selector Subset
 

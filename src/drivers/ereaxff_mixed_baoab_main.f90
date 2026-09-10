@@ -271,6 +271,9 @@ program ereaxff_mixed_baoab_main
     end do
     call initialize_group_velocities(assignment, groups, quantum_indices, quantum_bead_counts, state, &
         classical_velocities, v_nm, rng)
+    if (config_mode .and. cfg%simulation%rescale_initial_pimd_velocities) then
+      call rescale_initial_quantum_velocities(assignment, groups, quantum_indices, quantum_bead_counts, state, v_nm)
+    end if
     solver_guess = 0.0_dp
   end if
   if (.not. allocated(quantum_indices)) quantum_indices = collect_particles_with_dynamics(assignment, dynamics_pimd)
@@ -581,6 +584,54 @@ contains
       end do
     end do
   end subroutine initialize_group_velocities
+
+  subroutine rescale_initial_quantum_velocities(assignment_in, groups_in, quantum_indices, quantum_bead_counts, &
+      state_in, v_nm_inout)
+    type(particle_group_assignment), intent(in) :: assignment_in
+    type(particle_group_spec), intent(in) :: groups_in(:)
+    integer, intent(in) :: quantum_indices(:), quantum_bead_counts(:)
+    type(system_state), intent(in) :: state_in
+    real(dp), intent(inout) :: v_nm_inout(:, :, :)
+    integer :: q, p, group_index
+    real(dp) :: target_extended_T_K, centroid_target_ke_eV, internal_target_ke_eV
+    real(dp) :: centroid_ke_eV, internal_ke_eV, mass_amu
+    real(dp) :: mass_vec(3)
+
+    do q = 1, size(quantum_indices)
+      p = quantum_bead_counts(q)
+      group_index = assignment_in%group_index(quantum_indices(q))
+      target_extended_T_K = groups_in(group_index)%temperature_K * real(p, dp)
+      mass_amu = state_in%mass_amu(quantum_indices(q))
+      mass_vec = [mass_amu, mass_amu, mass_amu]
+
+      centroid_target_ke_eV = 1.5_dp * boltzmann_eV_per_K * target_extended_T_K
+      centroid_ke_eV = kinetic_energy_1d_eV(v_nm_inout(:, q, 1), mass_vec)
+      call rescale_velocity_block(v_nm_inout(:, q, 1:1), centroid_ke_eV, centroid_target_ke_eV)
+
+      if (p > 1) then
+        internal_target_ke_eV = 1.5_dp * real(p - 1, dp) * boltzmann_eV_per_K * target_extended_T_K
+        internal_ke_eV = 0.0_dp
+        do group_index = 2, p
+          internal_ke_eV = internal_ke_eV + kinetic_energy_1d_eV(v_nm_inout(:, q, group_index), mass_vec)
+        end do
+        call rescale_velocity_block(v_nm_inout(:, q, 2:p), internal_ke_eV, internal_target_ke_eV)
+      end if
+    end do
+  end subroutine rescale_initial_quantum_velocities
+
+  subroutine rescale_velocity_block(velocities, current_ke_eV, target_ke_eV)
+    real(dp), intent(inout) :: velocities(:, :)
+    real(dp), intent(in) :: current_ke_eV, target_ke_eV
+    real(dp) :: scale
+
+    if (target_ke_eV < 0.0_dp) error stop "rescale_velocity_block: target KE must be non-negative"
+    if (target_ke_eV <= tiny(1.0_dp)) then
+      velocities = 0.0_dp
+    else if (current_ke_eV > 0.0_dp) then
+      scale = sqrt(target_ke_eV / current_ke_eV)
+      velocities = velocities * scale
+    end if
+  end subroutine rescale_velocity_block
 
   subroutine write_step_outputs(step_in)
     integer, intent(in) :: step_in

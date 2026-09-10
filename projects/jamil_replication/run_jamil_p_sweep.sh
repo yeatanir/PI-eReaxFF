@@ -207,6 +207,10 @@ def replace(pattern: str, value: str, text: str) -> str:
 text = src
 text = replace(r"^  dt_fs:.*$", f"  dt_fs: {dt_fs}", text)
 text = replace(r"^  steps:.*$", f"  steps: {steps}", text)
+if "rescale_initial_pimd_velocities:" in text:
+    text = replace(r"^  rescale_initial_pimd_velocities:.*$", "  rescale_initial_pimd_velocities: true", text)
+else:
+    text = replace(r"^  restart_stride:.*$", "  restart_stride: 1\n  rescale_initial_pimd_velocities: true", text)
 text = replace(r"^  output_dir:.*$", f'  output_dir: "{out}"', text)
 text = replace(r"^  oracle_backend_mode:.*$", "  oracle_backend_mode: persistent_worker_pool", text)
 text = replace(r"^  oracle_dispatch_mode:.*$", "  oracle_dispatch_mode: bounded_pool", text)

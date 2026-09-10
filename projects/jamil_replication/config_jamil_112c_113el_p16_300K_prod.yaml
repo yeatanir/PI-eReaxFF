@@ -5,6 +5,7 @@ simulation:
   integrator: baoab
   output_stride: 1
   restart_stride: 1
+  rescale_initial_pimd_velocities: true
 
 force_provider:
   type: ereaxff_oracle

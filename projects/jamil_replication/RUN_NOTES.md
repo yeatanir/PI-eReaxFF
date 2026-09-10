@@ -268,6 +268,45 @@ Interpretation:
 - The current `mass_amu=1.0` Jamil setting is therefore a fictitious electron mass convention, not the physical electron mass.
 - The immediate `489 K` reading is mostly a finite-sample/initialization/internal-mode issue. With one PIMD electron and `P=16`, the kinetic diagnostic has only `48` velocity degrees of freedom, so a single-seed one-step temperature can fluctuate substantially.
 
+## 2026-09-10 Initial PIMD Velocity Rescale
+
+Added `simulation.rescale_initial_pimd_velocities`. When enabled for a fresh run, the mixed BAOAB driver rescales the initial PIMD normal-mode velocities only once:
+
+- centroid mode kinetic energy is set to its target extended-mode temperature
+- internal modes `2:P` are collectively set to their target extended-mode temperature
+- the thermostat is not clamped after initialization, so subsequent stochastic PILE-L fluctuations remain canonical
+
+Force-off validation with `P=16`, `dt_fs=0.05`, `mass_amu=1.0`:
+
+- step 0 physical electron temperature: `300.000 K`
+- step 0 all-mode extended temperature: `4800.000 K`
+- step 0 centroid extended temperature: `4800.000 K`
+- step 0 internal extended temperature: `4800.000 K`
+- 10000-step physical electron temperature average: `299.207 K`
+- last-5000-step physical electron temperature average: `301.249 K`
+
+Jamil oracle one-step check:
+
+```bash
+JAMIL_P_SWEEP_CASES=16 JAMIL_P_SWEEP_GAMMAS=0.001 JAMIL_P_SWEEP_DT_FS=0.05 \
+  projects/jamil_replication/run_jamil_p_sweep.sh
+```
+
+Result:
+
+- status: `PASS`
+- physical electron temperature: `368.562 K`
+- all-mode extended temperature: `5896.991 K`
+- expected extended temperature: `4800.000 K`
+- centroid extended temperature: `4772.871 K`
+- internal extended temperature: `5971.932 K`
+- carbon temperature: `292.972 K`
+- bead RMS spread: `0.005462 A`
+- oracle calls: `80`
+- wall time: `449.718 s`
+
+This fixes the hot initial draw at step 0 and improves the one-step P=16 oracle diagnostic by about `120.5 K` versus the previous `489.111 K`. The remaining one-step overshoot comes from the stochastic PILE-L update, not from initial kinetic-energy partitioning or eReaxFF force feedback.
+
 ## 2026-05-08 Partial Dispatch Sweep
 
 I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.
