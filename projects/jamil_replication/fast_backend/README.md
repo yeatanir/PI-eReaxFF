@@ -90,12 +90,18 @@ nonzero solver state.
   autodiff, batching, and timing mechanics.
 - an experimental source-derived eReaxFF shielded/tapered Coulomb slice that
   parses `gammaEEM` and taper radii from each oracle call directory's `ffield`.
+- an experimental source-derived `nonbonnoinS` slice for the Jamil force field,
+  combining shielded Morse vdW with shielded/tapered Coulomb.
 
 The Coulomb kernels are orthorhombic-minimum-image only.  The
 `reaxff_shielded_coulomb` path follows the Jamil source `poten.f` Coulomb
-expression and `reac.f` seventh-order taper polynomial, but it is still only
-one energy term.  It must not be used for production dynamics or total-force
-parity.
+expression and `reac.f` seventh-order taper polynomial.  The
+`reaxff_nonbonded_no_inner_shielded` path follows the same `poten.f`
+`nonbonnoinS` routine for the no-inner-wall, shielded-vdW case selected by the
+current Jamil C/El parameters.  These kernels still omit bond order, valence,
+torsion, over/undercoordination, ACKS2 dynamic charge solving, self-image
+details beyond minimum image, and other total-energy terms.  They must not be
+used for production dynamics or total-force parity.
 
 Force evaluation fails closed by default:
 
@@ -127,4 +133,10 @@ or:
 
 ```json
 {"command": "force_batch", "force_kernel": "reaxff_shielded_coulomb", "cases": [ ... ]}
+```
+
+or:
+
+```json
+{"command": "force_batch", "force_kernel": "reaxff_nonbonded_no_inner_shielded", "cases": [ ... ]}
 ```

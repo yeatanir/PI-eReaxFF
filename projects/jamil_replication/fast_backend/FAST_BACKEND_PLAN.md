@@ -39,6 +39,10 @@ removing the exact legacy oracle.
 - An experimental source-derived shielded/tapered eReaxFF Coulomb slice now
   parses the oracle call `ffield` and uses the Jamil `poten.f`/`reac.f`
   formula for the Coulomb term.
+- An experimental source-derived no-inner-wall, shielded-vdW nonbonded kernel
+  now combines the Jamil `nonbonnoinS` vdW and Coulomb terms in a batched JAX
+  path.
 - Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
   fail-closed until their parity kernels are implemented.  The next force work
-  should add vdW and bond-order terms term-by-term against oracle labels.
+  should add bond-order and bonded ReaxFF terms term-by-term against oracle
+  labels.

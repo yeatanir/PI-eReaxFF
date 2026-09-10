@@ -195,6 +195,38 @@ analytic_force = float(evaluate_reaxff_shielded_coulomb_case(case)["forces_eV_pe
 assert abs(fd_force - analytic_force) < 1.0e-8
 
 completed = subprocess.run(
+    [
+        ".venv-fast/bin/python",
+        "projects/jamil_replication/fast_backend/jax_backend.py",
+        "--allow-unvalidated",
+    ],
+    input=json.dumps(
+        {
+            "command": "force_batch",
+            "force_kernel": "reaxff_nonbonded_no_inner_shielded",
+            "cases": [case],
+        }
+    ),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["reaxff_nonbonded_no_inner_shielded"]
+assert abs(response["energy_eV"][0] + 1.0453112428163907) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][0][0] - 0.02335580645549877) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][1][0] + 0.02335580645549877) < 1.0e-12
+
+from jax_force_kernel import evaluate_reaxff_no_inner_shielded_nonbonded_case
+
+e_plus = float(evaluate_reaxff_no_inner_shielded_nonbonded_case(case_plus)["energy_eV"])
+e_minus = float(evaluate_reaxff_no_inner_shielded_nonbonded_case(case_minus)["energy_eV"])
+fd_force = -(e_plus - e_minus) / (2.0 * eps)
+analytic_force = float(evaluate_reaxff_no_inner_shielded_nonbonded_case(case)["forces_eV_per_A"][0][0])
+assert abs(fd_force - analytic_force) < 1.0e-8
+
+completed = subprocess.run(
     [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
     input=json.dumps({"command": "force_batch", "allow_oracle_replay": True, "cases": [case, case]}),
     text=True,

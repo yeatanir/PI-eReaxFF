@@ -68,7 +68,7 @@ def _leading_float(text: str) -> float:
 
 
 def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
-    """Parse the ffield parameters needed by the eReaxFF Coulomb slice."""
+    """Parse the ffield parameters needed by the source-derived nonbonded slices."""
 
     lines = path.read_text().splitlines()
     if len(lines) < 2:
@@ -85,16 +85,32 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
     n_atom_types = int(_leading_float(lines[idx]))
     idx += 4
     gamma_by_symbol: dict[str, float] = {}
+    rvdw_by_symbol: dict[str, float] = {}
+    eps_by_symbol: dict[str, float] = {}
+    alfa_by_symbol: dict[str, float] = {}
+    gammavdw_by_symbol: dict[str, float] = {}
     for _ in range(n_atom_types):
         first = lines[idx].split("!", 1)[0].split()
         if len(first) < 7:
             raise ValueError(f"{path}: malformed atom parameter line {idx + 1}")
+        second = lines[idx + 1].split("!", 1)[0].split()
+        if len(second) < 2:
+            raise ValueError(f"{path}: malformed atom parameter line {idx + 2}")
         gamma_by_symbol[first[0]] = float(first[6])
+        rvdw_by_symbol[first[0]] = float(first[4])
+        eps_by_symbol[first[0]] = float(first[5])
+        alfa_by_symbol[first[0]] = float(second[0])
+        gammavdw_by_symbol[first[0]] = float(second[1])
         idx += 4
     return {
         "lower_taper_A": general[11],
         "upper_taper_A": general[12],
+        "vdw_shielding_power": general[28],
         "gamma_eem_by_symbol": gamma_by_symbol,
+        "rvdw_by_symbol": rvdw_by_symbol,
+        "eps_by_symbol": eps_by_symbol,
+        "alfa_by_symbol": alfa_by_symbol,
+        "gammavdw_by_symbol": gammavdw_by_symbol,
     }
 
 
@@ -194,6 +210,80 @@ def reaxff_shielded_coulomb_energy(positions_A, charges, gamma_eem, taper_coeffi
     return 0.5 * jnp.sum(jnp.where(off_diagonal & in_cutoff, pair_energy_eV, 0.0))
 
 
+def reaxff_no_inner_shielded_vdw_energy(
+    positions_A,
+    rvdw,
+    eps,
+    alfa,
+    gammavdw,
+    vdw_shielding_power,
+    taper_coefficients,
+    upper_taper_A,
+    cell_lengths=None,
+):
+    """eReaxFF shielded Morse vdW energy in eV for `nonbonnoinS`."""
+
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    rvdw = jnp.asarray(rvdw, dtype=jnp.float64)
+    eps = jnp.asarray(eps, dtype=jnp.float64)
+    alfa = jnp.asarray(alfa, dtype=jnp.float64)
+    gammavdw = jnp.asarray(gammavdw, dtype=jnp.float64)
+    displacements = positions[:, None, :] - positions[None, :, :]
+    displacements = _minimum_image(displacements, cell_lengths)
+    n_atoms = positions.shape[0]
+    off_diagonal = ~jnp.eye(n_atoms, dtype=bool)
+    r2 = jnp.sum(displacements * displacements, axis=-1)
+    safe_r = jnp.sqrt(jnp.where(off_diagonal, r2, 1.0))
+    p1 = jnp.sqrt(4.0 * rvdw[:, None] * rvdw[None, :])
+    p2 = jnp.sqrt(eps[:, None] * eps[None, :])
+    p3 = jnp.sqrt(alfa[:, None] * alfa[None, :])
+    gamwco = 1.0 / (jnp.sqrt(gammavdw[:, None] * gammavdw[None, :]) ** vdw_shielding_power)
+    rrw = (safe_r**vdw_shielding_power + gamwco) ** (1.0 / vdw_shielding_power)
+    h1 = jnp.exp(p3 * (1.0 - rrw / p1))
+    h2 = jnp.exp(0.5 * p3 * (1.0 - rrw / p1))
+    taper = taper_value(safe_r, taper_coefficients)
+    in_cutoff = safe_r <= upper_taper_A
+    pair_energy_eV = KCAL_TO_EV * p2 * (h1 - 2.0 * h2) * taper
+    return 0.5 * jnp.sum(jnp.where(off_diagonal & in_cutoff, pair_energy_eV, 0.0))
+
+
+def reaxff_no_inner_shielded_nonbonded_energy(
+    positions_A,
+    charges,
+    gamma_eem,
+    rvdw,
+    eps,
+    alfa,
+    gammavdw,
+    vdw_shielding_power,
+    taper_coefficients,
+    upper_taper_A,
+    cell_lengths=None,
+):
+    coulomb = reaxff_shielded_coulomb_energy(
+        positions_A,
+        charges,
+        gamma_eem,
+        taper_coefficients,
+        upper_taper_A,
+        cell_lengths,
+    )
+    vdw = reaxff_no_inner_shielded_vdw_energy(
+        positions_A,
+        rvdw,
+        eps,
+        alfa,
+        gammavdw,
+        vdw_shielding_power,
+        taper_coefficients,
+        upper_taper_A,
+        cell_lengths,
+    )
+    return coulomb + vdw
+
+
 def evaluate_fixed_charge_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
     import jax
     import jax.numpy as jnp
@@ -217,14 +307,17 @@ def evaluate_fixed_charge_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
 
 
 def _gamma_array(case: dict[str, Any], coulomb_parameters: dict[str, Any]):
+    return _parameter_array(case, coulomb_parameters["gamma_eem_by_symbol"], "gammaEEM")
+
+
+def _parameter_array(case: dict[str, Any], values_by_symbol: dict[str, float], name: str):
     import jax.numpy as jnp
 
-    gamma_by_symbol = coulomb_parameters["gamma_eem_by_symbol"]
     try:
-        gamma = [gamma_by_symbol[symbol] for symbol in case["atom_types"]]
+        values = [values_by_symbol[symbol] for symbol in case["atom_types"]]
     except KeyError as exc:
-        raise ValueError(f"ffield is missing atom type {exc.args[0]!r}") from exc
-    return jnp.asarray(gamma, dtype=jnp.float64)
+        raise ValueError(f"ffield is missing {name} for atom type {exc.args[0]!r}") from exc
+    return jnp.asarray(values, dtype=jnp.float64)
 
 
 def evaluate_reaxff_shielded_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
@@ -253,6 +346,49 @@ def evaluate_reaxff_shielded_coulomb_case(case: dict[str, Any]) -> dict[str, Any
     }
 
 
+def evaluate_reaxff_no_inner_shielded_nonbonded_case(case: dict[str, Any]) -> dict[str, Any]:
+    import jax
+    import jax.numpy as jnp
+
+    jax.config.update("jax_enable_x64", True)
+    positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
+    charges = _fixed_charges(case)
+    cell_lengths = _orthorhombic_cell_lengths(case)
+    parameters = _coulomb_parameters_from_case(case)
+    gamma = _gamma_array(case, parameters)
+    rvdw = _parameter_array(case, parameters["rvdw_by_symbol"], "Rvdw")
+    eps = _parameter_array(case, parameters["eps_by_symbol"], "Evdw")
+    alfa = _parameter_array(case, parameters["alfa_by_symbol"], "alfa")
+    gammavdw = _parameter_array(case, parameters["gammavdw_by_symbol"], "gammavdW")
+    coefficients = _taper_coefficients(parameters["lower_taper_A"], parameters["upper_taper_A"])
+    upper_taper = float(parameters["upper_taper_A"])
+    vdw_power = float(parameters["vdw_shielding_power"])
+
+    def energy_fn(x):
+        return reaxff_no_inner_shielded_nonbonded_energy(
+            x,
+            charges,
+            gamma,
+            rvdw,
+            eps,
+            alfa,
+            gammavdw,
+            vdw_power,
+            coefficients,
+            upper_taper,
+            cell_lengths,
+        )
+
+    energy, grad = jax.value_and_grad(energy_fn)(positions)
+    return {
+        "kernel": "reaxff_nonbonded_no_inner_shielded",
+        "fingerprint": geometry_fingerprint(case),
+        "energy_eV": energy,
+        "forces_eV_per_A": -grad,
+        "status": 0,
+    }
+
+
 def evaluate_force_case(
     case: dict[str, Any],
     *,
@@ -274,6 +410,8 @@ def evaluate_force_case(
         return evaluate_fixed_charge_coulomb_case(case)
     if kernel == "reaxff_shielded_coulomb":
         return evaluate_reaxff_shielded_coulomb_case(case)
+    if kernel == "reaxff_nonbonded_no_inner_shielded":
+        return evaluate_reaxff_no_inner_shielded_nonbonded_case(case)
     if kernel != "validated":
         raise ValueError(f"unknown force kernel: {kernel}")
     labels = case.get("labels")
@@ -303,7 +441,12 @@ def evaluate_force_batch(
     jax.config.update("jax_enable_x64", True)
     if not cases:
         raise ValueError("force batch is empty")
-    if kernel in ("fixed_charge_coulomb", "reaxff_shielded_coulomb"):
+    experimental_kernels = (
+        "fixed_charge_coulomb",
+        "reaxff_shielded_coulomb",
+        "reaxff_nonbonded_no_inner_shielded",
+    )
+    if kernel in experimental_kernels:
         positions = jnp.stack(
             [jnp.asarray(case["positions_A"], dtype=jnp.float64) for case in cases],
             axis=0,
@@ -314,30 +457,102 @@ def evaluate_force_batch(
         if any(has_cell) and not all(has_cell):
             raise ValueError("mixed periodic and nonperiodic force batches are not supported")
 
-        if kernel == "reaxff_shielded_coulomb":
+        if kernel in ("reaxff_shielded_coulomb", "reaxff_nonbonded_no_inner_shielded"):
             parameters = [_coulomb_parameters_from_case(case) for case in cases]
             first_parameters = json.dumps(parameters[0], sort_keys=True)
             if any(json.dumps(item, sort_keys=True) != first_parameters for item in parameters):
-                raise ValueError("mixed Coulomb parameter batches are not supported")
+                raise ValueError("mixed source-derived nonbonded parameter batches are not supported")
             gamma = jnp.stack([_gamma_array(case, parameters[0]) for case in cases], axis=0)
+            rvdw = jnp.stack(
+                [_parameter_array(case, parameters[0]["rvdw_by_symbol"], "Rvdw") for case in cases],
+                axis=0,
+            )
+            eps = jnp.stack(
+                [_parameter_array(case, parameters[0]["eps_by_symbol"], "Evdw") for case in cases],
+                axis=0,
+            )
+            alfa = jnp.stack(
+                [_parameter_array(case, parameters[0]["alfa_by_symbol"], "alfa") for case in cases],
+                axis=0,
+            )
+            gammavdw = jnp.stack(
+                [_parameter_array(case, parameters[0]["gammavdw_by_symbol"], "gammavdW") for case in cases],
+                axis=0,
+            )
             coefficients = _taper_coefficients(parameters[0]["lower_taper_A"], parameters[0]["upper_taper_A"])
             upper_taper = float(parameters[0]["upper_taper_A"])
+            vdw_power = float(parameters[0]["vdw_shielding_power"])
 
             if all(has_cell):
                 cells = jnp.stack(cell_lengths_by_case, axis=0)
 
-                def energy_fn(x, q, gam, cell):
-                    return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, cell)
+                if kernel == "reaxff_shielded_coulomb":
+
+                    def energy_fn(x, q, gam, _rvdw, _eps, _alfa, _gammavdw, cell):
+                        return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, cell)
+
+                else:
+
+                    def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i, cell):
+                        return reaxff_no_inner_shielded_nonbonded_energy(
+                            x,
+                            q,
+                            gam,
+                            rvdw_i,
+                            eps_i,
+                            alfa_i,
+                            gammavdw_i,
+                            vdw_power,
+                            coefficients,
+                            upper_taper,
+                            cell,
+                        )
 
                 energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
-                energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges, gamma, cells)
+                energies, grads = jax.jit(jax.vmap(energy_and_grad))(
+                    positions,
+                    charges,
+                    gamma,
+                    rvdw,
+                    eps,
+                    alfa,
+                    gammavdw,
+                    cells,
+                )
             else:
 
-                def energy_fn(x, q, gam):
-                    return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, None)
+                if kernel == "reaxff_shielded_coulomb":
+
+                    def energy_fn(x, q, gam, _rvdw, _eps, _alfa, _gammavdw):
+                        return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, None)
+
+                else:
+
+                    def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i):
+                        return reaxff_no_inner_shielded_nonbonded_energy(
+                            x,
+                            q,
+                            gam,
+                            rvdw_i,
+                            eps_i,
+                            alfa_i,
+                            gammavdw_i,
+                            vdw_power,
+                            coefficients,
+                            upper_taper,
+                            None,
+                        )
 
                 energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
-                energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges, gamma)
+                energies, grads = jax.jit(jax.vmap(energy_and_grad))(
+                    positions,
+                    charges,
+                    gamma,
+                    rvdw,
+                    eps,
+                    alfa,
+                    gammavdw,
+                )
         else:
             if all(has_cell):
                 cells = jnp.stack(cell_lengths_by_case, axis=0)
