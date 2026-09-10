@@ -200,6 +200,30 @@ Interpretation:
 - P=16 physical electron temperature only drops from `505.433 K` at `0.1 fs` to `489.111 K` at `0.05 fs`.
 - The next check should vary electron thermostat coupling/initialization, not just timestep.
 
+## 2026-09-10 P=16 Centroid Thermostat Sweep
+
+Command:
+
+```bash
+JAMIL_P_SWEEP_CASES=16 JAMIL_P_SWEEP_GAMMAS="0.001 0.005 0.01" \
+  JAMIL_P_SWEEP_DT_FS=0.05 projects/jamil_replication/run_jamil_p_sweep.sh
+```
+
+Results:
+
+| Centroid gamma | Wall time | Oracle calls | Batches | Mean batch | Electron T | Extended T | Expected extended T | Ratio | Carbon T | Quantum heat | Bead RMS spread | Status |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 0.001 fs^-1 | 442.092 s | 80 | 20 | 20.327 s | 489.111 K | 7825.775 K | 4800.000 K | 16.000 | 292.972 K | 5.482156 eV | 0.006594 A | PASS |
+| 0.005 fs^-1 | 441.559 s | 80 | 20 | 20.256 s | 489.024 K | 7824.388 K | 4800.000 K | 16.000 | 292.972 K | 5.709646 eV | 0.006594 A | PASS |
+| 0.010 fs^-1 | 447.885 s | 80 | 20 | 20.406 s | 488.959 K | 7823.349 K | 4800.000 K | 16.000 | 292.972 K | 5.879248 eV | 0.006594 A | PASS |
+
+Interpretation:
+
+- Increasing centroid friction across this range does not fix the P=16 physical electron heating.
+- The physical electron temperature stays near `489 K`, while the carbon temperature remains near `293 K`.
+- The heat term increases with gamma even though the measured physical electron temperature barely moves, so this is not a simple underdamped-centroid problem.
+- The next diagnostic should split electron kinetic energy by normal mode and run a force-off/harmonic-only P=16 check. That will separate incorrect initialization or thermostat sampling from force-coupled heating.
+
 ## 2026-05-08 Partial Dispatch Sweep
 
 I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.

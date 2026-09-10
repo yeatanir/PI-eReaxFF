@@ -10,6 +10,7 @@ WORKERS="${JAMIL_P_SWEEP_WORKERS:-4}"
 OMP_THREADS="${JAMIL_P_SWEEP_OMP_THREADS:-$WORKERS}"
 STEPS="${JAMIL_P_SWEEP_STEPS:-1}"
 DT_FS="${JAMIL_P_SWEEP_DT_FS:-0.1}"
+GAMMAS="${JAMIL_P_SWEEP_GAMMAS:-0.001}"
 
 if [[ ! -f "$BASE_CFG" ]]; then
   echo "run_jamil_p_sweep: missing base config: $BASE_CFG" >&2
@@ -27,6 +28,7 @@ if [[ -n "${JAMIL_P_SWEEP_CASES:-}" ]]; then
 else
   case_specs=(4 8 16)
 fi
+read -r -a gamma_specs <<<"$GAMMAS"
 
 extract_last_column() {
   local file="$1"
@@ -37,12 +39,13 @@ extract_last_column() {
 summarize_case() {
   local case_name="$1"
   local p="$2"
-  local case_dir="$3"
+  local gamma="$3"
+  local case_dir="$4"
   local result_json="$case_dir/result.json"
   local out="$case_dir/out"
   local timing="$out/adapter_work/persistent_oracle_timing.log"
 
-  python3 - "$case_name" "$p" "$WORKERS" "$OMP_THREADS" "$result_json" "$out" "$timing" "$SUMMARY" <<'PY'
+  python3 - "$case_name" "$p" "$gamma" "$WORKERS" "$OMP_THREADS" "$result_json" "$out" "$timing" "$SUMMARY" <<'PY'
 from __future__ import annotations
 
 import json
@@ -53,12 +56,13 @@ import sys
 
 case_name = sys.argv[1]
 p = int(sys.argv[2])
-workers = int(sys.argv[3])
-omp_threads = int(sys.argv[4])
-result_path = pathlib.Path(sys.argv[5])
-out = pathlib.Path(sys.argv[6])
-timing_path = pathlib.Path(sys.argv[7])
-summary_path = pathlib.Path(sys.argv[8])
+gamma = float(sys.argv[3])
+workers = int(sys.argv[4])
+omp_threads = int(sys.argv[5])
+result_path = pathlib.Path(sys.argv[6])
+out = pathlib.Path(sys.argv[7])
+timing_path = pathlib.Path(sys.argv[8])
+summary_path = pathlib.Path(sys.argv[9])
 
 
 def last_data(path: pathlib.Path, col: int) -> float:
@@ -108,6 +112,7 @@ calls, batches, min_batch, mean_batch, max_batch, sum_batch = timing_stats(timin
 row = {
     "case": case_name,
     "P": p,
+    "gamma_fs_inv": gamma,
     "workers": workers,
     "omp_threads": omp_threads,
     "wall_s": float(result.get("wall_s", math.nan)),
@@ -135,14 +140,15 @@ with summary_path.open("a", encoding="utf-8") as handle:
         handle.write("# Jamil P Sweep Summary\n\n")
         handle.write(
             "| case | P | workers | OMP | wall_s | oracle_calls | batches | batch_sum_s | "
-            "batch_mean_s | electron_T_K | extended_T_K | expected_extended_T_K | ratio | "
+            "batch_mean_s | gamma_fs_inv | electron_T_K | extended_T_K | expected_extended_T_K | ratio | "
             "carbon_T_K | thermostat_heat_eV | quantum_heat_eV | bead_rms_spread_A | status |\n"
         )
-        handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
+        handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
     handle.write(
         f"| {row['case']} | {row['P']} | {row['workers']} | {row['omp_threads']} | "
         f"{row['wall_s']:.3f} | {row['oracle_calls']} | {row['batches']} | {row['batch_sum_s']:.3f} | "
-        f"{row['batch_mean_s']:.3f} | {row['electron_T_K']:.3f} | {row['electron_extended_T_K']:.3f} | "
+        f"{row['batch_mean_s']:.3f} | {row['gamma_fs_inv']:.6f} | {row['electron_T_K']:.3f} | "
+        f"{row['electron_extended_T_K']:.3f} | "
         f"{row['electron_expected_extended_T_K']:.3f} | {row['electron_ratio']:.3f} | "
         f"{row['carbon_T_K']:.3f} | {row['thermostat_heat_eV']:.6f} | {row['quantum_heat_eV']:.6f} | "
         f"{row['bead_rms_spread_A']:.6f} | {row['status']} |\n"
@@ -153,21 +159,27 @@ PY
 
 rm -f "$SUMMARY"
 
-for p in "${case_specs[@]}"; do
-  if [[ ! "$p" =~ ^[0-9]+$ ]]; then
-    echo "run_jamil_p_sweep: P value must be an integer, got '$p'" >&2
+for gamma in "${gamma_specs[@]}"; do
+  if [[ ! "$gamma" =~ ^[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?$ ]]; then
+    echo "run_jamil_p_sweep: gamma value must be numeric, got '$gamma'" >&2
     exit 2
   fi
-  case_name="p${p}_w${WORKERS}_steps${STEPS}_dt${DT_FS//./p}"
-  case_dir="$SWEEP_ROOT/$case_name"
-  cfg="$case_dir/config.yaml"
-  out="$case_dir/out"
-  stdout_log="$case_dir/stdout.log"
-  stderr_log="$case_dir/stderr.log"
-  result_json="$case_dir/result.json"
-  mkdir -p "$case_dir" "$out"
+  gamma_token="${gamma//./p}"
+  for p in "${case_specs[@]}"; do
+    if [[ ! "$p" =~ ^[0-9]+$ ]]; then
+      echo "run_jamil_p_sweep: P value must be an integer, got '$p'" >&2
+      exit 2
+    fi
+    case_name="p${p}_w${WORKERS}_steps${STEPS}_dt${DT_FS//./p}_g${gamma_token}"
+    case_dir="$SWEEP_ROOT/$case_name"
+    cfg="$case_dir/config.yaml"
+    out="$case_dir/out"
+    stdout_log="$case_dir/stdout.log"
+    stderr_log="$case_dir/stderr.log"
+    result_json="$case_dir/result.json"
+    mkdir -p "$case_dir" "$out"
 
-  python3 - "$BASE_CFG" "$cfg" "$p" "$WORKERS" "$STEPS" "$DT_FS" "$out" <<'PY'
+    python3 - "$BASE_CFG" "$cfg" "$p" "$WORKERS" "$STEPS" "$DT_FS" "$gamma" "$out" <<'PY'
 from __future__ import annotations
 
 import pathlib
@@ -180,7 +192,8 @@ p = sys.argv[3]
 workers = sys.argv[4]
 steps = sys.argv[5]
 dt_fs = sys.argv[6]
-out = sys.argv[7]
+gamma = sys.argv[7]
+out = sys.argv[8]
 
 def replace(pattern: str, value: str, text: str) -> str:
     return re.sub(pattern, value, text, flags=re.M)
@@ -196,10 +209,11 @@ text = replace(r"^  oracle_timing_log:.*$", "  oracle_timing_log: true", text)
 text = replace(r"^  oracle_timeout_s:.*$", "  oracle_timeout_s: 180", text)
 text = replace(r"^  repeatability_check:.*$", "  repeatability_check: false", text)
 text = replace(r"^    beads:.*$", f"    beads: {p}", text)
+text = replace(r"^    centroid_gamma_fs_inv:.*$", f"    centroid_gamma_fs_inv: {gamma}", text)
 dst.write_text(text, encoding="utf-8")
 PY
 
-  python3 - "$ROOT_DIR" "$cfg" "$out" "$OMP_THREADS" "$stdout_log" "$stderr_log" "$result_json" <<'PY'
+    python3 - "$ROOT_DIR" "$cfg" "$out" "$OMP_THREADS" "$stdout_log" "$stderr_log" "$result_json" <<'PY'
 from __future__ import annotations
 
 import json
@@ -253,7 +267,8 @@ result_json.write_text(
 print(note)
 PY
 
-  summarize_case "$case_name" "$p" "$case_dir"
+    summarize_case "$case_name" "$p" "$gamma" "$case_dir"
+  done
 done
 
 echo "sweep_root=$SWEEP_ROOT"
