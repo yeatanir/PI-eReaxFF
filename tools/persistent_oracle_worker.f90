@@ -108,7 +108,7 @@ contains
     call append_timing(trim(timing_log), request_id_out, step_out, bead_out, trim(stage_out), trim(worker_state), &
         end_count_local - start_count_local, status_out, natom_out)
     call write_text_file(trim(completion_path), "done")
-    call write_text_file(trim(response_path), trim(itoa(request_id_out)))
+    call write_text_file_atomic(trim(response_path), trim(itoa(request_id_out)))
     call remove_file(trim(request_path))
   end subroutine process_request
 
@@ -425,12 +425,31 @@ contains
     close(unit)
   end subroutine write_text_file
 
+  subroutine write_text_file_atomic(path, text)
+    character(len=*), intent(in) :: path, text
+    character(len=1024) :: tmp_path
+
+    tmp_path = trim(path) // ".tmp"
+    call remove_file(trim(tmp_path))
+    call write_text_file(trim(tmp_path), trim(text))
+    call publish_file_atomic(trim(tmp_path), trim(path))
+  end subroutine write_text_file_atomic
+
   subroutine remove_file(path)
     character(len=*), intent(in) :: path
     integer :: exitstat
 
     call execute_command_line("rm -f " // shell_quote(trim(path)), wait=.true., exitstat=exitstat)
   end subroutine remove_file
+
+  subroutine publish_file_atomic(tmp_path, final_path)
+    character(len=*), intent(in) :: tmp_path, final_path
+    integer :: exitstat
+
+    call execute_command_line("mv -f " // shell_quote(trim(tmp_path)) // " " // shell_quote(trim(final_path)), &
+        wait=.true., exitstat=exitstat)
+    if (exitstat /= 0) stop "persistent_oracle_worker: unable to publish file"
+  end subroutine publish_file_atomic
 
   pure function pad_int(value, width) result(text)
     integer, intent(in) :: value, width

@@ -382,9 +382,12 @@ contains
     real(dp), intent(in) :: positions_A(:, :)
     real(dp), intent(in) :: charge_in(:), solver_guess_in(:)
     integer :: unit, i
+    character(len=1024) :: tmp_path
 
     if (size(positions_A, 2) /= size(charge_in)) error stop "write_persistent_request: size mismatch"
-    open(newunit=unit, file=trim(path), status="replace", action="write")
+    tmp_path = trim(path) // ".tmp"
+    call remove_file(trim(tmp_path))
+    open(newunit=unit, file=trim(tmp_path), status="replace", action="write")
     write(unit,'(i0)') request_id
     write(unit,'(i0,1x,i0,1x,i0)') 0, bead_id, size(charge_in)
     write(unit,'(a)') trim(stage_label)
@@ -393,6 +396,7 @@ contains
           solver_guess_in(i)
     end do
     close(unit)
+    call publish_file_atomic(trim(tmp_path), trim(path))
   end subroutine write_persistent_request
 
   subroutine wait_for_file(path, timeout_ms)
@@ -433,6 +437,15 @@ contains
 
     call execute_command_line("rm -f " // shell_quote(trim(path)), wait=.true., exitstat=exitstat)
   end subroutine remove_file
+
+  subroutine publish_file_atomic(tmp_path, final_path)
+    character(len=*), intent(in) :: tmp_path, final_path
+    integer :: exitstat
+
+    call execute_command_line("mv -f " // shell_quote(trim(tmp_path)) // " " // shell_quote(trim(final_path)), &
+        wait=.true., exitstat=exitstat)
+    if (exitstat /= 0) error stop "publish_file_atomic: unable to publish file"
+  end subroutine publish_file_atomic
 
   subroutine wait_milliseconds(ms)
     integer, intent(in) :: ms
