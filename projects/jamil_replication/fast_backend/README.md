@@ -83,7 +83,7 @@ nonzero solver state.
 
 ## Force Kernel Status
 
-`jax_force_kernel.py` currently provides two gated paths:
+`jax_force_kernel.py` currently provides these gated paths:
 
 - strict oracle-label replay for protocol/parity testing;
 - an experimental fixed-charge Coulomb-only JAX kernel for testing real
@@ -94,6 +94,11 @@ nonzero solver state.
   combining shielded Morse vdW with shielded/tapered Coulomb.
 - an experimental source-derived raw bond-order and uncorrected covalent
   bond-energy slice from `reac.f:srtbon`/`poten.f:covbon`.
+- an experimental source-derived corrected bond-order and covalent bond-energy
+  slice that applies the Jamil `poten.f:boncor` overcoordination and 1-3
+  bond-order corrections before `covbon`.
+- an experimental aggregate slice that sums corrected covalent bond energy,
+  no-inner-wall vdW, and shielded/tapered Coulomb in one JAX force call.
 
 The Coulomb kernels are orthorhombic-minimum-image only.  The
 `reaxff_shielded_coulomb` path follows the Jamil source `poten.f` Coulomb
@@ -101,12 +106,14 @@ expression and `reac.f` seventh-order taper polynomial.  The
 `reaxff_nonbonded_no_inner_shielded` path follows the same `poten.f`
 `nonbonnoinS` routine for the no-inner-wall, shielded-vdW case selected by the
 current Jamil C/El parameters.  The `reaxff_uncorrected_bond` path builds raw
-sigma/pi/pi-pi bond orders and the direct covalent bond term, but does not yet
-apply `boncor` overcoordination or 1-3 bond-order corrections.  These kernels
-still omit valence, torsion, lone-pair, over/undercoordination energy,
-ACKS2 dynamic charge solving, self-image details beyond minimum image, and
-other total-energy terms.  They must not be used for production dynamics or
-total-force parity.
+sigma/pi/pi-pi bond orders and the direct covalent bond term.  The
+`reaxff_corrected_bond` path applies the source-derived `boncor` bond-order
+attenuation before the covalent bond-energy expression.  The
+`reaxff_corrected_bond_nonbonded` path combines the implemented corrected bond,
+vdW, and Coulomb slices, but still omits valence-angle, torsion, lone-pair,
+over/undercoordination penalty, ACKS2 dynamic charge solving, self-image
+details beyond minimum image, and other total-energy terms.  These kernels must
+not be used for production dynamics or total-force parity.
 
 Force evaluation fails closed by default:
 
@@ -150,4 +157,16 @@ or:
 
 ```json
 {"command": "force_batch", "force_kernel": "reaxff_uncorrected_bond", "cases": [ ... ]}
+```
+
+or:
+
+```json
+{"command": "force_batch", "force_kernel": "reaxff_corrected_bond", "cases": [ ... ]}
+```
+
+or:
+
+```json
+{"command": "force_batch", "force_kernel": "reaxff_corrected_bond_nonbonded", "cases": [ ... ]}
 ```

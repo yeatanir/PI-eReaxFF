@@ -45,7 +45,12 @@ removing the exact legacy oracle.
 - An experimental source-derived raw bond-order and uncorrected covalent
   bond-energy kernel now parses bond/off-diagonal `ffield` sections and runs
   in a batched JAX path.
+- An experimental source-derived corrected bond-order and covalent bond-energy
+  kernel now applies the Jamil `boncor` overcoordination and 1-3 BO correction
+  formulas before the `covbon` energy expression.
+- An experimental aggregate kernel now sums the implemented corrected-bond,
+  shielded-vdW, and shielded/tapered-Coulomb slices in one batched JAX call.
 - Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
   fail-closed until their parity kernels are implemented.  The next force work
-  should add `boncor` bond-order corrections and then valence/overcoordination
-  terms against oracle labels.
+  should add valence-angle, torsion, lone-pair, and over/undercoordination
+  energy terms against oracle labels.

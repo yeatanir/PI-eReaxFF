@@ -112,6 +112,7 @@ if [[ -x ".venv-fast/bin/python" ]]; then
     --dataset "$OUT_JSONL"
   .venv-fast/bin/python - <<'PY'
 import json
+import math
 import subprocess
 from pathlib import Path
 
@@ -271,6 +272,96 @@ e_plus = float(evaluate_reaxff_uncorrected_bond_case(bond_plus)["energy_eV"])
 e_minus = float(evaluate_reaxff_uncorrected_bond_case(bond_minus)["energy_eV"])
 fd_force = -(e_plus - e_minus) / (2.0 * eps)
 analytic_force = float(evaluate_reaxff_uncorrected_bond_case(bond_case)["forces_eV_per_A"][0][0])
+assert abs(fd_force - analytic_force) < 1.0e-8
+
+corrected_case = json.loads(json.dumps(case))
+r = 1.4
+diag = r / math.sqrt(3.0)
+corrected_case["atom_types"] = ["C"] * 9
+corrected_case["positions_A"] = [
+    [0.0, 0.0, 0.0],
+    [r, 0.0, 0.0],
+    [-r, 0.0, 0.0],
+    [0.0, r, 0.0],
+    [0.0, -r, 0.0],
+    [0.0, 0.0, r],
+    [0.0, 0.0, -r],
+    [diag, diag, diag],
+    [-diag, -diag, -diag],
+]
+corrected_case["charge_constraints"]["fixed_charges"] = [0.0] * 9
+corrected_case["charge_in"] = [0.0] * 9
+corrected_case["solver_guess_in"] = [0.0] * 9
+completed = subprocess.run(
+    [
+        ".venv-fast/bin/python",
+        "projects/jamil_replication/fast_backend/jax_backend.py",
+        "--allow-unvalidated",
+    ],
+    input=json.dumps(
+        {
+            "command": "force_batch",
+            "force_kernel": "reaxff_corrected_bond",
+            "cases": [corrected_case],
+        }
+    ),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["reaxff_corrected_bond"]
+assert abs(response["energy_eV"][0] + 77.82789596632907) < 1.0e-10
+assert abs(response["forces_eV_per_A"][0][1][0] - 6.588497625294385) < 1.0e-10
+assert abs(response["forces_eV_per_A"][0][7][0] + 2.9441751399842717) < 1.0e-10
+
+from jax_force_kernel import evaluate_reaxff_corrected_bond_case
+
+corrected_plus = json.loads(json.dumps(corrected_case))
+corrected_minus = json.loads(json.dumps(corrected_case))
+corrected_plus["positions_A"][1][0] += eps
+corrected_minus["positions_A"][1][0] -= eps
+e_plus = float(evaluate_reaxff_corrected_bond_case(corrected_plus)["energy_eV"])
+e_minus = float(evaluate_reaxff_corrected_bond_case(corrected_minus)["energy_eV"])
+fd_force = -(e_plus - e_minus) / (2.0 * eps)
+analytic_force = float(evaluate_reaxff_corrected_bond_case(corrected_case)["forces_eV_per_A"][1][0])
+assert abs(fd_force - analytic_force) < 1.0e-8
+
+completed = subprocess.run(
+    [
+        ".venv-fast/bin/python",
+        "projects/jamil_replication/fast_backend/jax_backend.py",
+        "--allow-unvalidated",
+    ],
+    input=json.dumps(
+        {
+            "command": "force_batch",
+            "force_kernel": "reaxff_corrected_bond_nonbonded",
+            "cases": [corrected_case],
+        }
+    ),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["reaxff_corrected_bond_nonbonded"]
+assert abs(response["energy_eV"][0] + 62.15205963429547) < 1.0e-10
+assert abs(response["forces_eV_per_A"][0][1][0] - 11.077932259015485) < 1.0e-10
+assert abs(response["forces_eV_per_A"][0][7][0] - 0.12878014525015002) < 1.0e-10
+
+from jax_force_kernel import evaluate_reaxff_corrected_bond_nonbonded_case
+
+combined_plus = json.loads(json.dumps(corrected_case))
+combined_minus = json.loads(json.dumps(corrected_case))
+combined_plus["positions_A"][1][0] += eps
+combined_minus["positions_A"][1][0] -= eps
+e_plus = float(evaluate_reaxff_corrected_bond_nonbonded_case(combined_plus)["energy_eV"])
+e_minus = float(evaluate_reaxff_corrected_bond_nonbonded_case(combined_minus)["energy_eV"])
+fd_force = -(e_plus - e_minus) / (2.0 * eps)
+analytic_force = float(evaluate_reaxff_corrected_bond_nonbonded_case(corrected_case)["forces_eV_per_A"][1][0])
 assert abs(fd_force - analytic_force) < 1.0e-8
 
 completed = subprocess.run(

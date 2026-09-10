@@ -80,15 +80,20 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
     for _ in range(n_general):
         general.append(_leading_float(lines[idx]))
         idx += 1
-    if len(general) < 13:
-        raise ValueError(f"{path}: expected at least 13 general parameters")
+    if len(general) < 30:
+        raise ValueError(f"{path}: expected at least 30 general parameters")
     n_atom_types = int(_leading_float(lines[idx]))
     idx += 4
     gamma_by_symbol: dict[str, float] = {}
     atom_type_index_by_symbol: dict[str, int] = {}
+    aval_by_symbol: dict[str, float] = {}
     rat_by_symbol: dict[str, float] = {}
     rapt_by_symbol: dict[str, float] = {}
     vnq_by_symbol: dict[str, float] = {}
+    vval3_by_symbol: dict[str, float] = {}
+    bo131_by_symbol: dict[str, float] = {}
+    bo132_by_symbol: dict[str, float] = {}
+    bo133_by_symbol: dict[str, float] = {}
     rvdw_by_symbol: dict[str, float] = {}
     eps_by_symbol: dict[str, float] = {}
     alfa_by_symbol: dict[str, float] = {}
@@ -96,15 +101,22 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
     symbols_by_index: dict[int, str] = {}
     for _ in range(n_atom_types):
         first = lines[idx].split("!", 1)[0].split()
-        if len(first) < 7:
+        if len(first) < 8:
             raise ValueError(f"{path}: malformed atom parameter line {idx + 1}")
         second = lines[idx + 1].split("!", 1)[0].split()
         if len(second) < 2:
             raise ValueError(f"{path}: malformed atom parameter line {idx + 2}")
+        third = lines[idx + 2].split("!", 1)[0].split()
+        if len(third) < 6:
+            raise ValueError(f"{path}: malformed atom parameter line {idx + 3}")
+        fourth = lines[idx + 3].split("!", 1)[0].split()
+        if len(fourth) < 4:
+            raise ValueError(f"{path}: malformed atom parameter line {idx + 4}")
         symbol = first[0]
         type_index = len(symbols_by_index) + 1
         symbols_by_index[type_index] = symbol
         atom_type_index_by_symbol[symbol] = type_index
+        aval_by_symbol[symbol] = float(first[2])
         rat_by_symbol[symbol] = float(first[1])
         rapt_by_symbol[symbol] = float(first[7])
         gamma_by_symbol[symbol] = float(first[6])
@@ -112,10 +124,11 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
         eps_by_symbol[symbol] = float(first[5])
         alfa_by_symbol[symbol] = float(second[0])
         gammavdw_by_symbol[symbol] = float(second[1])
-        third = lines[idx + 2].split("!", 1)[0].split()
-        if not third:
-            raise ValueError(f"{path}: malformed atom parameter line {idx + 3}")
         vnq_by_symbol[symbol] = float(third[0])
+        bo131_by_symbol[symbol] = float(third[3])
+        bo132_by_symbol[symbol] = float(third[4])
+        bo133_by_symbol[symbol] = float(third[5])
+        vval3_by_symbol[symbol] = float(fourth[3])
         idx += 4
     rob1_by_pair = _default_pair_average(symbols_by_index, rat_by_symbol)
     rob2_by_pair = _default_pair_average(symbols_by_index, rapt_by_symbol)
@@ -184,13 +197,20 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
 
     return {
         "bond_order_cutoff": 0.01 * general[29],
+        "overcoordination_parameter": general[0],
+        "overcoordination_log_parameter": general[1],
         "lower_taper_A": general[11],
         "upper_taper_A": general[12],
         "vdw_shielding_power": general[28],
         "atom_type_index_by_symbol": atom_type_index_by_symbol,
+        "aval_by_symbol": aval_by_symbol,
         "rat_by_symbol": rat_by_symbol,
         "rapt_by_symbol": rapt_by_symbol,
         "vnq_by_symbol": vnq_by_symbol,
+        "vval3_by_symbol": vval3_by_symbol,
+        "bo131_by_symbol": bo131_by_symbol,
+        "bo132_by_symbol": bo132_by_symbol,
+        "bo133_by_symbol": bo133_by_symbol,
         "gamma_eem_by_symbol": gamma_by_symbol,
         "rvdw_by_symbol": rvdw_by_symbol,
         "eps_by_symbol": eps_by_symbol,
@@ -385,6 +405,70 @@ def reaxff_no_inner_shielded_nonbonded_energy(
     return coulomb + vdw
 
 
+def reaxff_corrected_bond_nonbonded_energy(
+    positions_A,
+    charges,
+    gamma_eem,
+    rvdw,
+    eps,
+    alfa,
+    gammavdw,
+    vdw_shielding_power,
+    taper_coefficients,
+    upper_taper_A,
+    bond_inputs,
+    cell_lengths=None,
+):
+    """Sum implemented source-derived slices: corrected bond + vdW + Coulomb."""
+
+    nonbonded = reaxff_no_inner_shielded_nonbonded_energy(
+        positions_A,
+        charges,
+        gamma_eem,
+        rvdw,
+        eps,
+        alfa,
+        gammavdw,
+        vdw_shielding_power,
+        taper_coefficients,
+        upper_taper_A,
+        cell_lengths,
+    )
+    bond = reaxff_corrected_bond_energy(
+        positions_A,
+        bond_inputs["rat"],
+        bond_inputs["rapt"],
+        bond_inputs["vnq"],
+        bond_inputs["rob1"],
+        bond_inputs["rob2"],
+        bond_inputs["rob3"],
+        bond_inputs["de1"],
+        bond_inputs["de2"],
+        bond_inputs["de3"],
+        bond_inputs["psi"],
+        bond_inputs["pdo"],
+        bond_inputs["popi"],
+        bond_inputs["pdp"],
+        bond_inputs["ptp"],
+        bond_inputs["psp"],
+        bond_inputs["bop1"],
+        bond_inputs["bop2"],
+        bond_inputs["bond_mask"],
+        bond_inputs["cutoff"],
+        bond_inputs["aval"],
+        bond_inputs["vval3"],
+        bond_inputs["bo131"],
+        bond_inputs["bo132"],
+        bond_inputs["bo133"],
+        bond_inputs["ovc"],
+        bond_inputs["v13cor"],
+        bond_inputs["overcoordination_parameter"],
+        bond_inputs["overcoordination_log_parameter"],
+        cell_lengths,
+    )
+    return nonbonded + bond
+
+
 def evaluate_fixed_charge_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
     import jax
     import jax.numpy as jnp
@@ -524,6 +608,95 @@ def raw_bond_orders(
     return total, sigma_cut, pi, pipi, active
 
 
+def corrected_bond_orders(
+    positions_A,
+    rat,
+    rapt,
+    vnq,
+    rob1,
+    rob2,
+    rob3,
+    de1,
+    pdo,
+    popi,
+    pdp,
+    ptp,
+    bop1,
+    bop2,
+    bond_type_mask,
+    cutoff,
+    aval,
+    vval3,
+    bo131,
+    bo132,
+    bo133,
+    ovc,
+    v13cor,
+    overcoordination_parameter,
+    overcoordination_log_parameter,
+    cell_lengths=None,
+):
+    """Apply Jamil eReaxFF `boncor` corrections to source-derived raw BO."""
+
+    import jax.numpy as jnp
+
+    raw_total, raw_sigma, raw_pi, raw_pipi, raw_active = raw_bond_orders(
+        positions_A,
+        rat,
+        rapt,
+        vnq,
+        rob1,
+        rob2,
+        rob3,
+        de1,
+        pdo,
+        popi,
+        pdp,
+        ptp,
+        bop1,
+        bop2,
+        bond_type_mask,
+        cutoff,
+        cell_lengths,
+    )
+    abo = jnp.sum(raw_total, axis=1)
+    ovi = abo[:, None] - aval[:, None]
+    ovj = abo[None, :] - aval[None, :]
+
+    overcoord_enabled = ovc > 0.001
+    exphu1 = jnp.exp(-overcoordination_log_parameter * ovi)
+    exphu2 = jnp.exp(-overcoordination_log_parameter * ovj)
+    exp11 = jnp.exp(-overcoordination_parameter * ovi)
+    exp21 = jnp.exp(-overcoordination_parameter * ovj)
+    ovcor = -(1.0 / overcoordination_log_parameter) * jnp.log(0.5 * (exphu1 + exphu2))
+    huli = aval[:, None] + exp11 + exp21
+    hulj = aval[None, :] + exp11 + exp21
+    corr1 = huli / (huli + ovcor)
+    corr2 = hulj / (hulj + ovcor)
+    corrtot = jnp.where(overcoord_enabled, 0.5 * (corr1 + corr2), 1.0)
+
+    thirteen_enabled = v13cor > 0.001
+    ovi2 = abo[:, None] - vval3[:, None]
+    ovj2 = abo[None, :] - vval3[None, :]
+    bo131_pair = jnp.sqrt(bo131[:, None] * bo131[None, :])
+    bo132_pair = jnp.sqrt(bo132[:, None] * bo132[None, :])
+    bo133_pair = jnp.sqrt(bo133[:, None] * bo133[None, :])
+    cor1 = bo131_pair * raw_total * raw_total - ovi2
+    cor2 = bo131_pair * raw_total * raw_total - ovj2
+    bocor1 = jnp.where(thirteen_enabled, 1.0 / (1.0 + jnp.exp(-bo132_pair * cor1 + bo133_pair)), 1.0)
+    bocor2 = jnp.where(thirteen_enabled, 1.0 / (1.0 + jnp.exp(-bo132_pair * cor2 + bo133_pair)), 1.0)
+
+    corrected_total = raw_total * corrtot * bocor1 * bocor2
+    corrected_pi = raw_pi * corrtot * corrtot * bocor1 * bocor2
+    corrected_pipi = raw_pipi * corrtot * corrtot * bocor1 * bocor2
+    corrected_total = jnp.where(corrected_total >= 1.0e-10, corrected_total, 0.0)
+    corrected_pi = jnp.where(corrected_pi >= 1.0e-10, corrected_pi, 0.0)
+    corrected_pipi = jnp.where(corrected_pipi >= 1.0e-10, corrected_pipi, 0.0)
+    corrected_sigma = jnp.maximum(corrected_total - corrected_pi - corrected_pipi, 0.0)
+    active = raw_active & ((corrected_total > 0.0) | (corrected_pi > 0.0) | (corrected_pipi > 0.0))
+    return corrected_total, corrected_sigma, corrected_pi, corrected_pipi, active
+
+
 def reaxff_uncorrected_bond_energy(
     positions_A,
     rat,
@@ -571,6 +744,75 @@ def reaxff_uncorrected_bond_energy(
         cell_lengths,
     )
     sigma_order = jnp.maximum(total - pi - pipi, 0.0)
+    sigma_power = sigma_order**psp
+    pair_energy_kcal = -de1 * sigma_order * jnp.exp(psi * (1.0 - sigma_power)) - de2 * pi - de3 * pipi
+    return 0.5 * jnp.sum(jnp.where(active, KCAL_TO_EV * pair_energy_kcal, 0.0))
+
+
+def reaxff_corrected_bond_energy(
+    positions_A,
+    rat,
+    rapt,
+    vnq,
+    rob1,
+    rob2,
+    rob3,
+    de1,
+    de2,
+    de3,
+    psi,
+    pdo,
+    popi,
+    pdp,
+    ptp,
+    psp,
+    bop1,
+    bop2,
+    bond_type_mask,
+    cutoff,
+    aval,
+    vval3,
+    bo131,
+    bo132,
+    bo133,
+    ovc,
+    v13cor,
+    overcoordination_parameter,
+    overcoordination_log_parameter,
+    cell_lengths=None,
+):
+    """Covalent bond energy using `boncor`-corrected BO values."""
+
+    import jax.numpy as jnp
+
+    _, sigma_order, pi, pipi, active = corrected_bond_orders(
+        positions_A,
+        rat,
+        rapt,
+        vnq,
+        rob1,
+        rob2,
+        rob3,
+        de1,
+        pdo,
+        popi,
+        pdp,
+        ptp,
+        bop1,
+        bop2,
+        bond_type_mask,
+        cutoff,
+        aval,
+        vval3,
+        bo131,
+        bo132,
+        bo133,
+        ovc,
+        v13cor,
+        overcoordination_parameter,
+        overcoordination_log_parameter,
+        cell_lengths,
+    )
     sigma_power = sigma_order**psp
     pair_energy_kcal = -de1 * sigma_order * jnp.exp(psi * (1.0 - sigma_power)) - de2 * pi - de3 * pipi
     return 0.5 * jnp.sum(jnp.where(active, KCAL_TO_EV * pair_energy_kcal, 0.0))
@@ -646,9 +888,14 @@ def evaluate_reaxff_no_inner_shielded_nonbonded_case(case: dict[str, Any]) -> di
 
 
 def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
+    aval = _parameter_array(case, parameters["aval_by_symbol"], "valency")
     rat = _parameter_array(case, parameters["rat_by_symbol"], "covalent radius")
     rapt = _parameter_array(case, parameters["rapt_by_symbol"], "pi covalent radius")
     vnq = _parameter_array(case, parameters["vnq_by_symbol"], "double-pi covalent radius")
+    vval3 = _parameter_array(case, parameters["vval3_by_symbol"], "1-3 valency")
+    bo131 = _parameter_array(case, parameters["bo131_by_symbol"], "1-3 correction parameter 1")
+    bo132 = _parameter_array(case, parameters["bo132_by_symbol"], "1-3 correction parameter 2")
+    bo133 = _parameter_array(case, parameters["bo133_by_symbol"], "1-3 correction parameter 3")
     rob1 = _pair_parameter_matrix(case, parameters["rob1_by_pair"], "sigma bond-order radius")
     rob2 = _pair_parameter_matrix(case, parameters["rob2_by_pair"], "pi bond-order radius")
     rob3 = _pair_parameter_matrix(case, parameters["rob3_by_pair"], "double-pi bond-order radius")
@@ -663,10 +910,17 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
     psp, _ = _bond_parameter_matrix(case, parameters, "psp")
     bop1, _ = _bond_parameter_matrix(case, parameters, "bop1")
     bop2, _ = _bond_parameter_matrix(case, parameters, "bop2")
+    ovc, _ = _bond_parameter_matrix(case, parameters, "ovc")
+    v13cor, _ = _bond_parameter_matrix(case, parameters, "v13cor")
     return {
+        "aval": aval,
         "rat": rat,
         "rapt": rapt,
         "vnq": vnq,
+        "vval3": vval3,
+        "bo131": bo131,
+        "bo132": bo132,
+        "bo133": bo133,
         "rob1": rob1,
         "rob2": rob2,
         "rob3": rob3,
@@ -681,8 +935,12 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
         "psp": psp,
         "bop1": bop1,
         "bop2": bop2,
+        "ovc": ovc,
+        "v13cor": v13cor,
         "bond_mask": bond_mask,
         "cutoff": float(parameters["bond_order_cutoff"]),
+        "overcoordination_parameter": float(parameters["overcoordination_parameter"]),
+        "overcoordination_log_parameter": float(parameters["overcoordination_log_parameter"]),
     }
 
 
@@ -731,6 +989,105 @@ def evaluate_reaxff_uncorrected_bond_case(case: dict[str, Any]) -> dict[str, Any
     }
 
 
+def evaluate_reaxff_corrected_bond_case(case: dict[str, Any]) -> dict[str, Any]:
+    import jax
+    import jax.numpy as jnp
+
+    jax.config.update("jax_enable_x64", True)
+    positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
+    cell_lengths = _orthorhombic_cell_lengths(case)
+    parameters = _coulomb_parameters_from_case(case)
+    inputs = _bond_energy_inputs(case, parameters)
+
+    def energy_fn(x):
+        return reaxff_corrected_bond_energy(
+            x,
+            inputs["rat"],
+            inputs["rapt"],
+            inputs["vnq"],
+            inputs["rob1"],
+            inputs["rob2"],
+            inputs["rob3"],
+            inputs["de1"],
+            inputs["de2"],
+            inputs["de3"],
+            inputs["psi"],
+            inputs["pdo"],
+            inputs["popi"],
+            inputs["pdp"],
+            inputs["ptp"],
+            inputs["psp"],
+            inputs["bop1"],
+            inputs["bop2"],
+            inputs["bond_mask"],
+            inputs["cutoff"],
+            inputs["aval"],
+            inputs["vval3"],
+            inputs["bo131"],
+            inputs["bo132"],
+            inputs["bo133"],
+            inputs["ovc"],
+            inputs["v13cor"],
+            inputs["overcoordination_parameter"],
+            inputs["overcoordination_log_parameter"],
+            cell_lengths,
+        )
+
+    energy, grad = jax.value_and_grad(energy_fn)(positions)
+    return {
+        "kernel": "reaxff_corrected_bond",
+        "fingerprint": geometry_fingerprint(case),
+        "energy_eV": energy,
+        "forces_eV_per_A": -grad,
+        "status": 0,
+    }
+
+
+def evaluate_reaxff_corrected_bond_nonbonded_case(case: dict[str, Any]) -> dict[str, Any]:
+    import jax
+    import jax.numpy as jnp
+
+    jax.config.update("jax_enable_x64", True)
+    positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
+    charges = _fixed_charges(case)
+    cell_lengths = _orthorhombic_cell_lengths(case)
+    parameters = _coulomb_parameters_from_case(case)
+    gamma = _gamma_array(case, parameters)
+    rvdw = _parameter_array(case, parameters["rvdw_by_symbol"], "Rvdw")
+    eps = _parameter_array(case, parameters["eps_by_symbol"], "Evdw")
+    alfa = _parameter_array(case, parameters["alfa_by_symbol"], "alfa")
+    gammavdw = _parameter_array(case, parameters["gammavdw_by_symbol"], "gammavdW")
+    coefficients = _taper_coefficients(parameters["lower_taper_A"], parameters["upper_taper_A"])
+    upper_taper = float(parameters["upper_taper_A"])
+    vdw_power = float(parameters["vdw_shielding_power"])
+    bond_inputs = _bond_energy_inputs(case, parameters)
+
+    def energy_fn(x):
+        return reaxff_corrected_bond_nonbonded_energy(
+            x,
+            charges,
+            gamma,
+            rvdw,
+            eps,
+            alfa,
+            gammavdw,
+            vdw_power,
+            coefficients,
+            upper_taper,
+            bond_inputs,
+            cell_lengths,
+        )
+
+    energy, grad = jax.value_and_grad(energy_fn)(positions)
+    return {
+        "kernel": "reaxff_corrected_bond_nonbonded",
+        "fingerprint": geometry_fingerprint(case),
+        "energy_eV": energy,
+        "forces_eV_per_A": -grad,
+        "status": 0,
+    }
+
+
 def evaluate_force_case(
     case: dict[str, Any],
     *,
@@ -756,6 +1113,10 @@ def evaluate_force_case(
         return evaluate_reaxff_no_inner_shielded_nonbonded_case(case)
     if kernel == "reaxff_uncorrected_bond":
         return evaluate_reaxff_uncorrected_bond_case(case)
+    if kernel == "reaxff_corrected_bond":
+        return evaluate_reaxff_corrected_bond_case(case)
+    if kernel == "reaxff_corrected_bond_nonbonded":
+        return evaluate_reaxff_corrected_bond_nonbonded_case(case)
     if kernel != "validated":
         raise ValueError(f"unknown force kernel: {kernel}")
     labels = case.get("labels")
@@ -790,6 +1151,8 @@ def evaluate_force_batch(
         "reaxff_shielded_coulomb",
         "reaxff_nonbonded_no_inner_shielded",
         "reaxff_uncorrected_bond",
+        "reaxff_corrected_bond",
+        "reaxff_corrected_bond_nonbonded",
     )
     if kernel in experimental_kernels:
         positions = jnp.stack(
@@ -802,11 +1165,21 @@ def evaluate_force_batch(
         if any(has_cell) and not all(has_cell):
             raise ValueError("mixed periodic and nonperiodic force batches are not supported")
 
-        if kernel in ("reaxff_shielded_coulomb", "reaxff_nonbonded_no_inner_shielded"):
+        if kernel in (
+            "reaxff_shielded_coulomb",
+            "reaxff_nonbonded_no_inner_shielded",
+            "reaxff_corrected_bond_nonbonded",
+        ):
             parameters = [_coulomb_parameters_from_case(case) for case in cases]
             first_parameters = json.dumps(parameters[0], sort_keys=True)
             if any(json.dumps(item, sort_keys=True) != first_parameters for item in parameters):
                 raise ValueError("mixed source-derived nonbonded parameter batches are not supported")
+            bond_inputs = None
+            if kernel == "reaxff_corrected_bond_nonbonded":
+                first_atom_types = cases[0]["atom_types"]
+                if any(case["atom_types"] != first_atom_types for case in cases):
+                    raise ValueError("mixed atom-type bond/nonbonded batches are not supported")
+                bond_inputs = _bond_energy_inputs(cases[0], parameters[0])
             gamma = jnp.stack([_gamma_array(case, parameters[0]) for case in cases], axis=0)
             rvdw = jnp.stack(
                 [_parameter_array(case, parameters[0]["rvdw_by_symbol"], "Rvdw") for case in cases],
@@ -836,7 +1209,7 @@ def evaluate_force_batch(
                     def energy_fn(x, q, gam, _rvdw, _eps, _alfa, _gammavdw, cell):
                         return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, cell)
 
-                else:
+                elif kernel == "reaxff_nonbonded_no_inner_shielded":
 
                     def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i, cell):
                         return reaxff_no_inner_shielded_nonbonded_energy(
@@ -850,6 +1223,24 @@ def evaluate_force_batch(
                             vdw_power,
                             coefficients,
                             upper_taper,
+                            cell,
+                        )
+
+                else:
+
+                    def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i, cell):
+                        return reaxff_corrected_bond_nonbonded_energy(
+                            x,
+                            q,
+                            gam,
+                            rvdw_i,
+                            eps_i,
+                            alfa_i,
+                            gammavdw_i,
+                            vdw_power,
+                            coefficients,
+                            upper_taper,
+                            bond_inputs,
                             cell,
                         )
 
@@ -871,7 +1262,7 @@ def evaluate_force_batch(
                     def energy_fn(x, q, gam, _rvdw, _eps, _alfa, _gammavdw):
                         return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, None)
 
-                else:
+                elif kernel == "reaxff_nonbonded_no_inner_shielded":
 
                     def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i):
                         return reaxff_no_inner_shielded_nonbonded_energy(
@@ -888,6 +1279,24 @@ def evaluate_force_batch(
                             None,
                         )
 
+                else:
+
+                    def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i):
+                        return reaxff_corrected_bond_nonbonded_energy(
+                            x,
+                            q,
+                            gam,
+                            rvdw_i,
+                            eps_i,
+                            alfa_i,
+                            gammavdw_i,
+                            vdw_power,
+                            coefficients,
+                            upper_taper,
+                            bond_inputs,
+                            None,
+                        )
+
                 energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
                 energies, grads = jax.jit(jax.vmap(energy_and_grad))(
                     positions,
@@ -899,7 +1308,7 @@ def evaluate_force_batch(
                     gammavdw,
                 )
         else:
-            if kernel == "reaxff_uncorrected_bond":
+            if kernel in ("reaxff_uncorrected_bond", "reaxff_corrected_bond"):
                 parameters = [_coulomb_parameters_from_case(case) for case in cases]
                 first_parameters = json.dumps(parameters[0], sort_keys=True)
                 if any(json.dumps(item, sort_keys=True) != first_parameters for item in parameters):
@@ -909,10 +1318,9 @@ def evaluate_force_batch(
                     raise ValueError("mixed atom-type bond batches are not supported")
                 bond_inputs = _bond_energy_inputs(cases[0], parameters[0])
                 cutoff = float(bond_inputs["cutoff"])
-                if all(has_cell):
-                    cells = jnp.stack(cell_lengths_by_case, axis=0)
 
-                    def energy_fn(x, cell):
+                def bond_energy(x, cell):
+                    if kernel == "reaxff_uncorrected_bond":
                         return reaxff_uncorrected_bond_energy(
                             x,
                             bond_inputs["rat"],
@@ -936,35 +1344,51 @@ def evaluate_force_batch(
                             cutoff,
                             cell,
                         )
+                    return reaxff_corrected_bond_energy(
+                        x,
+                        bond_inputs["rat"],
+                        bond_inputs["rapt"],
+                        bond_inputs["vnq"],
+                        bond_inputs["rob1"],
+                        bond_inputs["rob2"],
+                        bond_inputs["rob3"],
+                        bond_inputs["de1"],
+                        bond_inputs["de2"],
+                        bond_inputs["de3"],
+                        bond_inputs["psi"],
+                        bond_inputs["pdo"],
+                        bond_inputs["popi"],
+                        bond_inputs["pdp"],
+                        bond_inputs["ptp"],
+                        bond_inputs["psp"],
+                        bond_inputs["bop1"],
+                        bond_inputs["bop2"],
+                        bond_inputs["bond_mask"],
+                        cutoff,
+                        bond_inputs["aval"],
+                        bond_inputs["vval3"],
+                        bond_inputs["bo131"],
+                        bond_inputs["bo132"],
+                        bond_inputs["bo133"],
+                        bond_inputs["ovc"],
+                        bond_inputs["v13cor"],
+                        bond_inputs["overcoordination_parameter"],
+                        bond_inputs["overcoordination_log_parameter"],
+                        cell,
+                    )
+
+                if all(has_cell):
+                    cells = jnp.stack(cell_lengths_by_case, axis=0)
+
+                    def energy_fn(x, cell):
+                        return bond_energy(x, cell)
 
                     energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
                     energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, cells)
                 else:
 
                     def energy_fn(x):
-                        return reaxff_uncorrected_bond_energy(
-                            x,
-                            bond_inputs["rat"],
-                            bond_inputs["rapt"],
-                            bond_inputs["vnq"],
-                            bond_inputs["rob1"],
-                            bond_inputs["rob2"],
-                            bond_inputs["rob3"],
-                            bond_inputs["de1"],
-                            bond_inputs["de2"],
-                            bond_inputs["de3"],
-                            bond_inputs["psi"],
-                            bond_inputs["pdo"],
-                            bond_inputs["popi"],
-                            bond_inputs["pdp"],
-                            bond_inputs["ptp"],
-                            bond_inputs["psp"],
-                            bond_inputs["bop1"],
-                            bond_inputs["bop2"],
-                            bond_inputs["bond_mask"],
-                            cutoff,
-                            None,
-                        )
+                        return bond_energy(x, None)
 
                     energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
                     energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions)
