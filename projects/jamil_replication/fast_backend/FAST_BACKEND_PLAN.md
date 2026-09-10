@@ -36,8 +36,9 @@ removing the exact legacy oracle.
   parity plumbing, while failing closed unless replay is explicitly requested.
 - An experimental fixed-charge Coulomb-only JAX kernel now exercises real
   energy/force autodiff and batching behind `--allow-unvalidated`.
+- An experimental source-derived shielded/tapered eReaxFF Coulomb slice now
+  parses the oracle call `ffield` and uses the Jamil `poten.f`/`reac.f`
+  formula for the Coulomb term.
 - Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
   fail-closed until their parity kernels are implemented.  The next force work
-  should replace the unshielded Coulomb slice with the exact eReaxFF
-  shielded/tapered Coulomb term, then add vdW and bond-order terms
-  term-by-term against oracle labels.
+  should add vdW and bond-order terms term-by-term against oracle labels.

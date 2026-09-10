@@ -35,6 +35,61 @@ EOF
 cat > "$CALL_DIR/control" <<'EOF'
       8 icharg
 EOF
+cat > "$CALL_DIR/ffield" <<'EOF'
+test fast backend ffield
+ 39       ! Number of general parameters
+   50.0000
+    9.5469
+    1.6725
+    1.7224
+    6.8702
+   54.6742
+    1.0588
+    4.6000
+   12.1176
+   13.3056
+  -34.5448
+    0.0000 !Lower Taper-radius
+   10.0000 !Upper Taper-radius
+    2.8793
+   33.8667
+    6.0891
+    1.0563
+    2.0384
+    6.1431
+    6.9290
+    0.3989
+    3.9954
+   -2.4837
+    8.5385
+    6.7491
+    0.1414
+    1.0000
+    1.1348
+    1.5591
+    0.1000
+    1.7602
+    0.6991
+   50.0000
+    1.8512
+  548.6451
+    0.0001
+    1.5000
+    0.0000
+    0.7903
+ 2    ! Nr of atoms
+ header 1
+ header 2
+ header 3
+ C    1.3417   4.0000  12.0000   2.0464   0.1064   0.3500   1.1681   4.0000
+      9.0000   1.5000   4.0000  40.0000   0.8000   5.3422   4.5000   3.1838
+      1.1437   0.0000 181.0000   5.4236  19.2788  13.5366   3.1838  22.0000
+     -4.0998   4.8750   0.0027   4.0000   2.9663   0.0000   0.0000   0.0000
+ El  -0.1000   0.0000   0.5000   1.3000   0.0050   0.2500  -0.1000   0.0000
+      2.0000   4.0000   4.0000   0.0000   0.0000   1.0002   1.0009  10.0000
+     -0.1000   0.0000  -2.3700   6.4918   8.5961   0.2368   2.0000   3.5000
+     -5.0000   3.1873   0.1600   6.2998   2.5791   0.0000   0.0000   0.0000
+EOF
 cat > "$CALL_DIR/single_point_forces.out" <<'EOF'
 # atom Fx Fy Fz charge solver_guess
 1  1.0  0.0  0.0  0.5  0.0
@@ -105,6 +160,39 @@ assert response["kernel"] == ["fixed_charge_coulomb"]
 assert abs(response["energy_eV"][0] + 3.599911369606375) < 1.0e-12
 assert abs(response["forces_eV_per_A"][0][0][0] - 3.599911369606375) < 1.0e-12
 assert abs(response["forces_eV_per_A"][0][1][0] + 3.599911369606375) < 1.0e-12
+
+completed = subprocess.run(
+    [
+        ".venv-fast/bin/python",
+        "projects/jamil_replication/fast_backend/jax_backend.py",
+        "--allow-unvalidated",
+    ],
+    input=json.dumps({"command": "force_batch", "force_kernel": "reaxff_shielded_coulomb", "cases": [case]}),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["reaxff_shielded_coulomb"]
+assert abs(response["energy_eV"][0] + 1.0529536968375994) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][0][0] - 0.03734168384345882) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][1][0] + 0.03734168384345882) < 1.0e-12
+
+import sys
+sys.path.insert(0, "projects/jamil_replication/fast_backend")
+from jax_force_kernel import evaluate_reaxff_shielded_coulomb_case
+
+eps = 1.0e-5
+case_plus = json.loads(json.dumps(case))
+case_minus = json.loads(json.dumps(case))
+case_plus["positions_A"][0][0] += eps
+case_minus["positions_A"][0][0] -= eps
+e_plus = float(evaluate_reaxff_shielded_coulomb_case(case_plus)["energy_eV"])
+e_minus = float(evaluate_reaxff_shielded_coulomb_case(case_minus)["energy_eV"])
+fd_force = -(e_plus - e_minus) / (2.0 * eps)
+analytic_force = float(evaluate_reaxff_shielded_coulomb_case(case)["forces_eV_per_A"][0][0])
+assert abs(fd_force - analytic_force) < 1.0e-8
 
 completed = subprocess.run(
     [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],

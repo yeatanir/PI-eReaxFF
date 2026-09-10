@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 COULOMB_EV_A = 14.3996454784255
+KCAL_TO_EV = 0.043364
+REAXFF_COULOMB_KCAL_A = 332.0638
 
 
 def geometry_fingerprint(case: dict[str, Any]) -> str:
@@ -60,6 +63,89 @@ def _minimum_image(displacements, cell_lengths):
     return displacements - cell_lengths * jnp.round(displacements / cell_lengths)
 
 
+def _leading_float(text: str) -> float:
+    return float(text.split("!", 1)[0].split()[0])
+
+
+def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
+    """Parse the ffield parameters needed by the eReaxFF Coulomb slice."""
+
+    lines = path.read_text().splitlines()
+    if len(lines) < 2:
+        raise ValueError(f"{path}: too short to be a ReaxFF ffield")
+    idx = 1
+    n_general = int(_leading_float(lines[idx]))
+    idx += 1
+    general = []
+    for _ in range(n_general):
+        general.append(_leading_float(lines[idx]))
+        idx += 1
+    if len(general) < 13:
+        raise ValueError(f"{path}: expected at least 13 general parameters")
+    n_atom_types = int(_leading_float(lines[idx]))
+    idx += 4
+    gamma_by_symbol: dict[str, float] = {}
+    for _ in range(n_atom_types):
+        first = lines[idx].split("!", 1)[0].split()
+        if len(first) < 7:
+            raise ValueError(f"{path}: malformed atom parameter line {idx + 1}")
+        gamma_by_symbol[first[0]] = float(first[6])
+        idx += 4
+    return {
+        "lower_taper_A": general[11],
+        "upper_taper_A": general[12],
+        "gamma_eem_by_symbol": gamma_by_symbol,
+    }
+
+
+def _coulomb_parameters_from_case(case: dict[str, Any]) -> dict[str, Any]:
+    supplied = case.get("coulomb_parameters")
+    if supplied is not None:
+        return supplied
+    call_dir = case.get("source_call_dir")
+    if call_dir is None:
+        raise ValueError("reaxff_shielded_coulomb requires coulomb_parameters or source_call_dir")
+    ffield = Path(call_dir) / "ffield"
+    if not ffield.exists():
+        raise FileNotFoundError(f"missing ffield for Coulomb parameters: {ffield}")
+    return parse_ffield_coulomb_parameters(ffield)
+
+
+def _taper_coefficients(lower_A: float, upper_A: float):
+    import jax.numpy as jnp
+
+    d1 = upper_A - lower_A
+    if d1 <= 0.0:
+        raise ValueError("upper taper radius must be greater than lower taper radius")
+    d7 = d1**7.0
+    a2 = lower_A * lower_A
+    a3 = a2 * lower_A
+    b2 = upper_A * upper_A
+    b3 = b2 * upper_A
+    return jnp.asarray(
+        [
+            (-35.0 * a3 * b2 * b2 + 21.0 * a2 * b3 * b2 + 7.0 * lower_A * b3 * b3 + b3 * b3 * upper_A) / d7,
+            140.0 * a3 * b3 / d7,
+            -210.0 * (a3 * b2 + a2 * b3) / d7,
+            140.0 * (a3 * upper_A + 3.0 * a2 * b2 + lower_A * b3) / d7,
+            -35.0 * (a3 + 9.0 * a2 * upper_A + 9.0 * lower_A * b2 + b3) / d7,
+            84.0 * (a2 + 3.0 * lower_A * upper_A + b2) / d7,
+            -70.0 * (lower_A + upper_A) / d7,
+            20.0 / d7,
+        ],
+        dtype=jnp.float64,
+    )
+
+
+def taper_value(r_A, coefficients):
+    """Evaluate the legacy 7th-order taper polynomial."""
+
+    swc0, swc1, swc2, swc3, swc4, swc5, swc6, swc7 = coefficients
+    r2 = r_A * r_A
+    r3 = r2 * r_A
+    return swc7 * r3 * r3 * r_A + swc6 * r3 * r3 + swc5 * r3 * r2 + swc4 * r2 * r2 + swc3 * r3 + swc2 * r2 + swc1 * r_A + swc0
+
+
 def fixed_charge_coulomb_energy(positions_A, charges, cell_lengths=None):
     """Unshielded fixed-charge pair Coulomb energy in eV.
 
@@ -81,6 +167,33 @@ def fixed_charge_coulomb_energy(positions_A, charges, cell_lengths=None):
     return 0.5 * jnp.sum(jnp.where(off_diagonal, pair_energy, 0.0))
 
 
+def reaxff_shielded_coulomb_energy(positions_A, charges, gamma_eem, taper_coefficients, upper_taper_A, cell_lengths=None):
+    """eReaxFF shielded/tapered Coulomb pair energy in eV.
+
+    Formula source: Jamil eReaxFF `poten.f:nonbonnoinS`, using only the Coulomb
+    `eph` term and `reac.f:tap7th` taper polynomial.
+    """
+
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    charges = jnp.asarray(charges, dtype=jnp.float64)
+    gamma_eem = jnp.asarray(gamma_eem, dtype=jnp.float64)
+    displacements = positions[:, None, :] - positions[None, :, :]
+    displacements = _minimum_image(displacements, cell_lengths)
+    n_atoms = positions.shape[0]
+    off_diagonal = ~jnp.eye(n_atoms, dtype=bool)
+    r2 = jnp.sum(displacements * displacements, axis=-1)
+    safe_r = jnp.sqrt(jnp.where(off_diagonal, r2, 1.0))
+    gamma_pair = 1.0 / (jnp.sqrt(gamma_eem[:, None] * gamma_eem[None, :]) ** 3)
+    shielded_r = (safe_r * r2 + gamma_pair) ** (1.0 / 3.0)
+    taper = taper_value(safe_r, taper_coefficients)
+    in_cutoff = safe_r <= upper_taper_A
+    pair_energy_kcal = REAXFF_COULOMB_KCAL_A * charges[:, None] * charges[None, :] / shielded_r
+    pair_energy_eV = KCAL_TO_EV * pair_energy_kcal * taper
+    return 0.5 * jnp.sum(jnp.where(off_diagonal & in_cutoff, pair_energy_eV, 0.0))
+
+
 def evaluate_fixed_charge_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
     import jax
     import jax.numpy as jnp
@@ -96,6 +209,43 @@ def evaluate_fixed_charge_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
     energy, grad = jax.value_and_grad(energy_fn)(positions)
     return {
         "kernel": "fixed_charge_coulomb",
+        "fingerprint": geometry_fingerprint(case),
+        "energy_eV": energy,
+        "forces_eV_per_A": -grad,
+        "status": 0,
+    }
+
+
+def _gamma_array(case: dict[str, Any], coulomb_parameters: dict[str, Any]):
+    import jax.numpy as jnp
+
+    gamma_by_symbol = coulomb_parameters["gamma_eem_by_symbol"]
+    try:
+        gamma = [gamma_by_symbol[symbol] for symbol in case["atom_types"]]
+    except KeyError as exc:
+        raise ValueError(f"ffield is missing atom type {exc.args[0]!r}") from exc
+    return jnp.asarray(gamma, dtype=jnp.float64)
+
+
+def evaluate_reaxff_shielded_coulomb_case(case: dict[str, Any]) -> dict[str, Any]:
+    import jax
+    import jax.numpy as jnp
+
+    jax.config.update("jax_enable_x64", True)
+    positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
+    charges = _fixed_charges(case)
+    cell_lengths = _orthorhombic_cell_lengths(case)
+    parameters = _coulomb_parameters_from_case(case)
+    gamma = _gamma_array(case, parameters)
+    coefficients = _taper_coefficients(parameters["lower_taper_A"], parameters["upper_taper_A"])
+    upper_taper = float(parameters["upper_taper_A"])
+
+    def energy_fn(x):
+        return reaxff_shielded_coulomb_energy(x, charges, gamma, coefficients, upper_taper, cell_lengths)
+
+    energy, grad = jax.value_and_grad(energy_fn)(positions)
+    return {
+        "kernel": "reaxff_shielded_coulomb",
         "fingerprint": geometry_fingerprint(case),
         "energy_eV": energy,
         "forces_eV_per_A": -grad,
@@ -122,6 +272,8 @@ def evaluate_force_case(
     jax.config.update("jax_enable_x64", True)
     if kernel == "fixed_charge_coulomb":
         return evaluate_fixed_charge_coulomb_case(case)
+    if kernel == "reaxff_shielded_coulomb":
+        return evaluate_reaxff_shielded_coulomb_case(case)
     if kernel != "validated":
         raise ValueError(f"unknown force kernel: {kernel}")
     labels = case.get("labels")
@@ -151,7 +303,7 @@ def evaluate_force_batch(
     jax.config.update("jax_enable_x64", True)
     if not cases:
         raise ValueError("force batch is empty")
-    if kernel == "fixed_charge_coulomb":
+    if kernel in ("fixed_charge_coulomb", "reaxff_shielded_coulomb"):
         positions = jnp.stack(
             [jnp.asarray(case["positions_A"], dtype=jnp.float64) for case in cases],
             axis=0,
@@ -162,24 +314,49 @@ def evaluate_force_batch(
         if any(has_cell) and not all(has_cell):
             raise ValueError("mixed periodic and nonperiodic force batches are not supported")
 
-        if all(has_cell):
-            cells = jnp.stack(cell_lengths_by_case, axis=0)
+        if kernel == "reaxff_shielded_coulomb":
+            parameters = [_coulomb_parameters_from_case(case) for case in cases]
+            first_parameters = json.dumps(parameters[0], sort_keys=True)
+            if any(json.dumps(item, sort_keys=True) != first_parameters for item in parameters):
+                raise ValueError("mixed Coulomb parameter batches are not supported")
+            gamma = jnp.stack([_gamma_array(case, parameters[0]) for case in cases], axis=0)
+            coefficients = _taper_coefficients(parameters[0]["lower_taper_A"], parameters[0]["upper_taper_A"])
+            upper_taper = float(parameters[0]["upper_taper_A"])
 
-            def energy_fn(x, q, cell):
-                return fixed_charge_coulomb_energy(x, q, cell)
+            if all(has_cell):
+                cells = jnp.stack(cell_lengths_by_case, axis=0)
 
-            energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
-            energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges, cells)
+                def energy_fn(x, q, gam, cell):
+                    return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, cell)
+
+                energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
+                energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges, gamma, cells)
+            else:
+
+                def energy_fn(x, q, gam):
+                    return reaxff_shielded_coulomb_energy(x, q, gam, coefficients, upper_taper, None)
+
+                energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
+                energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges, gamma)
         else:
+            if all(has_cell):
+                cells = jnp.stack(cell_lengths_by_case, axis=0)
 
-            def energy_fn(x, q):
-                return fixed_charge_coulomb_energy(x, q, None)
+                def energy_fn(x, q, cell):
+                    return fixed_charge_coulomb_energy(x, q, cell)
 
-            energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
-            energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges)
+                energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
+                energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges, cells)
+            else:
+
+                def energy_fn(x, q):
+                    return fixed_charge_coulomb_energy(x, q, None)
+
+                energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
+                energies, grads = jax.jit(jax.vmap(energy_and_grad))(positions, charges)
 
         return {
-            "kernel": ["fixed_charge_coulomb"],
+            "kernel": [kernel],
             "fingerprints": [geometry_fingerprint(case) for case in cases],
             "energy_eV": energies,
             "forces_eV_per_A": -grads,

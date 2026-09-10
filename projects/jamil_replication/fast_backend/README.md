@@ -88,10 +88,14 @@ nonzero solver state.
 - strict oracle-label replay for protocol/parity testing;
 - an experimental fixed-charge Coulomb-only JAX kernel for testing real
   autodiff, batching, and timing mechanics.
+- an experimental source-derived eReaxFF shielded/tapered Coulomb slice that
+  parses `gammaEEM` and taper radii from each oracle call directory's `ffield`.
 
-The Coulomb kernel is unshielded, orthorhombic-minimum-image only, and is not
-the full eReaxFF Coulomb term.  It must not be used for production dynamics or
-total-force parity.
+The Coulomb kernels are orthorhombic-minimum-image only.  The
+`reaxff_shielded_coulomb` path follows the Jamil source `poten.f` Coulomb
+expression and `reac.f` seventh-order taper polynomial, but it is still only
+one energy term.  It must not be used for production dynamics or total-force
+parity.
 
 Force evaluation fails closed by default:
 
@@ -117,4 +121,10 @@ with a stdin request:
 
 ```json
 {"command": "force_batch", "force_kernel": "fixed_charge_coulomb", "cases": [ ... ]}
+```
+
+or:
+
+```json
+{"command": "force_batch", "force_kernel": "reaxff_shielded_coulomb", "cases": [ ... ]}
 ```
