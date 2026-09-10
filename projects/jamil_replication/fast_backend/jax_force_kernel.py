@@ -1601,10 +1601,23 @@ def reaxff_lone_pair_overcoordination_terms(
     hulpo = 1.0 / (1.0 + jnp.exp(bond_inputs["vovun"] * vov1))
     hulpp = 1.0 / (vov1 + avalc + 1.0e-8)
     overcoordination = sumov2 * hulpp * hulpo * vov1
+    hulpu2 = 1.0 / (
+        1.0
+        + bond_inputs["general_parameters"][8]
+        * jnp.exp(bond_inputs["general_parameters"][9] * sumov)
+    )
+    hulpu3 = jnp.exp(bond_inputs["general_parameters"][6] * vov1) - 1.0
+    hulpu = 1.0 / (1.0 + jnp.exp(-bond_inputs["vovun"] * vov1))
+    undercoordination = jnp.where(
+        bond_inputs["valp1"] >= 0.0,
+        bond_inputs["valp1"] * hulpu * hulpu2 * hulpu3,
+        0.0,
+    )
+    legacy_ea = overcoordination + undercoordination
     core_mask = ~electron_inputs["is_electron"]
     return {
         "lone_pair": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, lone_pair, 0.0)),
-        "overcoordination": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, overcoordination, 0.0)),
+        "overcoordination": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, legacy_ea, 0.0)),
     }
 
 

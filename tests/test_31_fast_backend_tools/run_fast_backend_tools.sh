@@ -502,11 +502,11 @@ if real_dataset.exists():
     assert abs(response["energy_terms_eV"]["valence"][0] - 4.930837527913495) < 1.0e-10
     assert abs(response["energy_terms_eV"]["penalty"][0] - 0.04994792351223957) < 1.0e-10
     assert abs(response["energy_terms_eV"]["lone_pair"][0]) < 1.0e-12
-    assert abs(response["energy_terms_eV"]["overcoordination"][0] + 0.047613000566716114) < 1.0e-10
+    assert abs(response["energy_terms_eV"]["overcoordination"][0] + 3.7374704375759955) < 1.0e-10
     assert abs(response["energy_terms_eV"]["electron_core"][0]) < 1.0e-12
     assert abs(response["energy_terms_eV"]["electron_electron"][0]) < 1.0e-12
-    assert abs(response["energy_eV"][0] + 10.839418566160594) < 1.0e-10
-    assert abs(response["forces_eV_per_A"][0][2][1] + 12.689082934581952) < 1.0e-10
+    assert abs(response["energy_eV"][0] + 14.529276003169873) < 1.0e-10
+    assert abs(response["forces_eV_per_A"][0][2][1] + 8.039063444233594) < 1.0e-10
 
     completed = subprocess.run(
         [
@@ -567,9 +567,9 @@ if real_dataset.exists():
     assert abs(torsion_terms["torsion"] - 0.1283796427711645) < 1.0e-12
     assert abs(torsion_terms["torsion_conjugation"] + 0.09034874251558697) < 1.0e-12
     assert abs(torsion_terms["lone_pair"]) < 1.0e-12
-    assert abs(torsion_terms["overcoordination"] + 0.025368940232967648) < 1.0e-12
+    assert abs(torsion_terms["overcoordination"] + 5.7036842614609045) < 1.0e-12
     assert abs(sum(torsion_terms.values()) - float(torsion_output["energy_eV"])) < 1.0e-12
-    assert abs(float(torsion_output["energy_eV"]) + 13.139467390218355) < 1.0e-12
+    assert abs(float(torsion_output["energy_eV"]) + 18.81778271144629) < 1.0e-12
 
     torsion_eps = 1.0e-6
     torsion_plus = json.loads(json.dumps(torsion_case))
@@ -594,7 +594,7 @@ electron_terms = {key: float(value) for key, value in electron_output["energy_te
 assert abs(electron_terms["electron_core"] + 0.2326373860870282) < 1.0e-12
 assert abs(electron_terms["electron_electron"]) < 1.0e-12
 assert abs(sum(electron_terms.values()) - float(electron_output["energy_eV"])) < 1.0e-12
-assert abs(float(electron_output["energy_eV"]) + 0.2249949320658194) < 1.0e-12
+assert abs(float(electron_output["energy_eV"]) + 0.35523096391457404) < 1.0e-12
 
 periodic_electron_case = json.loads(json.dumps(electron_case))
 periodic_electron_case["atom_types"] = ["C", "El", "El"]
