@@ -12,6 +12,12 @@ KCAL_TO_EV = 0.043364
 REAXFF_COULOMB_KCAL_A = 332.0638
 
 
+def _enable_jax_x64() -> None:
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+
+
 def geometry_fingerprint(case: dict[str, Any]) -> str:
     payload = {
         "atom_types": case.get("atom_types"),
@@ -27,6 +33,7 @@ def geometry_fingerprint(case: dict[str, Any]) -> str:
 
 
 def _fixed_charges(case: dict[str, Any]):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     constraints = case.get("charge_constraints") or {}
@@ -39,6 +46,7 @@ def _fixed_charges(case: dict[str, Any]):
 
 
 def _orthorhombic_cell_lengths(case: dict[str, Any]):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     crystx = case.get("crystx")
@@ -725,6 +733,7 @@ def reaxff_corrected_bond_nonbonded_valence_terms(
     atom_type_indices,
     angle_inputs,
     torsion_inputs=None,
+    topology=None,
     electron_inputs=None,
     cell_lengths=None,
 ):
@@ -742,9 +751,14 @@ def reaxff_corrected_bond_nonbonded_valence_terms(
         bond_inputs,
         cell_lengths,
     )
-    terms.update(reaxff_valence_angle_terms(positions_A, atom_type_indices, bond_inputs, angle_inputs, cell_lengths))
-    if torsion_inputs is not None:
+    if topology is None:
+        terms.update(reaxff_valence_angle_terms(positions_A, atom_type_indices, bond_inputs, angle_inputs, cell_lengths))
+    else:
+        terms.update(reaxff_sparse_valence_angle_terms(positions_A, bond_inputs, topology, cell_lengths))
+    if torsion_inputs is not None and topology is None:
         terms.update(reaxff_torsion_terms(positions_A, atom_type_indices, bond_inputs, torsion_inputs, cell_lengths))
+    elif topology is not None:
+        terms.update(reaxff_sparse_torsion_terms(positions_A, bond_inputs, topology, cell_lengths))
     if electron_inputs is not None:
         terms["electron"] = reaxff_electron_pair_energy(
             positions_A,
@@ -775,6 +789,7 @@ def reaxff_corrected_bond_nonbonded_valence_energy(
     atom_type_indices,
     angle_inputs,
     torsion_inputs=None,
+    topology=None,
     electron_inputs=None,
     cell_lengths=None,
 ):
@@ -794,6 +809,7 @@ def reaxff_corrected_bond_nonbonded_valence_energy(
             atom_type_indices,
             angle_inputs,
             torsion_inputs,
+            topology,
             electron_inputs,
             cell_lengths,
         )
@@ -828,6 +844,7 @@ def _gamma_array(case: dict[str, Any], coulomb_parameters: dict[str, Any]):
 
 
 def _atom_type_index_array(case: dict[str, Any], parameters: dict[str, Any]):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     try:
@@ -838,6 +855,7 @@ def _atom_type_index_array(case: dict[str, Any], parameters: dict[str, Any]):
 
 
 def _parameter_array(case: dict[str, Any], values_by_symbol: dict[str, float], name: str):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     try:
@@ -848,6 +866,7 @@ def _parameter_array(case: dict[str, Any], values_by_symbol: dict[str, float], n
 
 
 def _pair_parameter_matrix(case: dict[str, Any], values_by_pair: dict[str, float], name: str):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     atom_types = case["atom_types"]
@@ -864,6 +883,7 @@ def _pair_parameter_matrix(case: dict[str, Any], values_by_pair: dict[str, float
 
 
 def _angle_parameter_tensors(parameters: dict[str, Any]):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     n_types = len(parameters["atom_type_index_by_symbol"])
@@ -886,6 +906,7 @@ def _angle_parameter_tensors(parameters: dict[str, Any]):
 
 
 def _torsion_parameter_tensors(parameters: dict[str, Any]):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     n_types = len(parameters["atom_type_index_by_symbol"])
@@ -911,7 +932,142 @@ def _torsion_parameter_tensors(parameters: dict[str, Any]):
     }
 
 
+def _lookup_angle_parameters(parameters: dict[str, Any], left_symbol: str, center_symbol: str, right_symbol: str):
+    endpoints = tuple(sorted((left_symbol, right_symbol)))
+    for item in parameters["angle_params"]:
+        if tuple(sorted((item["left"], item["right"]))) == endpoints and item["center"] == center_symbol:
+            if abs(item["vka"]) < 0.001:
+                return None
+            return item
+    return None
+
+
+def _lookup_torsion_parameters(parameters: dict[str, Any], left_symbol: str, center_left_symbol: str, center_right_symbol: str, right_symbol: str):
+    if parameters["atom_type_index_by_symbol"][center_left_symbol] > parameters["atom_type_index_by_symbol"][center_right_symbol]:
+        left_symbol, center_left_symbol, center_right_symbol, right_symbol = (
+            right_symbol,
+            center_right_symbol,
+            center_left_symbol,
+            left_symbol,
+        )
+    elif (
+        center_left_symbol == center_right_symbol
+        and parameters["atom_type_index_by_symbol"][right_symbol] < parameters["atom_type_index_by_symbol"][left_symbol]
+    ):
+        left_symbol, center_left_symbol, center_right_symbol, right_symbol = (
+            right_symbol,
+            center_right_symbol,
+            center_left_symbol,
+            left_symbol,
+        )
+    for item in parameters["torsion_params"]:
+        if (
+            item["left"] == left_symbol
+            and item["center_left"] == center_left_symbol
+            and item["center_right"] == center_right_symbol
+            and item["right"] == right_symbol
+        ):
+            return item
+    for item in parameters["torsion_params"]:
+        if item["left"] == "*" and item["center_left"] == center_left_symbol and item["center_right"] == center_right_symbol and item["right"] == "*":
+            return item
+    return None
+
+
+def _sparse_topology_from_bond_orders(case: dict[str, Any], parameters: dict[str, Any], bond_inputs: dict[str, Any], cell_lengths=None):
+    _enable_jax_x64()
+    import jax.numpy as jnp
+    import numpy as np
+
+    positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
+    total, _, _, _, _ = corrected_bond_orders(
+        positions,
+        bond_inputs["rat"],
+        bond_inputs["rapt"],
+        bond_inputs["vnq"],
+        bond_inputs["rob1"],
+        bond_inputs["rob2"],
+        bond_inputs["rob3"],
+        bond_inputs["de1"],
+        bond_inputs["pdo"],
+        bond_inputs["popi"],
+        bond_inputs["pdp"],
+        bond_inputs["ptp"],
+        bond_inputs["bop1"],
+        bond_inputs["bop2"],
+        bond_inputs["bond_mask"],
+        bond_inputs["cutoff"],
+        bond_inputs["aval"],
+        bond_inputs["vval3"],
+        bond_inputs["bo131"],
+        bond_inputs["bo132"],
+        bond_inputs["bo133"],
+        bond_inputs["ovc"],
+        bond_inputs["v13cor"],
+        bond_inputs["overcoordination_parameter"],
+        bond_inputs["overcoordination_log_parameter"],
+        cell_lengths,
+    )
+    total_np = np.asarray(total)
+    atom_types = list(case["atom_types"])
+    n_atoms = len(atom_types)
+    neighbors = [[idx for idx in range(n_atoms) if idx != center and total_np[idx, center] > 0.001] for center in range(n_atoms)]
+
+    angle_indices = []
+    angle_values = {name: [] for name in ("theta0_degrees", "vka", "vka3", "vka8", "vkac", "vkap", "vval2")}
+    for center in range(n_atoms):
+        center_neighbors = neighbors[center]
+        for left_pos, left in enumerate(center_neighbors):
+            for right in center_neighbors[left_pos + 1 :]:
+                if total_np[left, center] * total_np[center, right] < 0.00001:
+                    continue
+                item = _lookup_angle_parameters(parameters, atom_types[left], atom_types[center], atom_types[right])
+                if item is None:
+                    continue
+                angle_indices.append((left, center, right))
+                for name in angle_values:
+                    angle_values[name].append(item[name])
+
+    torsion_indices = []
+    torsion_values = {name: [] for name in ("v1", "v2", "v3", "v4", "vconj", "v2bo", "v3bo")}
+    for center_left in range(n_atoms):
+        for center_right in neighbors[center_left]:
+            if center_left >= center_right:
+                continue
+            for left in neighbors[center_left]:
+                if left == center_right:
+                    continue
+                for right in neighbors[center_right]:
+                    if right == center_left or right == left:
+                        continue
+                    if total_np[center_left, center_right] * total_np[left, center_left] * total_np[center_right, right] <= 0.001:
+                        continue
+                    item = _lookup_torsion_parameters(
+                        parameters,
+                        atom_types[left],
+                        atom_types[center_left],
+                        atom_types[center_right],
+                        atom_types[right],
+                    )
+                    if item is None:
+                        continue
+                    torsion_indices.append((left, center_left, center_right, right))
+                    for name in torsion_values:
+                        torsion_values[name].append(item[name])
+
+    topology = {
+        "angle_indices": jnp.asarray(angle_indices, dtype=jnp.int32).reshape((-1, 3)),
+        "torsion_indices": jnp.asarray(torsion_indices, dtype=jnp.int32).reshape((-1, 4)),
+    }
+    for name, values in angle_values.items():
+        topology[f"angle_{name}"] = jnp.asarray(values, dtype=jnp.float64)
+    for name, values in torsion_values.items():
+        topology[f"torsion_{name}"] = jnp.asarray(values, dtype=jnp.float64)
+    return topology
+
+
 def _electron_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     core_charges = {
@@ -936,6 +1092,7 @@ def _electron_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
 
 
 def _bond_parameter_matrix(case: dict[str, Any], parameters: dict[str, Any], name: str):
+    _enable_jax_x64()
     import jax.numpy as jnp
 
     atom_types = case["atom_types"]
@@ -1374,6 +1531,138 @@ def reaxff_valence_angle_terms(
     }
 
 
+def reaxff_sparse_valence_angle_terms(
+    positions_A,
+    bond_inputs,
+    topology,
+    cell_lengths=None,
+):
+    """Source-derived `valang` energy terms for sparse topology angle triples."""
+
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    total, _, pi, pipi, _ = corrected_bond_orders(
+        positions,
+        bond_inputs["rat"],
+        bond_inputs["rapt"],
+        bond_inputs["vnq"],
+        bond_inputs["rob1"],
+        bond_inputs["rob2"],
+        bond_inputs["rob3"],
+        bond_inputs["de1"],
+        bond_inputs["pdo"],
+        bond_inputs["popi"],
+        bond_inputs["pdp"],
+        bond_inputs["ptp"],
+        bond_inputs["bop1"],
+        bond_inputs["bop2"],
+        bond_inputs["bond_mask"],
+        bond_inputs["cutoff"],
+        bond_inputs["aval"],
+        bond_inputs["vval3"],
+        bond_inputs["bo131"],
+        bond_inputs["bo132"],
+        bond_inputs["bo133"],
+        bond_inputs["ovc"],
+        bond_inputs["v13cor"],
+        bond_inputs["overcoordination_parameter"],
+        bond_inputs["overcoordination_log_parameter"],
+        cell_lengths,
+    )
+    indices = topology["angle_indices"]
+    zero = jnp.sum(positions) * 0.0
+    if indices.shape[0] == 0:
+        return {"valence": zero, "penalty": zero, "angle_conjugation": zero}
+
+    left = indices[:, 0]
+    center = indices[:, 1]
+    right = indices[:, 2]
+    boa = total[left, center] - 0.001
+    bob = total[center, right] - 0.001
+    mask = (boa >= 0.0) & (bob >= 0.0) & ((total[left, center] * total[center, right]) >= 0.00001)
+
+    vec_a = _minimum_image(positions[center] - positions[left], cell_lengths)
+    vec_b = _minimum_image(positions[center] - positions[right], cell_lengths)
+    norm_a = jnp.sqrt(jnp.maximum(jnp.sum(vec_a * vec_a, axis=-1), 1.0e-24))
+    norm_b = jnp.sqrt(jnp.maximum(jnp.sum(vec_b * vec_b, axis=-1), 1.0e-24))
+    cosine = jnp.sum(vec_a * vec_b, axis=-1) / jnp.maximum(norm_a * norm_b, 1.0e-20)
+    angle = jnp.arccos(jnp.where(mask, jnp.clip(cosine, -1.0 + 1.0e-12, 1.0 - 1.0e-12), 0.0))
+
+    theta0 = topology["angle_theta0_degrees"]
+    vka = topology["angle_vka"]
+    vka3 = topology["angle_vka3"]
+    vka8 = topology["angle_vka8"]
+    vkac = topology["angle_vkac"]
+    vkap = topology["angle_vkap"]
+    vval2 = topology["angle_vval2"]
+
+    abo = jnp.sum(total, axis=1)
+    center_abo = abo[center]
+    center_valf = bond_inputs["valf"][center]
+    center_vval1 = bond_inputs["vval1"][center]
+    center_vval3 = bond_inputs["vval3"][center]
+    center_vval4 = bond_inputs["vval4"][center]
+    center_aval = bond_inputs["aval"][center]
+    center_stlp = bond_inputs["stlp"][center]
+
+    vmbo = jnp.exp(jnp.sum(-(total[center] ** 8), axis=1))
+    sbo2_base = jnp.sum(pi[center] + pipi[center], axis=1)
+    exbo = center_abo - center_valf
+    exlp1 = center_abo - center_stlp
+    exlp2 = 2.0 * jnp.trunc(exlp1 / 2.0)
+    exlp = exlp1 - exlp2
+    vlpnc = jnp.exp(-bond_inputs["general_parameters"][15] * (2.0 + exlp) * (2.0 + exlp)) - jnp.trunc(exlp1 / 2.0)
+    vlpadj = jnp.where(exlp < 0.0, vlpnc, 0.0)
+    sbo2 = sbo2_base + (1.0 - vmbo) * (-exbo - bond_inputs["general_parameters"][33] * vlpadj)
+    powv = bond_inputs["general_parameters"][16]
+    sbo2h = jnp.where(
+        sbo2 <= 0.0,
+        0.0,
+        jnp.where(sbo2 <= 1.0, jnp.maximum(sbo2, 0.0) ** powv, jnp.where(sbo2 < 2.0, 2.0 - jnp.maximum(2.0 - sbo2, 0.0) ** powv, 2.0)),
+    )
+    expsbo = jnp.exp(-bond_inputs["general_parameters"][17] * (2.0 - sbo2h))
+    theta0_rad = (180.0 - theta0 * (1.0 - expsbo)) * (jnp.pi / 180.0)
+    thdif = theta0_rad - angle
+    exphu = vka * jnp.exp(-vka3 * thdif * thdif)
+    exphu2 = jnp.where(vka < 0.0, vka - exphu - vka, vka - exphu)
+    exa = jnp.exp(-center_vval1 * jnp.maximum(boa, 1.0e-12) ** vval2)
+    exb = jnp.exp(-center_vval1 * jnp.maximum(bob, 1.0e-12) ** vval2)
+    expun = jnp.exp(-vkac * exbo)
+    expun2 = jnp.exp(bond_inputs["general_parameters"][14] * exbo)
+    evboadj2 = center_vval4 - (center_vval4 - 1.0) * (2.0 + expun2) / (1.0 + expun + expun2)
+    valence = evboadj2 * (1.0 - exa) * (1.0 - exb) * exphu2
+
+    exbo_penalty = center_abo - center_aval
+    expov = jnp.exp(bond_inputs["general_parameters"][21] * exbo_penalty)
+    expov2 = jnp.exp(-bond_inputs["general_parameters"][20] * exbo_penalty)
+    ecsboadj = (2.0 + expov2) / (1.0 + expov + expov2)
+    penalty = (
+        vkap
+        * ecsboadj
+        * jnp.exp(-bond_inputs["general_parameters"][19] * (boa - 2.0) * (boa - 2.0))
+        * jnp.exp(-bond_inputs["general_parameters"][19] * (bob - 2.0) * (bob - 2.0))
+    )
+
+    unda = abo[left] - boa
+    ovb = center_abo - center_vval3
+    undc = abo[right] - bob
+    angle_conjugation = (
+        vka8
+        * jnp.exp(-bond_inputs["general_parameters"][30] * (boa - 1.5) * (boa - 1.5))
+        * jnp.exp(-bond_inputs["general_parameters"][30] * (bob - 1.5) * (bob - 1.5))
+        * jnp.exp(-bond_inputs["general_parameters"][38] * unda * unda)
+        * jnp.exp(-bond_inputs["general_parameters"][38] * undc * undc)
+        / (1.0 + jnp.exp(bond_inputs["general_parameters"][2] * ovb))
+    )
+
+    return {
+        "valence": KCAL_TO_EV * jnp.sum(jnp.where(mask, valence, 0.0)),
+        "penalty": KCAL_TO_EV * jnp.sum(jnp.where(mask, penalty, 0.0)),
+        "angle_conjugation": KCAL_TO_EV * jnp.sum(jnp.where(mask, angle_conjugation, 0.0)),
+    }
+
+
 def reaxff_torsion_terms(
     positions_A,
     atom_type_indices,
@@ -1424,7 +1713,9 @@ def reaxff_torsion_terms(
     boa = total[:, :, None, None] - 0.001
     bob = total[None, :, :, None] - 0.001
     boc = total[None, None, :, :] - 0.001
-    graph_mask = (boa >= 0.0) & (bob >= 0.0) & (boc >= 0.0)
+    graph_mask = (boa >= 0.0) & (bob >= 0.0) & (boc >= 0.0) & (
+        total[:, :, None, None] * total[None, :, :, None] * total[None, None, :, :] > 0.001
+    )
 
     type_i = atom_type_indices[:, None, None, None]
     type_j = atom_type_indices[None, :, None, None]
@@ -1432,19 +1723,15 @@ def reaxff_torsion_terms(
     type_l = atom_type_indices[None, None, None, :]
     wildcard = torsion_inputs["wildcard"]
     exact_mask = torsion_inputs["mask"][type_i, type_j, type_k, type_l]
-    left_wild_mask = torsion_inputs["mask"][wildcard, type_j, type_k, type_l]
-    right_wild_mask = torsion_inputs["mask"][type_i, type_j, type_k, wildcard]
     both_wild_mask = torsion_inputs["mask"][wildcard, type_j, type_k, wildcard]
-    torsion_mask = exact_mask | left_wild_mask | right_wild_mask | both_wild_mask
+    torsion_mask = exact_mask | both_wild_mask
     mask = distinct & central_order & graph_mask & torsion_mask
 
     def choose(name):
         values = torsion_inputs[name]
         exact = values[type_i, type_j, type_k, type_l]
-        left_wild = values[wildcard, type_j, type_k, type_l]
-        right_wild = values[type_i, type_j, type_k, wildcard]
         both_wild = values[wildcard, type_j, type_k, wildcard]
-        return jnp.where(exact_mask, exact, jnp.where(left_wild_mask, left_wild, jnp.where(right_wild_mask, right_wild, both_wild)))
+        return jnp.where(exact_mask, exact, both_wild)
 
     v1 = choose("v1")
     v2 = choose("v2")
@@ -1486,6 +1773,116 @@ def reaxff_torsion_terms(
     etboadj = (2.0 + expov2) / (1.0 + expov + expov2)
     center_pi = pi[None, :, :, None]
     bo2t = 2.0 - center_pi - etboadj
+    bocor2 = jnp.exp(v4 * bo2t * bo2t)
+    ethhulp = 0.5 * v1 * (1.0 + arg) + v2 * bocor2 * (1.0 - arg2) + v3 * (0.5 + 2.0 * arg2 * arg - 1.5 * arg)
+    bocor4 = (
+        (1.0 - jnp.exp(-bond_inputs["general_parameters"][23] * boa))
+        * (1.0 - jnp.exp(-bond_inputs["general_parameters"][23] * bob))
+        * (1.0 - jnp.exp(-bond_inputs["general_parameters"][23] * boc))
+    )
+    torsion = sinhd * sinhe * ethhulp * bocor4
+
+    sbo = (
+        jnp.exp(-bond_inputs["general_parameters"][27] * (boa - 1.5) * (boa - 1.5))
+        * jnp.exp(-bond_inputs["general_parameters"][27] * (bob - 1.5) * (bob - 1.5))
+        * jnp.exp(-bond_inputs["general_parameters"][27] * (boc - 1.5) * (boc - 1.5))
+    )
+    torsion_conjugation = vconj * (((arg2 - 1.0) * sinhd * sinhe) + 1.0) * sbo
+
+    return {
+        "torsion": KCAL_TO_EV * jnp.sum(jnp.where(mask, torsion, 0.0)),
+        "torsion_conjugation": KCAL_TO_EV * jnp.sum(jnp.where(mask, torsion_conjugation, 0.0)),
+    }
+
+
+def reaxff_sparse_torsion_terms(
+    positions_A,
+    bond_inputs,
+    topology,
+    cell_lengths=None,
+):
+    """Source-derived `torang` energy terms for sparse topology torsion quadruples."""
+
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    total, _, pi, _, _ = corrected_bond_orders(
+        positions,
+        bond_inputs["rat"],
+        bond_inputs["rapt"],
+        bond_inputs["vnq"],
+        bond_inputs["rob1"],
+        bond_inputs["rob2"],
+        bond_inputs["rob3"],
+        bond_inputs["de1"],
+        bond_inputs["pdo"],
+        bond_inputs["popi"],
+        bond_inputs["pdp"],
+        bond_inputs["ptp"],
+        bond_inputs["bop1"],
+        bond_inputs["bop2"],
+        bond_inputs["bond_mask"],
+        bond_inputs["cutoff"],
+        bond_inputs["aval"],
+        bond_inputs["vval3"],
+        bond_inputs["bo131"],
+        bond_inputs["bo132"],
+        bond_inputs["bo133"],
+        bond_inputs["ovc"],
+        bond_inputs["v13cor"],
+        bond_inputs["overcoordination_parameter"],
+        bond_inputs["overcoordination_log_parameter"],
+        cell_lengths,
+    )
+    indices = topology["torsion_indices"]
+    zero = jnp.sum(positions) * 0.0
+    if indices.shape[0] == 0:
+        return {"torsion": zero, "torsion_conjugation": zero}
+
+    left = indices[:, 0]
+    center_left = indices[:, 1]
+    center_right = indices[:, 2]
+    right = indices[:, 3]
+    boa = total[left, center_left] - 0.001
+    bob = total[center_left, center_right] - 0.001
+    boc = total[center_right, right] - 0.001
+    mask = (boa >= 0.0) & (bob >= 0.0) & (boc >= 0.0) & (
+        total[left, center_left] * total[center_left, center_right] * total[center_right, right] > 0.001
+    )
+
+    rij = _minimum_image(positions[left] - positions[center_left], cell_lengths)
+    rkj = _minimum_image(positions[center_right] - positions[center_left], cell_lengths)
+    rjk = -rkj
+    rlk = _minimum_image(positions[right] - positions[center_right], cell_lengths)
+    rij_norm = jnp.sqrt(jnp.maximum(jnp.sum(rij * rij, axis=-1), 1.0e-24))
+    rkj_norm = jnp.sqrt(jnp.maximum(jnp.sum(rkj * rkj, axis=-1), 1.0e-24))
+    rlk_norm = jnp.sqrt(jnp.maximum(jnp.sum(rlk * rlk, axis=-1), 1.0e-24))
+    coshd = jnp.sum(rij * rkj, axis=-1) / jnp.maximum(rij_norm * rkj_norm, 1.0e-20)
+    coshe = jnp.sum(rjk * rlk, axis=-1) / jnp.maximum(rkj_norm * rlk_norm, 1.0e-20)
+    coshd = jnp.clip(coshd, -1.0 + 1.0e-12, 1.0 - 1.0e-12)
+    coshe = jnp.clip(coshe, -1.0 + 1.0e-12, 1.0 - 1.0e-12)
+    sinhd = jnp.sqrt(jnp.maximum(1.0 - coshd * coshd, 0.0))
+    sinhe = jnp.sqrt(jnp.maximum(1.0 - coshe * coshe, 0.0))
+
+    normal_a = jnp.cross(rij, rkj)
+    normal_b = jnp.cross(rjk, rlk)
+    normal_a_norm = jnp.sqrt(jnp.maximum(jnp.sum(normal_a * normal_a, axis=-1), 1.0e-24))
+    normal_b_norm = jnp.sqrt(jnp.maximum(jnp.sum(normal_b * normal_b, axis=-1), 1.0e-24))
+    arg = jnp.sum(normal_a * normal_b, axis=-1) / jnp.maximum(normal_a_norm * normal_b_norm, 1.0e-20)
+    arg = jnp.where(mask, jnp.clip(arg, -1.0, 1.0), 0.0)
+    arg2 = arg * arg
+
+    v1 = topology["torsion_v1"]
+    v2 = topology["torsion_v2"]
+    v3 = topology["torsion_v3"]
+    v4 = topology["torsion_v4"]
+    vconj = topology["torsion_vconj"]
+    abo = jnp.sum(total, axis=1)
+    htovt = abo[center_left] + abo[center_right] - bond_inputs["valf"][center_left] - bond_inputs["valf"][center_right]
+    expov = jnp.exp(bond_inputs["general_parameters"][25] * htovt)
+    expov2 = jnp.exp(-bond_inputs["general_parameters"][24] * htovt)
+    etboadj = (2.0 + expov2) / (1.0 + expov + expov2)
+    bo2t = 2.0 - pi[center_left, center_right] - etboadj
     bocor2 = jnp.exp(v4 * bo2t * bo2t)
     ethhulp = 0.5 * v1 * (1.0 + arg) + v2 * bocor2 * (1.0 - arg2) + v3 * (0.5 + 2.0 * arg2 * arg - 1.5 * arg)
     bocor4 = (
@@ -1849,8 +2246,7 @@ def evaluate_reaxff_corrected_bond_nonbonded_valence_case(case: dict[str, Any]) 
     angle_inputs = _angle_parameter_tensors(parameters)
     torsion_inputs = _torsion_parameter_tensors(parameters)
     electron_inputs = _electron_energy_inputs(case, parameters)
-    if int(positions.shape[0]) > 64 and parameters["torsion_params"]:
-        raise ValueError("dense torsion diagnostic kernel is limited to 64 atoms; use sparse topology before full-frame MD")
+    topology = _sparse_topology_from_bond_orders(case, parameters, bond_inputs, cell_lengths)
 
     def energy_fn(x):
         return reaxff_corrected_bond_nonbonded_valence_energy(
@@ -1868,6 +2264,7 @@ def evaluate_reaxff_corrected_bond_nonbonded_valence_case(case: dict[str, Any]) 
             atom_type_indices,
             angle_inputs,
             torsion_inputs,
+            topology,
             electron_inputs,
             cell_lengths=cell_lengths,
         )
@@ -1888,6 +2285,7 @@ def evaluate_reaxff_corrected_bond_nonbonded_valence_case(case: dict[str, Any]) 
         atom_type_indices,
         angle_inputs,
         torsion_inputs,
+        topology,
         electron_inputs,
         cell_lengths=cell_lengths,
     )

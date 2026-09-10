@@ -239,9 +239,13 @@ The fast-backend work has started behind a gated interface:
 - valence-angle energy (`ev`), double-bond angle penalty (`epen`),
   angle-conjugation (`ecoa`), torsion (`et`), torsion-conjugation (`eco`), and
   explicit electron pair energy (`eelect`) are implemented in the diagnostic JAX
-  aggregate with force/finite-difference regression checks.  The torsion path is
-  currently dense and fail-closed above 64 atoms until a sparse topology kernel
-  is added;
+  aggregate with force/finite-difference regression checks;
+- the diagnostic aggregate now builds sparse legacy-style angle/torsion
+  topology from corrected bond orders, so valence and torsion scale over
+  selected interactions rather than all atom triples/quadruples.  The first
+  225-atom Jamil P4 labeled frame builds 336 angles and 672 torsions and runs
+  the one-case diagnostic aggregate in about 4 seconds including topology/JAX
+  overhead on the tested Mac CPU;
 - the force-provider base now has a batched result type so future backends can
   evaluate all beads in one compiled/vectorized request.
 

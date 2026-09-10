@@ -190,6 +190,9 @@ sys.path.insert(0, "projects/jamil_replication/fast_backend")
 from jax_force_kernel import evaluate_reaxff_shielded_coulomb_case
 from jax_force_kernel import evaluate_reaxff_corrected_bond_nonbonded_valence_case
 from jax_force_kernel import parse_ffield_coulomb_parameters
+from jax_force_kernel import _bond_energy_inputs
+from jax_force_kernel import _orthorhombic_cell_lengths
+from jax_force_kernel import _sparse_topology_from_bond_orders
 
 parameters = parse_ffield_coulomb_parameters(Path(case["source_call_dir"]) / "ffield")
 assert len(parameters["angle_params"]) == 0
@@ -406,6 +409,14 @@ if real_dataset.exists():
     angle_case["charge_in"] = [0.0] * 3
     angle_case["solver_guess_in"] = [0.0] * 3
     angle_case["crystx"] = None
+    angle_topology = _sparse_topology_from_bond_orders(
+        angle_case,
+        real_parameters,
+        _bond_energy_inputs(angle_case, real_parameters),
+        _orthorhombic_cell_lengths(angle_case),
+    )
+    assert angle_topology["angle_indices"].shape == (3, 3)
+    assert angle_topology["torsion_indices"].shape == (0, 4)
     completed = subprocess.run(
         [
             ".venv-fast/bin/python",
@@ -465,12 +476,20 @@ if real_dataset.exists():
     torsion_case["charge_in"] = [0.0] * 4
     torsion_case["solver_guess_in"] = [0.0] * 4
     torsion_case["crystx"] = None
+    torsion_topology = _sparse_topology_from_bond_orders(
+        torsion_case,
+        real_parameters,
+        _bond_energy_inputs(torsion_case, real_parameters),
+        _orthorhombic_cell_lengths(torsion_case),
+    )
+    assert torsion_topology["angle_indices"].shape == (8, 3)
+    assert torsion_topology["torsion_indices"].shape == (3, 4)
     torsion_output = evaluate_reaxff_corrected_bond_nonbonded_valence_case(torsion_case)
     torsion_terms = {key: float(value) for key, value in torsion_output["energy_terms_eV"].items()}
-    assert abs(torsion_terms["torsion"] - 0.13018736146294974) < 1.0e-12
-    assert abs(torsion_terms["torsion_conjugation"] + 0.09248999162654188) < 1.0e-12
+    assert abs(torsion_terms["torsion"] - 0.1283796427711645) < 1.0e-12
+    assert abs(torsion_terms["torsion_conjugation"] + 0.09034874251558697) < 1.0e-12
     assert abs(sum(torsion_terms.values()) - float(torsion_output["energy_eV"])) < 1.0e-12
-    assert abs(float(torsion_output["energy_eV"]) + 13.114431980404557) < 1.0e-12
+    assert abs(float(torsion_output["energy_eV"]) + 13.114098449985388) < 1.0e-12
 
     torsion_eps = 1.0e-6
     torsion_plus = json.loads(json.dumps(torsion_case))

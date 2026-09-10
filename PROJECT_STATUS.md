@@ -106,6 +106,8 @@ Generated: 2026-09-10
       angle-conjugation (`ecoa`), and explicit electron pair (`eelect`) terms.
 - [x] Add diagnostic JAX torsion (`et`) and torsion-conjugation (`eco`)
       formulas.
+- [x] Add sparse legacy-style JAX angle/torsion topology built from corrected
+      bond orders.
 - [ ] Port hydrogen-bond (`ehb`) formulas when using an ffield with active
       hydrogen-bond records.
 - [ ] Reconstruct dynamic lone-pair/over-under/electron state before porting
@@ -250,7 +252,10 @@ force finite differences, a nonzero C-C-C-C torsion/conjugation fixture, and a
 nonzero C-El explicit electron pair term.  The current diagnostic aggregate
 includes `bond`, `coulomb`, `vdw`, `valence`, `penalty`,
 `angle_conjugation`, `torsion`, `torsion_conjugation`, and `electron`.  The
-torsion implementation is dense and intentionally fails above 64 atoms until a
-sparse topology kernel is added.  The exact Fortran oracle remains the truth
-source until the remaining hydrogen-bond, dynamic lone-pair/overcoordination,
-and ACKS2 paths are ported and validated.
+angle/torsion implementation now uses sparse legacy-style topology lists built
+from corrected bond orders.  On the first 225-atom Jamil P4 labeled frame, the
+sparse topology contains 336 angles and 672 torsions and the one-case diagnostic
+aggregate runs in about 4 seconds including topology/JAX overhead on the tested
+Mac CPU.  The exact Fortran oracle remains the truth source until the remaining
+hydrogen-bond, dynamic lone-pair/overcoordination, and ACKS2 paths are ported
+and validated.
