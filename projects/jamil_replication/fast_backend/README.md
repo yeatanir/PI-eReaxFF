@@ -92,16 +92,21 @@ nonzero solver state.
   parses `gammaEEM` and taper radii from each oracle call directory's `ffield`.
 - an experimental source-derived `nonbonnoinS` slice for the Jamil force field,
   combining shielded Morse vdW with shielded/tapered Coulomb.
+- an experimental source-derived raw bond-order and uncorrected covalent
+  bond-energy slice from `reac.f:srtbon`/`poten.f:covbon`.
 
 The Coulomb kernels are orthorhombic-minimum-image only.  The
 `reaxff_shielded_coulomb` path follows the Jamil source `poten.f` Coulomb
 expression and `reac.f` seventh-order taper polynomial.  The
 `reaxff_nonbonded_no_inner_shielded` path follows the same `poten.f`
 `nonbonnoinS` routine for the no-inner-wall, shielded-vdW case selected by the
-current Jamil C/El parameters.  These kernels still omit bond order, valence,
-torsion, over/undercoordination, ACKS2 dynamic charge solving, self-image
-details beyond minimum image, and other total-energy terms.  They must not be
-used for production dynamics or total-force parity.
+current Jamil C/El parameters.  The `reaxff_uncorrected_bond` path builds raw
+sigma/pi/pi-pi bond orders and the direct covalent bond term, but does not yet
+apply `boncor` overcoordination or 1-3 bond-order corrections.  These kernels
+still omit valence, torsion, lone-pair, over/undercoordination energy,
+ACKS2 dynamic charge solving, self-image details beyond minimum image, and
+other total-energy terms.  They must not be used for production dynamics or
+total-force parity.
 
 Force evaluation fails closed by default:
 
@@ -139,4 +144,10 @@ or:
 
 ```json
 {"command": "force_batch", "force_kernel": "reaxff_nonbonded_no_inner_shielded", "cases": [ ... ]}
+```
+
+or:
+
+```json
+{"command": "force_batch", "force_kernel": "reaxff_uncorrected_bond", "cases": [ ... ]}
 ```

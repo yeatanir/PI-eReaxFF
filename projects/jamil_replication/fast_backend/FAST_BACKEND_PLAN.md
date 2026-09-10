@@ -42,7 +42,10 @@ removing the exact legacy oracle.
 - An experimental source-derived no-inner-wall, shielded-vdW nonbonded kernel
   now combines the Jamil `nonbonnoinS` vdW and Coulomb terms in a batched JAX
   path.
+- An experimental source-derived raw bond-order and uncorrected covalent
+  bond-energy kernel now parses bond/off-diagonal `ffield` sections and runs
+  in a batched JAX path.
 - Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
   fail-closed until their parity kernels are implemented.  The next force work
-  should add bond-order and bonded ReaxFF terms term-by-term against oracle
-  labels.
+  should add `boncor` bond-order corrections and then valence/overcoordination
+  terms against oracle labels.

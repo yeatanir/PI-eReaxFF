@@ -89,6 +89,11 @@ test fast backend ffield
       2.0000   4.0000   4.0000   0.0000   0.0000   1.0002   1.0009  10.0000
      -0.1000   0.0000  -2.3700   6.4918   8.5961   0.2368   2.0000   3.5000
      -5.0000   3.1873   0.1600   6.2998   2.5791   0.0000   0.0000   0.0000
+ 1    ! Nr of bonds
+ header
+  1  1  78.4266 115.3834  68.1631   0.5777  -0.2901   1.0000  34.9989   0.5101
+         3.8560  -0.1640   8.2326   1.0000  -0.0585   6.7997   1.0000   0.1481
+ 0    ! Nr of off-diagonal terms
 EOF
 cat > "$CALL_DIR/single_point_forces.out" <<'EOF'
 # atom Fx Fy Fz charge solver_guess
@@ -224,6 +229,48 @@ e_plus = float(evaluate_reaxff_no_inner_shielded_nonbonded_case(case_plus)["ener
 e_minus = float(evaluate_reaxff_no_inner_shielded_nonbonded_case(case_minus)["energy_eV"])
 fd_force = -(e_plus - e_minus) / (2.0 * eps)
 analytic_force = float(evaluate_reaxff_no_inner_shielded_nonbonded_case(case)["forces_eV_per_A"][0][0])
+assert abs(fd_force - analytic_force) < 1.0e-8
+
+bond_case = json.loads(json.dumps(case))
+bond_case["atom_types"] = ["C", "C"]
+bond_case["positions_A"] = [[0.0, 0.0, 0.0], [1.4, 0.0, 0.0]]
+bond_case["charge_constraints"]["fixed_charges"] = [0.0, 0.0]
+bond_case["charge_in"] = [0.0, 0.0]
+bond_case["solver_guess_in"] = [0.0, 0.0]
+completed = subprocess.run(
+    [
+        ".venv-fast/bin/python",
+        "projects/jamil_replication/fast_backend/jax_backend.py",
+        "--allow-unvalidated",
+    ],
+    input=json.dumps(
+        {
+            "command": "force_batch",
+            "force_kernel": "reaxff_uncorrected_bond",
+            "cases": [bond_case],
+        }
+    ),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["reaxff_uncorrected_bond"]
+assert abs(response["energy_eV"][0] + 6.070757166945563) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][0][0] - 9.444906995307184) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][1][0] + 9.444906995307184) < 1.0e-12
+
+from jax_force_kernel import evaluate_reaxff_uncorrected_bond_case
+
+bond_plus = json.loads(json.dumps(bond_case))
+bond_minus = json.loads(json.dumps(bond_case))
+bond_plus["positions_A"][0][0] += eps
+bond_minus["positions_A"][0][0] -= eps
+e_plus = float(evaluate_reaxff_uncorrected_bond_case(bond_plus)["energy_eV"])
+e_minus = float(evaluate_reaxff_uncorrected_bond_case(bond_minus)["energy_eV"])
+fd_force = -(e_plus - e_minus) / (2.0 * eps)
+analytic_force = float(evaluate_reaxff_uncorrected_bond_case(bond_case)["forces_eV_per_A"][0][0])
 assert abs(fd_force - analytic_force) < 1.0e-8
 
 completed = subprocess.run(
