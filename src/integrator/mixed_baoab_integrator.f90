@@ -5,7 +5,7 @@ module ereaxff_mixed_baoab_integrator
   use ereaxff_normal_modes, only: bead_to_nm, nm_to_bead
   use ereaxff_free_ring_propagator, only: exact_free_propagation
   use ereaxff_charge_coupling_policy, only: charge_memory_state
-  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads
+  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads, evaluate_zero_oracle_beads
   use ereaxff_rng, only: rng_state
   use ereaxff_thermostat_pile_l, only: pile_l_thermostat_state, pile_l_step
   use ereaxff_oracle_adapter, only: oracle_adapter_state
@@ -19,7 +19,7 @@ contains
 
   subroutine mixed_baoab_quantum_step(positions_A, q_nm, v_nm, quantum_indices, quantum_masses_amu, &
       rp, quantum_bead_counts, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, &
-      quantum_thermostats, rng, state_in, step_index)
+      quantum_thermostats, rng, state_in, step_index, force_off)
     real(dp), intent(inout) :: positions_A(:, :, :)
     real(dp), intent(inout) :: q_nm(:, :, :)
     real(dp), intent(inout) :: v_nm(:, :, :)
@@ -36,8 +36,10 @@ contains
     type(rng_state), intent(inout) :: rng
     type(system_state), intent(in) :: state_in
     integer, intent(in), optional :: step_index
+    logical, intent(in), optional :: force_off
     integer :: q
     integer :: step_value
+    logical :: force_off_value
     if (size(quantum_indices) < 1) error stop "mixed_baoab_quantum_step: quantum index list is empty"
     if (size(quantum_indices) /= size(quantum_masses_amu)) error stop "mixed_baoab_quantum_step: mass count mismatch"
     if (size(q_nm, 1) /= size(positions_A, 1)) error stop "mixed_baoab_quantum_step: dimension mismatch"
@@ -59,9 +61,18 @@ contains
     else
       step_value = -1
     end if
+    if (present(force_off)) then
+      force_off_value = force_off
+    else
+      force_off_value = .false.
+    end if
 
-    call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
-        charge_policy, summary, step_value, "quantum_pre_force")
+    if (force_off_value) then
+      call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+    else
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
+          charge_policy, summary, step_value, "quantum_pre_force")
+    end if
 
     do q = 1, size(quantum_indices)
       call half_kick_from_summary(summary, quantum_indices(q), quantum_masses_amu(q), dt_fs, rp(q), &
@@ -81,8 +92,12 @@ contains
 
     call update_quantum_positions(positions_A, q_nm, rp, quantum_indices, quantum_bead_counts, state_in)
 
-    call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
-        charge_policy, summary, step_value, "quantum_post_force")
+    if (force_off_value) then
+      call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+    else
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
+          charge_policy, summary, step_value, "quantum_post_force")
+    end if
 
     do q = 1, size(quantum_indices)
       call half_kick_from_summary(summary, quantum_indices(q), quantum_masses_amu(q), dt_fs, rp(q), &

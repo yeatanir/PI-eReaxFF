@@ -224,6 +224,50 @@ Interpretation:
 - The heat term increases with gamma even though the measured physical electron temperature barely moves, so this is not a simple underdamped-centroid problem.
 - The next diagnostic should split electron kinetic energy by normal mode and run a force-off/harmonic-only P=16 check. That will separate incorrect initialization or thermostat sampling from force-coupled heating.
 
+## 2026-09-10 P=16 Force-Off Mode Diagnostics
+
+Added `electron_mode_partition.out` to split the primary PIMD electron kinetic energy into:
+
+- centroid extended mode temperature
+- internal extended mode temperature averaged over modes `2:P`
+- all-mode extended temperature
+- physical aggregate electron temperature
+- centroid/internal kinetic-energy fraction
+
+Also added a config-driven `force_provider.type: dummy` mode for the mixed BAOAB driver. This keeps the Jamil geometry, masses, velocity initialization, free ring propagation, and PILE-L thermostat, but replaces all force evaluations with zero energy and zero force.
+
+One-step force-off check:
+
+```bash
+JAMIL_FORCE_OFF_STEPS=1 JAMIL_FORCE_OFF_DT_FS=0.05 JAMIL_FORCE_OFF_P=16 \
+  JAMIL_FORCE_OFF_MASS_AMU=1.0 projects/jamil_replication/run_jamil_force_off_check.sh
+```
+
+Result:
+
+- physical electron temperature: `489.111 K`
+- all-mode extended temperature: `7825.777 K`
+- expected extended mode temperature: `4800.000 K`
+- centroid extended mode temperature: `2103.860 K`
+- internal extended mode temperature: `8207.238 K`
+- centroid kinetic-energy fraction: `0.0168`
+- bead RMS spread: `0.006594 A`
+
+This matches the one-step oracle P=16/dt=0.05/gamma=0.001 temperature, so the immediate one-step hot-electron diagnostic is reproducible without eReaxFF forces. It is not force-feedback heating on the first step.
+
+Mass check:
+
+- With `mass_amu=1.0`, the one-step force-off bead RMS spread is `0.006594 A`.
+- With physical electron mass `mass_amu=0.00054858`, the same one-step force-off kinetic temperatures are unchanged, but bead RMS spread grows to `0.281545 A`.
+- After 100 force-off steps with physical electron mass, bead RMS spread reaches `6.743825 A`.
+
+Interpretation:
+
+- The sampled kinetic temperature is mass-independent for the same RNG stream because the Maxwell velocity width scales as `1/sqrt(m)` and the diagnostic uses `m v^2`.
+- The mass is still crucial for dynamics: physical electron mass produces much larger bead motion and is likely too delocalized/unstable for this eReaxFF electron coordinate unless the model was parameterized for it.
+- The current `mass_amu=1.0` Jamil setting is therefore a fictitious electron mass convention, not the physical electron mass.
+- The immediate `489 K` reading is mostly a finite-sample/initialization/internal-mode issue. With one PIMD electron and `P=16`, the kinetic diagnostic has only `48` velocity degrees of freedom, so a single-seed one-step temperature can fluctuate substantially.
+
 ## 2026-05-08 Partial Dispatch Sweep
 
 I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.

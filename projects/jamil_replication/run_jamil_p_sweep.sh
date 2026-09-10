@@ -126,6 +126,9 @@ row = {
     "electron_extended_T_K": last_data(out / "electron_temperature.out", 3),
     "electron_expected_extended_T_K": last_data(out / "electron_temperature.out", 4),
     "electron_ratio": last_data(out / "electron_temperature.out", 5),
+    "electron_centroid_extended_T_K": last_data(out / "electron_mode_partition.out", 2),
+    "electron_internal_extended_T_K": last_data(out / "electron_mode_partition.out", 3),
+    "electron_centroid_ke_fraction": last_data(out / "electron_mode_partition.out", 10),
     "carbon_T_K": last_data(out / "carbon_temperature.out", 2),
     "thermostat_heat_eV": last_data(out / "thermostat_heat.out", 2),
     "quantum_heat_eV": last_data(out / "thermostat_heat.out", 4),
@@ -141,15 +144,18 @@ with summary_path.open("a", encoding="utf-8") as handle:
         handle.write(
             "| case | P | workers | OMP | wall_s | oracle_calls | batches | batch_sum_s | "
             "batch_mean_s | gamma_fs_inv | electron_T_K | extended_T_K | expected_extended_T_K | ratio | "
-            "carbon_T_K | thermostat_heat_eV | quantum_heat_eV | bead_rms_spread_A | status |\n"
+            "centroid_ext_T_K | internal_ext_T_K | centroid_ke_fraction | carbon_T_K | thermostat_heat_eV | "
+            "quantum_heat_eV | bead_rms_spread_A | status |\n"
         )
-        handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
+        handle.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n")
     handle.write(
         f"| {row['case']} | {row['P']} | {row['workers']} | {row['omp_threads']} | "
         f"{row['wall_s']:.3f} | {row['oracle_calls']} | {row['batches']} | {row['batch_sum_s']:.3f} | "
         f"{row['batch_mean_s']:.3f} | {row['gamma_fs_inv']:.6f} | {row['electron_T_K']:.3f} | "
         f"{row['electron_extended_T_K']:.3f} | "
         f"{row['electron_expected_extended_T_K']:.3f} | {row['electron_ratio']:.3f} | "
+        f"{row['electron_centroid_extended_T_K']:.3f} | {row['electron_internal_extended_T_K']:.3f} | "
+        f"{row['electron_centroid_ke_fraction']:.6f} | "
         f"{row['carbon_T_K']:.3f} | {row['thermostat_heat_eV']:.6f} | {row['quantum_heat_eV']:.6f} | "
         f"{row['bead_rms_spread_A']:.6f} | {row['status']} |\n"
     )

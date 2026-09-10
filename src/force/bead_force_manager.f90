@@ -45,6 +45,7 @@ module ereaxff_bead_force_manager
 
   public :: evaluate_harmonic_beads
   public :: evaluate_dummy_beads
+  public :: evaluate_zero_oracle_beads
   public :: evaluate_oracle_beads
   public :: average_forces_over_beads
 
@@ -80,6 +81,19 @@ contains
     end do
     summary%pimd_potential_eV = sum(summary%bead_energies_eV) / real(p, dp)
   end subroutine evaluate_dummy_beads
+
+  subroutine evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+    real(dp), intent(in) :: positions_A(:, :, :)
+    type(charge_memory_state), intent(inout) :: charge_memory
+    real(dp), intent(inout) :: solver_guess_by_bead(:, :)
+    type(oracle_bead_summary), intent(inout) :: summary
+    integer :: bead
+
+    call evaluate_oracle_shapes(positions_A, solver_guess_by_bead, charge_memory, summary)
+    do bead = 1, size(positions_A, 3)
+      call set_bead_charges(charge_memory, bead, summary%bead_charges(:, bead))
+    end do
+  end subroutine evaluate_zero_oracle_beads
 
   subroutine evaluate_oracle_beads(provider, positions_A, charge_memory, solver_guess_by_bead, &
       charge_policy, summary, step_index, stage_label)

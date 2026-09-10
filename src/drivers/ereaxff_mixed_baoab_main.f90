@@ -12,7 +12,7 @@ program ereaxff_mixed_baoab_main
   use ereaxff_charge_coupling_policy, only: charge_memory_state, init_charge_memory, &
       charge_policy_bead_local_acks2, charge_policy_is_valid, max_charge_difference_across_beads
   use ereaxff_oracle_adapter, only: oracle_adapter_state, oracle_adapter_init, oracle_adapter_shutdown
-  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads
+  use ereaxff_bead_force_manager, only: oracle_bead_summary, evaluate_oracle_beads, evaluate_zero_oracle_beads
   use ereaxff_mixed_baoab_restart, only: mixed_baoab_restart_state, write_mixed_baoab_restart, &
       read_mixed_baoab_restart
   use ereaxff_mixed_restart, only: write_charge_by_bead_summary, write_charge_centroid_summary, &
@@ -61,12 +61,12 @@ program ereaxff_mixed_baoab_main
   character(len=512) :: geometry_path
   character(len=1100) :: mkdir_command
   integer :: beads, steps, ios, step, start_step, energy_unit, spread_unit, heat_unit, xyz_unit
-  integer :: carbon_temp_unit, electron_temp_unit, electron_mode_temp_unit
+  integer :: carbon_temp_unit, electron_temp_unit, electron_mode_temp_unit, electron_mode_partition_unit
   integer :: nparticles
   integer :: pimd_count, output_stride, nquantum, q, primary_quantum, primary_beads
   real(dp) :: temperature_K, dt_fs, pimd_mass_amu
   type(rng_state) :: rng
-  logical :: config_mode, exists
+  logical :: config_mode, exists, force_off_mode
 
   call get_command_argument(1, arg1)
   call get_command_argument(2, arg2)
@@ -108,6 +108,7 @@ program ereaxff_mixed_baoab_main
     dt_fs = 0.1_dp
   end if
   if (.not. charge_policy_is_valid(policy_arg)) error stop "ereaxff_mixed_baoab_main: invalid charge policy"
+  force_off_mode = config_mode .and. trim(cfg%force_provider%provider_type) == "dummy"
   call get_environment_variable("EREAXFF_V1_ROOT", v1_root)
   call get_environment_variable("EREAXFF_V2_ROOT", v2_root)
   if (len_trim(v1_root) == 0) v1_root = "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V1"
@@ -134,8 +135,14 @@ program ereaxff_mixed_baoab_main
   write(*,'(a)') "thermostat mode: mixed_group"
   write(*,'(a)') "integrator mode: mixed_baoab"
   write(*,'(a)') "charge coupling mode: " // trim(policy_arg)
-  write(*,'(a)') "force provider: eReaxFF adapter"
-  if (config_mode) write(*,'(a,l1)') "oracle repeatability_check=", cfg%force_provider%repeatability_check
+  if (force_off_mode) then
+    write(*,'(a)') "force provider: dummy zero-force"
+  else
+    write(*,'(a)') "force provider: eReaxFF adapter"
+  end if
+  if (config_mode .and. .not. force_off_mode) then
+    write(*,'(a,l1)') "oracle repeatability_check=", cfg%force_provider%repeatability_check
+  end if
   write(*,'(a)') "geometry template: " // trim(cfg%geometry%template)
   if (config_mode) then
     write(*,'(a)') "input boundary: config-driven legacy V1/V2 fixtures"
@@ -275,7 +282,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a,3(1x,es12.4))') "electron_start_A:", state%position_A(:, quantum_indices(1))
 
   call init_charge_memory(charge_memory, nparticles, beads, policy_arg)
-  if (config_mode) then
+  if (config_mode .and. .not. force_off_mode) then
     adapter_work_root = join_path(output_dir, "adapter_work")
     if (len_trim(cfg%force_provider%work_root) > 0) adapter_work_root = trim(cfg%force_provider%work_root)
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), trim(adapter_work_root), &
@@ -290,7 +297,7 @@ program ereaxff_mixed_baoab_main
         stagger_launch_ms=cfg%force_provider%oracle_stagger_launch_ms, fail_fast=cfg%force_provider%oracle_fail_fast, &
         timeout_s=cfg%force_provider%oracle_timeout_s, repeatability_check=cfg%force_provider%repeatability_check, &
         persistent_worker_binary=trim(cfg%force_provider%persistent_worker_binary))
-  else
+  else if (.not. force_off_mode) then
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
   end if
   primary_quantum = quantum_indices(1)
@@ -305,8 +312,7 @@ program ereaxff_mixed_baoab_main
   pimd_mass_amu = quantum_masses_amu(1)
   masses = [pimd_mass_amu, pimd_mass_amu, pimd_mass_amu]
 
-  call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess, policy_arg, summary, start_step, &
-      "initial_force")
+  call evaluate_mixed_force_beads(start_step, "initial_force")
   output_stride = 1
   if (config_mode) output_stride = max(1, cfg%simulation%output_stride)
 
@@ -318,6 +324,8 @@ program ereaxff_mixed_baoab_main
   open(newunit=electron_temp_unit, file=join_path(output_dir, "electron_temperature.out"), status="replace", action="write")
   open(newunit=electron_mode_temp_unit, &
       file=join_path(output_dir, "electron_mode_temperature.out"), status="replace", action="write")
+  open(newunit=electron_mode_partition_unit, &
+      file=join_path(output_dir, "electron_mode_partition.out"), status="replace", action="write")
 
   write(energy_unit,'(a)') "# step kinetic_eV physical_potential_eV spring_eV conserved_like_eV charge_diff max_force"
   write(spread_unit,'(a)') "# step centroid_x centroid_y centroid_z bead_rms_spread_A"
@@ -329,6 +337,10 @@ program ereaxff_mixed_baoab_main
   write(electron_mode_temp_unit,'(a)') &
       "# step mode physical_equivalent_mode_temperature_K extended_mode_temperature_K expected_extended_mode_temperature_K " // &
       "extended_to_physical_ratio mode_ke_eV"
+  write(electron_mode_partition_unit,'(a)') &
+      "# step centroid_extended_mode_temperature_K internal_extended_mode_temperature_K " // &
+      "all_extended_mode_temperature_K physical_electron_temperature_K expected_extended_mode_temperature_K " // &
+      "centroid_ke_eV internal_ke_eV all_ke_eV centroid_ke_fraction"
 
   if (mod(start_step, output_stride) == 0 .or. start_step == steps) call write_step_outputs(start_step)
   step = start_step
@@ -336,7 +348,7 @@ program ereaxff_mixed_baoab_main
     call mixed_group_baoab_step(positions_A, classical_velocities, q_nm, v_nm, assignment, groups, quantum_indices, &
         quantum_bead_counts, state, rp, dt_fs, adapter, charge_memory, solver_guess, policy_arg, summary, rng, &
         step, &
-        quantum_thermostats, quantum_heat_eV, classical_heat_eV)
+        quantum_thermostats, quantum_heat_eV, classical_heat_eV, force_off_mode)
     step = step + 1
     if (mod(step, output_stride) == 0 .or. step == steps) call write_step_outputs(step)
   end do
@@ -348,6 +360,7 @@ program ereaxff_mixed_baoab_main
   close(carbon_temp_unit)
   close(electron_temp_unit)
   close(electron_mode_temp_unit)
+  close(electron_mode_partition_unit)
 
   call write_final_restart_and_compat()
 
@@ -356,7 +369,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a,es12.4)') "classical_thermostat_heat_eV = ", classical_heat_eV
   write(*,'(a,es12.4)') "quantum_thermostat_heat_eV = ", sum(quantum_heat_eV)
 
-  call oracle_adapter_shutdown(adapter)
+  if (.not. force_off_mode) call oracle_adapter_shutdown(adapter)
 
 contains
 
@@ -589,7 +602,8 @@ contains
     physical_potential_eV = summary%pimd_potential_eV
     max_force = maxval(abs(summary%scaled_forces_eV_per_A(:, primary_quantum, :)))
     charge_diff = max_charge_difference_across_beads(charge_memory)
-    call write_temperature_diagnostics(step_in, carbon_temp_unit, electron_temp_unit, electron_mode_temp_unit)
+    call write_temperature_diagnostics(step_in, carbon_temp_unit, electron_temp_unit, electron_mode_temp_unit, &
+        electron_mode_partition_unit)
     thermostat_heat_eV = classical_heat_eV + sum(quantum_heat_eV)
     conserved_like = nvt_conserved_like(kinetic_eV, physical_potential_eV, spring_eV, thermostat_heat_eV)
 
@@ -662,12 +676,26 @@ contains
     write(unit,'(a,3(1x,es22.14))') "El", centroid(1), centroid(2), centroid(3)
   end subroutine write_centroid_xyz_frame
 
-  subroutine write_temperature_diagnostics(step_in, carbon_unit, electron_unit, mode_unit)
-    integer, intent(in) :: step_in, carbon_unit, electron_unit, mode_unit
+  subroutine evaluate_mixed_force_beads(step_index, stage_label)
+    integer, intent(in) :: step_index
+    character(len=*), intent(in) :: stage_label
+
+    if (force_off_mode) then
+      call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess, summary)
+    else
+      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess, policy_arg, summary, step_index, &
+          stage_label)
+    end if
+  end subroutine evaluate_mixed_force_beads
+
+  subroutine write_temperature_diagnostics(step_in, carbon_unit, electron_unit, mode_unit, partition_unit)
+    integer, intent(in) :: step_in, carbon_unit, electron_unit, mode_unit, partition_unit
     real(dp) :: carbon_ke_eV, carbon_temp_K
     real(dp) :: electron_ke_eV, electron_temp_K, extended_electron_temp_K, expected_extended_temp_K
     real(dp) :: mode_ke_eV, mode_temp_K, extended_mode_temp_K, expected_extended_mode_temp_K
     real(dp) :: extended_temp_ratio
+    real(dp) :: centroid_ke_eV, internal_ke_eV, centroid_extended_temp_K, internal_extended_temp_K
+    real(dp) :: centroid_ke_fraction
     integer :: i, mode, carbon_count
 
     carbon_ke_eV = 0.0_dp
@@ -690,10 +718,24 @@ contains
     do mode = 1, primary_beads
       electron_ke_eV = electron_ke_eV + kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
     end do
+    centroid_ke_eV = kinetic_energy_1d_eV(v_nm(:, 1, 1), masses)
+    internal_ke_eV = electron_ke_eV - centroid_ke_eV
     extended_electron_temp_K = 2.0_dp * electron_ke_eV / &
         (3.0_dp * real(primary_beads, dp) * boltzmann_eV_per_K)
     electron_temp_K = extended_electron_temp_K / real(primary_beads, dp)
     expected_extended_temp_K = get_pimd_group_temperature(groups, assignment, primary_quantum) * real(primary_beads, dp)
+    centroid_extended_temp_K = 2.0_dp * centroid_ke_eV / (3.0_dp * boltzmann_eV_per_K)
+    if (primary_beads > 1) then
+      internal_extended_temp_K = 2.0_dp * internal_ke_eV / &
+          (3.0_dp * real(primary_beads - 1, dp) * boltzmann_eV_per_K)
+    else
+      internal_extended_temp_K = 0.0_dp
+    end if
+    if (electron_ke_eV > 0.0_dp) then
+      centroid_ke_fraction = centroid_ke_eV / electron_ke_eV
+    else
+      centroid_ke_fraction = 0.0_dp
+    end if
     if (electron_temp_K > 0.0_dp) then
       extended_temp_ratio = extended_electron_temp_K / electron_temp_K
     else
@@ -703,6 +745,9 @@ contains
     write(carbon_unit,'(i8,2(1x,es22.14))') step_in, carbon_temp_K, carbon_ke_eV
     write(electron_unit,'(i8,5(1x,es22.14))') step_in, electron_temp_K, extended_electron_temp_K, &
         expected_extended_temp_K, extended_temp_ratio, electron_ke_eV
+    write(partition_unit,'(i8,9(1x,es22.14))') step_in, centroid_extended_temp_K, internal_extended_temp_K, &
+        extended_electron_temp_K, electron_temp_K, expected_extended_temp_K, centroid_ke_eV, internal_ke_eV, &
+        electron_ke_eV, centroid_ke_fraction
     do mode = 1, primary_beads
       mode_ke_eV = kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
       extended_mode_temp_K = 2.0_dp * mode_ke_eV / (3.0_dp * boltzmann_eV_per_K)
@@ -777,7 +822,7 @@ contains
   subroutine mixed_group_baoab_step(positions_A, classical_velocities, q_nm, v_nm, assignment, groups_in, quantum_indices, &
       quantum_bead_counts, state_in, rp_in, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, rng, &
       step_index, &
-      quantum_thermostats, quantum_heat_eV, classical_heat_eV)
+      quantum_thermostats, quantum_heat_eV, classical_heat_eV, force_off_mode)
     real(dp), intent(inout) :: positions_A(:, :, :)
     real(dp), intent(inout) :: classical_velocities(:, :)
     real(dp), intent(inout) :: q_nm(:, :, :)
@@ -799,6 +844,7 @@ contains
     type(pile_l_thermostat_state), intent(inout) :: quantum_thermostats(:)
     real(dp), intent(inout) :: quantum_heat_eV(:)
     real(dp), intent(inout) :: classical_heat_eV
+    logical, intent(in) :: force_off_mode
     integer :: i, g, q
     real(dp) :: force_particle(3)
     real(dp) :: mass_amu
@@ -814,10 +860,18 @@ contains
 
     call replicate_classical_positions(positions_A, assignment, quantum_indices)
     if (present(step_index)) then
-      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
-          step_index, "group_pre_force")
+      if (force_off_mode) then
+        call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else
+        call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
+            step_index, "group_pre_force")
+      end if
     else
-      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+      if (force_off_mode) then
+        call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else
+        call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+      end if
     end if
 
     do i = 1, state_in%nparticles
@@ -850,17 +904,25 @@ contains
 
     call mixed_baoab_quantum_step(positions_A, q_nm, v_nm, quantum_indices, quantum_masses, rp_in, &
         quantum_bead_counts, dt_fs, adapter, charge_memory, solver_guess_by_bead, charge_policy, summary, &
-        quantum_thermostats, rng, state_in, step_index)
+        quantum_thermostats, rng, state_in, step_index, force_off_mode)
     do q = 1, size(quantum_indices)
       quantum_heat_eV(q) = quantum_thermostats(q)%heat_eV
     end do
 
     call replicate_classical_positions(positions_A, assignment, quantum_indices)
     if (present(step_index)) then
-      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
-          step_index, "group_post_force")
+      if (force_off_mode) then
+        call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else
+        call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary, &
+            step_index, "group_post_force")
+      end if
     else
-      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+      if (force_off_mode) then
+        call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+      else
+        call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+      end if
     end if
 
     do i = 1, state_in%nparticles

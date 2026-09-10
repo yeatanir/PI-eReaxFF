@@ -154,6 +154,12 @@ contains
     if (config%simulation%output_stride < 0) error stop "validate_input_config: output_stride must be non-negative"
     if (config%ring_polymer%default_beads < 1) error stop "validate_input_config: default_beads must be positive"
     if (len_trim(config%force_provider%provider_type) == 0) error stop "validate_input_config: force provider empty"
+    select case (trim(config%force_provider%provider_type))
+    case ("ereaxff_oracle", "dummy")
+      continue
+    case default
+      error stop "validate_input_config: unsupported force provider type"
+    end select
     select case (trim(config%force_provider%oracle_backend_mode))
     case ("external_process", "persistent_worker", "persistent_worker_pool")
       continue

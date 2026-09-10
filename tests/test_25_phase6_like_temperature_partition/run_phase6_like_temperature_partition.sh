@@ -20,16 +20,20 @@ import sys
 source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 target = pathlib.Path(sys.argv[2])
 out_dir = sys.argv[3]
-source = source.replace("  steps: 100", "  steps: 20")
-source = source.replace("  output_stride: 10", "  output_stride: 5")
+source = source.replace("  steps: 100", "  steps: 1")
+source = source.replace("  output_stride: 10", "  output_stride: 1")
 source = source.replace("  restart_stride: 20", "  restart_stride: 10")
 source = source.replace("  output_dir: \"\"", f"  output_dir: \"{out_dir}\"")
+source = source.replace(
+    "  type: ereaxff_oracle",
+    f"  type: ereaxff_oracle\n  smoke_binary: \"{pathlib.Path(sys.argv[1]).parent.parent / 'build' / 'oracle_single_point_force_export'}\"\n  repeatability_check: false",
+)
 target.write_text(source, encoding="utf-8")
 PY
 
 "$ROOT_DIR/build/ereaxff_mixed_baoab_main" "$cfg" "$out" > "$out/stdout.log"
 
-for file in carbon_temperature.out electron_temperature.out electron_mode_temperature.out thermostat_heat.out fort.7 fort.8 molfra.out centroid.xyz restart.dat; do
+for file in carbon_temperature.out electron_temperature.out electron_mode_temperature.out electron_mode_partition.out thermostat_heat.out fort.7 fort.8 molfra.out centroid.xyz restart.dat; do
   if [[ ! -s "$out/$file" ]]; then
     echo "test_25_phase6_like_temperature_partition: FAIL missing $file" | tee "$SUMMARY"
     exit 1
@@ -52,6 +56,7 @@ fi
 carbon_last=$(awk 'NF && $1 !~ /^#/ {v=$2} END {print v}' "$out/carbon_temperature.out")
 electron_last=$(awk 'NF && $1 !~ /^#/ {v=$2} END {print v}' "$out/electron_temperature.out")
 mode_lines=$(grep -vc '^#' "$out/electron_mode_temperature.out")
+partition_lines=$(grep -vc '^#' "$out/electron_mode_partition.out")
 heat_last=$(awk 'NF && $1 !~ /^#/ {v=$2} END {print v}' "$out/thermostat_heat.out")
 
 python3 - "$carbon_last" "$electron_last" "$heat_last" <<'PY'
@@ -73,5 +78,6 @@ PY
   echo "  electron_temperature_K = $electron_last"
   echo "  thermostat_heat_eV = $heat_last"
   echo "  electron_mode_rows = $mode_lines"
+  echo "  electron_partition_rows = $partition_lines"
   echo "  hot_electron_status = diagnostic_only"
 } | tee "$SUMMARY"

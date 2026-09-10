@@ -153,7 +153,7 @@ test_23_ereaxff_mixed_baoab_geometry_matrix: ereaxff_mixed_baoab_main $(BUILD_DI
 test_24_ereaxff_mixed_baoab_user_geo_matrix: ereaxff_mixed_baoab_main $(BUILD_DIR) $(MOD_DIR)
 	tests/test_24_ereaxff_mixed_baoab_user_geo_matrix/run_ereaxff_mixed_baoab_user_geo_matrix.sh
 
-test_25_phase6_like_temperature_partition: ereaxff_mixed_baoab_main $(BUILD_DIR) $(MOD_DIR)
+test_25_phase6_like_temperature_partition: ereaxff_mixed_baoab_main oracle_single_point_force_export $(BUILD_DIR) $(MOD_DIR)
 	tests/test_25_phase6_like_temperature_partition/run_phase6_like_temperature_partition.sh
 
 test_26_crystx_periodic_loader: $(BUILD_DIR) $(MOD_DIR)
