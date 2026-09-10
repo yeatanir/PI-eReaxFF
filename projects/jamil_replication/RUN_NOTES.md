@@ -148,6 +148,36 @@ P=4/one-step verification:
 
 This is the first real throughput win: the previous direct single-worker P=4 timing was about four serial bead calls per force stage, while the pool now makes each P=4 force stage cost close to one 225-particle direct call.
 
+## 2026-09-10 P Sweep At 4 Workers
+
+Command:
+
+```bash
+projects/jamil_replication/run_jamil_p_sweep.sh
+```
+
+Environment defaults:
+
+- `JAMIL_P_SWEEP_WORKERS=4`
+- `JAMIL_P_SWEEP_OMP_THREADS=4`
+- `JAMIL_P_SWEEP_STEPS=1`
+- `JAMIL_P_SWEEP_DT_FS=0.1`
+
+Results:
+
+| P | Wall time | Oracle calls | Batches | Mean batch | Electron T | Extended T | Expected extended T | Ratio | Carbon T | Quantum heat | Bead RMS spread | Status |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 4 | 137.893 s | 20 | 5 | 20.254 s | 316.700 K | 1266.801 K | 1200.000 K | 4.000 | 292.973 K | 1.430712 eV | 0.005341 A | PASS |
+| 8 | 237.698 s | 40 | 10 | 19.954 s | 368.316 K | 2946.529 K | 2400.000 K | 8.000 | 292.973 K | -4.582652 eV | 0.008395 A | PASS |
+| 16 | 432.735 s | 80 | 20 | 19.833 s | 505.433 K | 8086.934 K | 4800.000 K | 16.000 | 292.973 K | 10.371555 eV | 0.013097 A | PASS |
+
+Interpretation:
+
+- The pool speed scales as expected: the per-batch force cost stays about `20 s`, and wall time grows with `ceil(P / 4)`.
+- The extended-to-physical diagnostic ratio is exactly P, so that part is just the scaled-Hamiltonian bookkeeping.
+- The physical electron temperature still increases with P at fixed `dt_fs=0.1`, so the hot-electron issue is real and is not only a diagnostic-label problem.
+- Carbon temperature remains stable near `293 K`, so the P-sensitive heating is isolated to the electron PIMD path.
+
 ## 2026-05-08 Partial Dispatch Sweep
 
 I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.
