@@ -472,6 +472,8 @@ if real_dataset.exists():
         "coulomb",
         "electron_core",
         "electron_electron",
+        "lone_pair",
+        "overcoordination",
         "penalty",
         "torsion",
         "torsion_conjugation",
@@ -480,10 +482,12 @@ if real_dataset.exists():
     }
     assert abs(response["energy_terms_eV"]["valence"][0] - 4.930837527913495) < 1.0e-10
     assert abs(response["energy_terms_eV"]["penalty"][0] - 0.04994792351223957) < 1.0e-10
+    assert abs(response["energy_terms_eV"]["lone_pair"][0]) < 1.0e-12
+    assert abs(response["energy_terms_eV"]["overcoordination"][0] + 0.047613000566716114) < 1.0e-10
     assert abs(response["energy_terms_eV"]["electron_core"][0]) < 1.0e-12
     assert abs(response["energy_terms_eV"]["electron_electron"][0]) < 1.0e-12
-    assert abs(response["energy_eV"][0] + 10.791805565593878) < 1.0e-10
-    assert abs(response["forces_eV_per_A"][0][2][1] + 12.263151967963509) < 1.0e-10
+    assert abs(response["energy_eV"][0] + 10.839418566160594) < 1.0e-10
+    assert abs(response["forces_eV_per_A"][0][2][1] + 12.689082934581952) < 1.0e-10
 
     completed = subprocess.run(
         [
@@ -543,8 +547,10 @@ if real_dataset.exists():
     torsion_terms = {key: float(value) for key, value in torsion_output["energy_terms_eV"].items()}
     assert abs(torsion_terms["torsion"] - 0.1283796427711645) < 1.0e-12
     assert abs(torsion_terms["torsion_conjugation"] + 0.09034874251558697) < 1.0e-12
+    assert abs(torsion_terms["lone_pair"]) < 1.0e-12
+    assert abs(torsion_terms["overcoordination"] + 0.025368940232967648) < 1.0e-12
     assert abs(sum(torsion_terms.values()) - float(torsion_output["energy_eV"])) < 1.0e-12
-    assert abs(float(torsion_output["energy_eV"]) + 13.114098449985388) < 1.0e-12
+    assert abs(float(torsion_output["energy_eV"]) + 13.139467390218355) < 1.0e-12
 
     torsion_eps = 1.0e-6
     torsion_plus = json.loads(json.dumps(torsion_case))

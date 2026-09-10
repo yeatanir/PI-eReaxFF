@@ -110,6 +110,7 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
     vval3_by_symbol: dict[str, float] = {}
     vval4_by_symbol: dict[str, float] = {}
     alphag_by_symbol: dict[str, float] = {}
+    vincr_by_symbol: dict[str, float] = {}
     bo131_by_symbol: dict[str, float] = {}
     bo132_by_symbol: dict[str, float] = {}
     bo133_by_symbol: dict[str, float] = {}
@@ -150,6 +151,7 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
         pxel2_by_symbol[symbol] = float(second[4])
         vnq_by_symbol[symbol] = float(third[0])
         vlp1_by_symbol[symbol] = float(third[1])
+        vincr_by_symbol[symbol] = float(third[2])
         bo131_by_symbol[symbol] = float(third[3])
         bo132_by_symbol[symbol] = float(third[4])
         bo133_by_symbol[symbol] = float(third[5])
@@ -320,6 +322,7 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
         "vval3_by_symbol": vval3_by_symbol,
         "vval4_by_symbol": vval4_by_symbol,
         "alphag_by_symbol": alphag_by_symbol,
+        "vincr_by_symbol": vincr_by_symbol,
         "bo131_by_symbol": bo131_by_symbol,
         "bo132_by_symbol": bo132_by_symbol,
         "bo133_by_symbol": bo133_by_symbol,
@@ -785,6 +788,8 @@ def reaxff_corrected_bond_nonbonded_valence_terms(
         bond_inputs,
         cell_lengths,
     )
+    if electron_inputs is not None:
+        terms.update(reaxff_lone_pair_overcoordination_terms(positions_A, bond_inputs, electron_inputs, cell_lengths))
     if topology is None:
         terms.update(reaxff_valence_angle_terms(positions_A, atom_type_indices, bond_inputs, angle_inputs, cell_lengths))
     else:
@@ -1126,6 +1131,23 @@ def _electron_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
     }
 
 
+def _electron_valence_sign_array(case: dict[str, Any]):
+    _enable_jax_x64()
+    import jax.numpy as jnp
+
+    valence_down = {"C", "O", "H", "F", "N", "Os"}
+    valence_up = {"Li", "Lv", "P", "B", "Av", "Al"}
+    values = []
+    for symbol in case["atom_types"]:
+        if symbol in valence_down:
+            values.append(-1.0)
+        elif symbol in valence_up:
+            values.append(1.0)
+        else:
+            values.append(0.0)
+    return jnp.asarray(values, dtype=jnp.float64)
+
+
 def _assert_electron_only_case(case: dict[str, Any]) -> None:
     if any(symbol == "Ho" for symbol in case["atom_types"]):
         raise ValueError("JAX eReaxFF fast backend supports electron-only inputs; Ho/hole particles are unsupported")
@@ -1427,6 +1449,119 @@ def reaxff_corrected_bond_energy(
     sigma_power = sigma_order**psp
     pair_energy_kcal = -de1 * sigma_order * jnp.exp(psi * (1.0 - sigma_power)) - de2 * pi - de3 * pipi
     return 0.5 * jnp.sum(jnp.where(active, KCAL_TO_EV * pair_energy_kcal, 0.0))
+
+
+def electron_corrected_valencies(
+    positions_A,
+    aval,
+    stlp,
+    vincr,
+    electron_valence_sign,
+    is_electron,
+):
+    """Legacy `elecpos` electron sharing for electron-only eReaxFF inputs."""
+
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    displacement = positions[:, None, :] - positions[None, :, :]
+    distance2 = jnp.sum(displacement * displacement, axis=-1)
+    is_core = ~is_electron
+    share = jnp.exp(-vincr[:, None] * distance2)
+    core_electron_share = jnp.where(is_core[:, None] & is_electron[None, :], share, 0.0)
+    eshare2 = jnp.sum(core_electron_share, axis=1)
+    avalc = aval + electron_valence_sign * eshare2
+    stlpc = stlp + jnp.where(is_core, eshare2, 0.0)
+    return avalc, stlpc, eshare2
+
+
+def reaxff_lone_pair_overcoordination_terms(
+    positions_A,
+    bond_inputs,
+    electron_inputs,
+    cell_lengths=None,
+):
+    """Source-derived `lonpar` and `ovcor` energy terms."""
+
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    total, _, pi, pipi, active = corrected_bond_orders(
+        positions,
+        bond_inputs["rat"],
+        bond_inputs["rapt"],
+        bond_inputs["vnq"],
+        bond_inputs["rob1"],
+        bond_inputs["rob2"],
+        bond_inputs["rob3"],
+        bond_inputs["de1"],
+        bond_inputs["pdo"],
+        bond_inputs["popi"],
+        bond_inputs["pdp"],
+        bond_inputs["ptp"],
+        bond_inputs["bop1"],
+        bond_inputs["bop2"],
+        bond_inputs["bond_mask"],
+        bond_inputs["cutoff"],
+        bond_inputs["aval"],
+        bond_inputs["vval3"],
+        bond_inputs["bo131"],
+        bond_inputs["bo132"],
+        bond_inputs["bo133"],
+        bond_inputs["ovc"],
+        bond_inputs["v13cor"],
+        bond_inputs["overcoordination_parameter"],
+        bond_inputs["overcoordination_log_parameter"],
+        cell_lengths,
+    )
+    avalc, stlpc, eshare2 = electron_corrected_valencies(
+        positions,
+        bond_inputs["aval"],
+        bond_inputs["stlp"],
+        bond_inputs["vincr"],
+        bond_inputs["electron_valence_sign"],
+        electron_inputs["is_electron"],
+    )
+    abo = jnp.sum(total, axis=1)
+    vund = abo - stlpc
+    int_half_vund = jnp.trunc(vund / 2.0)
+    vlpex = vund - 2.0 * int_half_vund
+    vlp = jnp.exp(-bond_inputs["general_parameters"][15] * (2.0 + vlpex) * (2.0 + vlpex)) - int_half_vund
+    voptlp = 0.5 * (stlpc - avalc)
+    diffvlp = voptlp - vlp
+    hulp1 = 1.0 / (1.0 + jnp.exp(-75.0 * diffvlp))
+    lone_pair = bond_inputs["vlp1"] * diffvlp * hulp1
+
+    first_row = bond_inputs["amas"] <= 31.0
+    dfvl = jnp.where(first_row, 1.0, 0.0)
+    vlptemp = jnp.where(first_row, vlp, voptlp)
+    diffvlph = dfvl * (voptlp - vlptemp)
+
+    safe_abo = jnp.maximum(abo, 1.0e-12)
+    sumov33 = jnp.sum(jnp.where(active, bond_inputs["pxel1"] * total / safe_abo[:, None], 0.0), axis=1)
+    neighbor_excess = (
+        jnp.exp(-bond_inputs["pxel2"][None, :] * eshare2[None, :] * sumov33[None, :])
+        * (abo[None, :] - avalc[None, :])
+        - dfvl[:, None] * (voptlp[None, :] - vlptemp[None, :])
+    )
+    sumov = jnp.sum(jnp.where(active, (pi + pipi) * neighbor_excess, 0.0), axis=1)
+    sumov2 = jnp.sum(jnp.where(active, bond_inputs["vover"] * bond_inputs["de1"] * total, 0.0), axis=1)
+    sumov3 = jnp.sum(jnp.where(active, bond_inputs["pxel1"] * total / safe_abo[:, None], 0.0), axis=1)
+
+    vho = 1.0 / (1.0 + bond_inputs["general_parameters"][32] * jnp.exp(bond_inputs["general_parameters"][31] * sumov))
+    vov1 = (
+        jnp.exp(-bond_inputs["pxel2"] * eshare2 * sumov3)
+        * (abo - avalc)
+        - diffvlph * vho
+    )
+    hulpo = 1.0 / (1.0 + jnp.exp(bond_inputs["vovun"] * vov1))
+    hulpp = 1.0 / (vov1 + avalc + 1.0e-8)
+    overcoordination = sumov2 * hulpp * hulpo * vov1
+    core_mask = ~electron_inputs["is_electron"]
+    return {
+        "lone_pair": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, lone_pair, 0.0)),
+        "overcoordination": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, overcoordination, 0.0)),
+    }
 
 
 def reaxff_valence_angle_terms(
@@ -2030,6 +2165,7 @@ def evaluate_reaxff_no_inner_shielded_nonbonded_case(case: dict[str, Any]) -> di
 
 
 def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
+    amas = _parameter_array(case, parameters["amas_by_symbol"], "atomic mass")
     aval = _parameter_array(case, parameters["aval_by_symbol"], "valency")
     stlp = _parameter_array(case, parameters["stlp_by_symbol"], "lone-pair valency")
     valf = _parameter_array(case, parameters["valf_by_symbol"], "valence-angle valency")
@@ -2043,6 +2179,7 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
     vnq = _parameter_array(case, parameters["vnq_by_symbol"], "double-pi covalent radius")
     vval3 = _parameter_array(case, parameters["vval3_by_symbol"], "1-3 valency")
     vval4 = _parameter_array(case, parameters["vval4_by_symbol"], "valence undercoordination damping")
+    vincr = _parameter_array(case, parameters["vincr_by_symbol"], "electron valency increment")
     bo131 = _parameter_array(case, parameters["bo131_by_symbol"], "1-3 correction parameter 1")
     bo132 = _parameter_array(case, parameters["bo132_by_symbol"], "1-3 correction parameter 2")
     bo133 = _parameter_array(case, parameters["bo133_by_symbol"], "1-3 correction parameter 3")
@@ -2062,7 +2199,10 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
     bop2, _ = _bond_parameter_matrix(case, parameters, "bop2")
     ovc, _ = _bond_parameter_matrix(case, parameters, "ovc")
     v13cor, _ = _bond_parameter_matrix(case, parameters, "v13cor")
+    pxel1, _ = _bond_parameter_matrix(case, parameters, "pxel1")
+    vover, _ = _bond_parameter_matrix(case, parameters, "vover")
     return {
+        "amas": amas,
         "aval": aval,
         "stlp": stlp,
         "valf": valf,
@@ -2076,6 +2216,8 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
         "vnq": vnq,
         "vval3": vval3,
         "vval4": vval4,
+        "vincr": vincr,
+        "electron_valence_sign": _electron_valence_sign_array(case),
         "bo131": bo131,
         "bo132": bo132,
         "bo133": bo133,
@@ -2095,6 +2237,8 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
         "bop2": bop2,
         "ovc": ovc,
         "v13cor": v13cor,
+        "pxel1": pxel1,
+        "vover": vover,
         "bond_mask": bond_mask,
         "cutoff": float(parameters["bond_order_cutoff"]),
         "overcoordination_parameter": float(parameters["overcoordination_parameter"]),

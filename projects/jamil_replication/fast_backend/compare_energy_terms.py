@@ -14,8 +14,8 @@ from jax_force_kernel import evaluate_force_batch
 
 LEGACY_TO_JAX = {
     "bond": "bond",
-    "overcoordination": (),
-    "lone_pair": (),
+    "overcoordination": "overcoordination",
+    "lone_pair": "lone_pair",
     "molecule": (),
     "valence_penalty": ("valence", "penalty"),
     "angle_conjugation": "angle_conjugation",
