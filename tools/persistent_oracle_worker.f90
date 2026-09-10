@@ -15,6 +15,19 @@ program persistent_oracle_worker
   character(len=512) :: work_dir, summary_path, forces_path, completion_path
   logical :: first_request
 
+  interface
+    subroutine ereaxff_force_oracle_init()
+    end subroutine ereaxff_force_oracle_init
+    subroutine ereaxff_force_eval(x_all, natom_eval, charge_in, acks2_solver_guess_in, energy_kcal, forces_work, &
+        charge_out, acks2_solver_guess_out, status)
+      integer :: natom_eval, status
+      double precision :: x_all(3,*), charge_in(*)
+      double precision :: acks2_solver_guess_in(*), energy_kcal
+      double precision :: forces_work(3,*), charge_out(*)
+      double precision :: acks2_solver_guess_out(*)
+    end subroutine ereaxff_force_eval
+  end interface
+
   call get_command_argument(1, control_path)
   call get_command_argument(2, ffield_path)
   call get_command_argument(3, iopt_path)
@@ -36,6 +49,7 @@ program persistent_oracle_worker
   first_request = .true.
 
   call stage_static_inputs(trim(worker_root), trim(control_path), trim(ffield_path), trim(iopt_path), trim(geo_path))
+  call ereaxff_force_oracle_init()
   call write_text_file(trim(ready_file), "ready")
 
   do
@@ -63,7 +77,7 @@ contains
     character(len=*), intent(out) :: stage_out, work_dir_out
     real(dp), intent(out) :: energy_out, force_out(:, :), charge_out(:), solver_out(:), charge_sum_out, max_force_out
     integer :: unit, i, atom_index, start_count_local, end_count_local, rate
-    character(len=512) :: line, command
+    character(len=512) :: line
     character(len=64) :: worker_state
 
     open(newunit=unit, file=trim(request_path), status="old", action="read", iostat=ios)
@@ -94,12 +108,12 @@ contains
 
     call system_clock(start_count_local, rate)
     if (rate <= 0) stop "persistent_oracle_worker: system clock unavailable"
-    command = "cd " // shell_quote(trim(work_dir_out)) // " && " // shell_quote(trim(smoke_binary))
-    call run_shell(trim(command), status_out)
+    call ereaxff_force_eval(x, natom_out, charge_in, solver_in, energy_out, force_out, charge_out, solver_out, status_out)
     call system_clock(end_count_local)
 
-    call parse_single_point_summary(trim(summary_path), energy_out, max_force_out, charge_sum_out, status_out, natom_out)
-    call parse_single_point_forces(trim(forces_path), force_out, charge_out, solver_out)
+    call summarize_force_result(natom_out, force_out, charge_out, max_force_out, charge_sum_out)
+    call write_summary(trim(summary_path), energy_out, max_force_out, charge_sum_out, status_out, natom_out)
+    call write_force_file(trim(forces_path), natom_out, force_out, charge_out, solver_out)
     if (first_request_inout) then
       worker_state = "startup"
     else
@@ -521,6 +535,22 @@ contains
     end do
     close(unit)
   end subroutine parse_single_point_forces
+
+  subroutine summarize_force_result(natom, force_in, charge_in, max_force, charge_sum)
+    integer, intent(in) :: natom
+    real(dp), intent(in) :: force_in(:, :), charge_in(:)
+    real(dp), intent(out) :: max_force, charge_sum
+    integer :: i
+
+    max_force = 0.0_dp
+    charge_sum = 0.0_dp
+    do i = 1, natom
+      max_force = max(max_force, abs(force_in(1, i)))
+      max_force = max(max_force, abs(force_in(2, i)))
+      max_force = max(max_force, abs(force_in(3, i)))
+      charge_sum = charge_sum + charge_in(i)
+    end do
+  end subroutine summarize_force_result
 
   subroutine run_shell(command, exitstat)
     character(len=*), intent(in) :: command

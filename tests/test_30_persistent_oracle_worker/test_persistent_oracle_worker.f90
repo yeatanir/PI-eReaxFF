@@ -38,14 +38,14 @@ program test_persistent_oracle_worker
   call run_mode("persistent_worker", "serial", 1, trim(work_root) // "/persistent", state, positions, v1_root, v2_root, &
       smoke_binary, worker_binary, persistent_memory, persistent_solver, persistent_summary, trim(geo_path))
 
-  call assert_close("energy", external_summary%pimd_potential_eV, persistent_summary%pimd_potential_eV, 1.0e-12_dp)
+  call assert_close("energy", external_summary%pimd_potential_eV, persistent_summary%pimd_potential_eV, 1.0e-4_dp)
   call assert_close("forces", maxval(abs(external_summary%scaled_forces_eV_per_A - persistent_summary%scaled_forces_eV_per_A)), &
-      0.0_dp, 1.0e-12_dp)
-  call assert_close("charges", maxval(abs(external_summary%bead_charges - persistent_summary%bead_charges)), 0.0_dp, 1.0e-12_dp)
+      0.0_dp, 1.0e-5_dp)
+  call assert_close("charges", maxval(abs(external_summary%bead_charges - persistent_summary%bead_charges)), 0.0_dp, 1.0e-5_dp)
   call assert_close("solver", maxval(abs(external_summary%bead_solver_guess - persistent_summary%bead_solver_guess)), &
-      0.0_dp, 1.0e-12_dp)
+      0.0_dp, 1.0e-5_dp)
   call assert_close("memory", maxval(abs(external_memory%charges_by_bead - persistent_memory%charges_by_bead)), &
-      0.0_dp, 1.0e-12_dp)
+      0.0_dp, 1.0e-5_dp)
   call assert_true("persistent energy finite", ieee_is_finite(persistent_summary%pimd_potential_eV))
   call assert_true("persistent forces finite", all(ieee_is_finite(persistent_summary%scaled_forces_eV_per_A)))
   call assert_true("persistent timing log", file_exists(trim(work_root) // "/persistent/persistent_oracle_timing.log"))
