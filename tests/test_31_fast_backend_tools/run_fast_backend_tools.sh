@@ -100,6 +100,23 @@ cat > "$CALL_DIR/single_point_forces.out" <<'EOF'
 1  1.0  0.0  0.0  0.5  0.0
 2 -1.0  0.0  0.0 -0.5  0.0
 EOF
+cat > "$CALL_DIR/single_point_energy_terms.out" <<'EOF'
+# term energy_kcal
+bond -4.0
+overcoordination 0.5
+lone_pair 0.25
+molecule 0.0
+valence_penalty 1.0
+angle_conjugation -0.25
+hydrogen_bond 0.0
+torsion 0.75
+torsion_conjugation -0.125
+vdw 2.0
+coulomb -9.625
+charge 0.0
+external_field 0.0
+electron -0.5
+EOF
 
 python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
   --adapter-work "$WORK_DIR" \
@@ -117,6 +134,20 @@ import subprocess
 from pathlib import Path
 
 case = json.loads(Path("build/test_31_fast_backend_tools/labeled_cases.jsonl").read_text())
+terms = case["labels"]["energy_terms_kcal"]
+assert terms["bond"] == -4.0
+assert terms["electron"] == -0.5
+assert abs(sum(case["labels"]["energy_terms_eV"].values()) - case["labels"]["energy_eV"]) < 1.0e-12
+
+import sys
+sys.path.insert(0, "projects/jamil_replication/fast_backend")
+from build_oracle_dataset import parse_energy_terms
+
+fort73 = Path("build/test_31_fast_backend_tools/fort73_sample.out")
+fort73.write_text("7 -4.0 0.5 0.25 0.0 1.0 -0.25 0.0 0.75 -0.125 2.0 -9.625 0.0 0.0 -0.5\n")
+_, fort73_terms_eV = parse_energy_terms(fort73)
+assert abs(sum(fort73_terms_eV.values()) - case["labels"]["energy_eV"]) < 1.0e-12
+
 request = json.dumps({"command": "charge_batch", "cases": [case, case]})
 completed = subprocess.run(
     [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
@@ -185,8 +216,6 @@ assert abs(response["energy_eV"][0] + 1.0529536968375994) < 1.0e-12
 assert abs(response["forces_eV_per_A"][0][0][0] - 0.03734168384345882) < 1.0e-12
 assert abs(response["forces_eV_per_A"][0][1][0] + 0.03734168384345882) < 1.0e-12
 
-import sys
-sys.path.insert(0, "projects/jamil_replication/fast_backend")
 from jax_force_kernel import evaluate_reaxff_shielded_coulomb_case
 from jax_force_kernel import evaluate_reaxff_corrected_bond_nonbonded_valence_case
 from jax_force_kernel import parse_ffield_coulomb_parameters

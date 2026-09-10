@@ -15,6 +15,30 @@ from typing import Any
 
 KCAL_TO_EV = 0.043364
 SCHEMA = "ereaxff_fast_backend_oracle_case_v1"
+ENERGY_TERM_NAMES = [
+    "bond",
+    "overcoordination",
+    "lone_pair",
+    "molecule",
+    "valence_penalty",
+    "angle_conjugation",
+    "hydrogen_bond",
+    "torsion",
+    "torsion_conjugation",
+    "vdw",
+    "coulomb",
+    "charge",
+    "external_field",
+    "electron",
+]
+
+
+def looks_float(value: str) -> bool:
+    try:
+        float(value)
+    except ValueError:
+        return False
+    return True
 
 
 def parse_restart(path: Path) -> dict[str, Any]:
@@ -322,6 +346,45 @@ def parse_summary(path: Path) -> dict[str, Any]:
     }
 
 
+def parse_energy_terms(path: Path) -> tuple[dict[str, float], dict[str, float]] | None:
+    if not path.exists():
+        return None
+    rows = [
+        line.split()
+        for line in path.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not rows:
+        return None
+
+    first_tokens = [row[0] for row in rows if row]
+    if first_tokens and not any(looks_float(token) for token in first_tokens):
+        terms_kcal = {}
+        for row in rows:
+            if len(row) < 2:
+                raise ValueError(f"{path}: malformed named energy-term row")
+            name = row[0]
+            if name not in ENERGY_TERM_NAMES:
+                raise ValueError(f"{path}: unexpected energy term {name!r}")
+            terms_kcal[name] = float(row[1])
+    else:
+        row = rows[-1]
+        values = [float(value) for value in row[1:]]
+        if len(values) < len(ENERGY_TERM_NAMES):
+            raise ValueError(f"{path}: expected at least {len(ENERGY_TERM_NAMES)} term values, got {len(values)}")
+        terms_kcal = dict(zip(ENERGY_TERM_NAMES, values[: len(ENERGY_TERM_NAMES)]))
+
+    terms_eV = {name: value * KCAL_TO_EV for name, value in terms_kcal.items()}
+    return terms_kcal, terms_eV
+
+
+def parse_optional_energy_terms(call_dir: Path) -> tuple[dict[str, float], dict[str, float]] | None:
+    named = parse_energy_terms(call_dir / "single_point_energy_terms.out")
+    if named is not None:
+        return named
+    return parse_energy_terms(call_dir / "fort.73")
+
+
 def parse_forces(path: Path, nparticles: int) -> tuple[list[list[float]], list[float], list[float]]:
     forces: list[list[float]] = []
     charges: list[float] = []
@@ -373,12 +436,28 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
         control = parse_control(call_dir / "control")
         charge_in, solver_in = parse_charge_memory(call_dir / "charge_memory.in")
         summary = parse_summary(call_dir / "phase4_single_point_oracle.out")
+        energy_terms = parse_optional_energy_terms(call_dir)
         forces, charge_out, solver_out = parse_forces(call_dir / "single_point_forces.out", summary["nparticles"])
         nparticles = summary["nparticles"]
         fixed_charges = fixed_charges_from_molcharges(nparticles, molcharges)
         charge_model = "fixed_molcharge" if control.get("icharg") == 8 and fixed_charges is not None else "acks2"
         if len(positions) != nparticles or len(charge_in) != nparticles or len(solver_in) != nparticles:
             raise ValueError(f"{call_dir}: inconsistent particle counts")
+        labels = {
+            "energy_kcal": summary["energy_kcal"],
+            "energy_eV": summary["energy_eV"],
+            "forces_eV_per_A": forces,
+            "charge_out": charge_out,
+            "solver_guess_out": solver_out,
+            "max_force": summary["max_force"],
+            "charge_sum": summary["charge_sum"],
+            "status": summary["status"],
+        }
+        if energy_terms is not None:
+            terms_kcal, terms_eV = energy_terms
+            labels["energy_terms_kcal"] = terms_kcal
+            labels["energy_terms_eV"] = terms_eV
+
         cases.append(
             {
                 "schema": SCHEMA,
@@ -409,16 +488,7 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
                 "charge_in": charge_in,
                 "solver_guess_in": solver_in,
                 "run_energy_tail": None,
-                "labels": {
-                    "energy_kcal": summary["energy_kcal"],
-                    "energy_eV": summary["energy_eV"],
-                    "forces_eV_per_A": forces,
-                    "charge_out": charge_out,
-                    "solver_guess_out": solver_out,
-                    "max_force": summary["max_force"],
-                    "charge_sum": summary["charge_sum"],
-                    "status": summary["status"],
-                },
+                "labels": labels,
             }
         )
     return cases
@@ -447,6 +517,14 @@ def check_jsonl(path: Path) -> int:
                 raise ValueError(f"{path}:{line_number}: charge label particle count mismatch")
             if len(labels["solver_guess_out"]) != case["nparticles"]:
                 raise ValueError(f"{path}:{line_number}: solver label particle count mismatch")
+            if "energy_terms_eV" in labels:
+                energy_terms = labels["energy_terms_eV"]
+                if not isinstance(energy_terms, dict) or not energy_terms:
+                    raise ValueError(f"{path}:{line_number}: invalid energy_terms_eV label")
+                for name, value in energy_terms.items():
+                    if name not in ENERGY_TERM_NAMES:
+                        raise ValueError(f"{path}:{line_number}: unexpected energy term {name!r}")
+                    float(value)
             labeled += 1
         count += 1
     print(f"checked {count} cases in {path}; labeled={labeled}; labels_ready={labeled == count and count > 0}")
