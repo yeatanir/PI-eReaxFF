@@ -164,10 +164,25 @@ def evaluate_from_stdin(allow_unvalidated: bool) -> int:
         print(json.dumps(response, sort_keys=True))
         return 0
     if request.get("command") == "force_batch":
+        force_kernel = request.get("force_kernel", "validated")
+        if force_kernel != "validated" and not allow_unvalidated:
+            print(
+                json.dumps(
+                    {
+                        "status": 2,
+                        "command": "force_batch",
+                        "diagnostic": "experimental force kernels require --allow-unvalidated",
+                        "force_kernel": force_kernel,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 2
         try:
             batch = evaluate_force_batch(
                 request.get("cases", []),
                 allow_replay=bool(request.get("allow_oracle_replay", False)),
+                kernel=force_kernel,
             )
         except NotImplementedError as exc:
             print(
@@ -185,6 +200,7 @@ def evaluate_from_stdin(allow_unvalidated: bool) -> int:
             "status": 0,
             "command": "force_batch",
             "kernel": batch["kernel"],
+            "requested_force_kernel": force_kernel,
             "fingerprints": batch["fingerprints"],
             "energy_eV": batch["energy_eV"].tolist(),
             "forces_eV_per_A": batch["forces_eV_per_A"].tolist(),

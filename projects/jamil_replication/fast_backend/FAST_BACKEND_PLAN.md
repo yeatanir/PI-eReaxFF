@@ -34,5 +34,10 @@ removing the exact legacy oracle.
   fixed-`MOLCHARGE` path and reports charge parity against oracle labels.
 - A strict oracle-replay force kernel now validates batched response shape and
   parity plumbing, while failing closed unless replay is explicitly requested.
+- An experimental fixed-charge Coulomb-only JAX kernel now exercises real
+  energy/force autodiff and batching behind `--allow-unvalidated`.
 - Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
-  fail-closed until their parity kernels are implemented.
+  fail-closed until their parity kernels are implemented.  The next force work
+  should replace the unshielded Coulomb slice with the exact eReaxFF
+  shielded/tapered Coulomb term, then add vdW and bond-order terms
+  term-by-term against oracle labels.

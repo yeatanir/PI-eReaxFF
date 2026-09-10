@@ -83,10 +83,15 @@ nonzero solver state.
 
 ## Force Kernel Status
 
-`jax_force_kernel.py` currently provides only strict oracle-label replay.  It
-is not a physics kernel and it must not be used to extrapolate to new
-geometries.  Its purpose is to lock the batched force protocol and parity
-metrics before the eReaxFF energy terms are ported.
+`jax_force_kernel.py` currently provides two gated paths:
+
+- strict oracle-label replay for protocol/parity testing;
+- an experimental fixed-charge Coulomb-only JAX kernel for testing real
+  autodiff, batching, and timing mechanics.
+
+The Coulomb kernel is unshielded, orthorhombic-minimum-image only, and is not
+the full eReaxFF Coulomb term.  It must not be used for production dynamics or
+total-force parity.
 
 Force evaluation fails closed by default:
 
@@ -98,4 +103,18 @@ For protocol/parity tests only, replay can be enabled explicitly:
 
 ```json
 {"command": "force_batch", "allow_oracle_replay": true, "cases": [ ... ]}
+```
+
+For kernel-development tests only, the Coulomb slice can be selected through
+the unvalidated CLI gate:
+
+```sh
+.venv-fast/bin/python projects/jamil_replication/fast_backend/jax_backend.py \
+  --allow-unvalidated
+```
+
+with a stdin request:
+
+```json
+{"command": "force_batch", "force_kernel": "fixed_charge_coulomb", "cases": [ ... ]}
 ```

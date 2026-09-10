@@ -79,6 +79,33 @@ failed = subprocess.run(
 assert failed.returncode == 2
 assert "physics force kernel is not implemented" in failed.stdout
 
+blocked = subprocess.run(
+    [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
+    input=json.dumps({"command": "force_batch", "force_kernel": "fixed_charge_coulomb", "cases": [case]}),
+    text=True,
+    capture_output=True,
+)
+assert blocked.returncode == 2
+assert "experimental force kernels require --allow-unvalidated" in blocked.stdout
+
+completed = subprocess.run(
+    [
+        ".venv-fast/bin/python",
+        "projects/jamil_replication/fast_backend/jax_backend.py",
+        "--allow-unvalidated",
+    ],
+    input=json.dumps({"command": "force_batch", "force_kernel": "fixed_charge_coulomb", "cases": [case]}),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["fixed_charge_coulomb"]
+assert abs(response["energy_eV"][0] + 3.599911369606375) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][0][0] - 3.599911369606375) < 1.0e-12
+assert abs(response["forces_eV_per_A"][0][1][0] + 3.599911369606375) < 1.0e-12
+
 completed = subprocess.run(
     [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
     input=json.dumps({"command": "force_batch", "allow_oracle_replay": True, "cases": [case, case]}),
