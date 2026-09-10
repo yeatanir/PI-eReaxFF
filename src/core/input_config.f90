@@ -30,6 +30,10 @@ module ereaxff_input_config
     character(len=512) :: make_geo_script = ""
     character(len=512) :: timeout_runner = ""
     character(len=512) :: persistent_worker_binary = ""
+    character(len=512) :: fast_backend_command = ""
+    character(len=512) :: fast_backend_model = ""
+    character(len=512) :: fast_backend_dataset = ""
+    logical :: fast_backend_allow_unvalidated = .false.
     character(len=32) :: oracle_dispatch_mode = "openmp_all"
     integer :: oracle_max_workers = 1
     logical :: oracle_timing_log = .false.
@@ -156,7 +160,7 @@ contains
     if (config%ring_polymer%default_beads < 1) error stop "validate_input_config: default_beads must be positive"
     if (len_trim(config%force_provider%provider_type) == 0) error stop "validate_input_config: force provider empty"
     select case (trim(config%force_provider%provider_type))
-    case ("ereaxff_oracle", "dummy")
+    case ("ereaxff_oracle", "dummy", "fast_jax_oracle")
       continue
     case default
       error stop "validate_input_config: unsupported force provider type"
@@ -302,6 +306,14 @@ contains
       force%timeout_runner = strip_quotes(value)
     case ("persistent_worker_binary")
       force%persistent_worker_binary = strip_quotes(value)
+    case ("fast_backend_command")
+      force%fast_backend_command = strip_quotes(value)
+    case ("fast_backend_model")
+      force%fast_backend_model = strip_quotes(value)
+    case ("fast_backend_dataset")
+      force%fast_backend_dataset = strip_quotes(value)
+    case ("fast_backend_allow_unvalidated")
+      call parse_logical(value, force%fast_backend_allow_unvalidated)
     case ("oracle_dispatch_mode")
       force%oracle_dispatch_mode = strip_quotes(value)
     case ("oracle_max_workers")

@@ -209,3 +209,16 @@ The main remaining blocker is speed.  A P=16 one-step Jamil run currently makes
 with four persistent workers.  The next engineering target is to bring the
 oracle path much closer to native ReaxFF throughput so this can become usable
 for longer MD trajectories.
+
+The fast-backend work has started behind a gated interface:
+
+- the exact legacy oracle remains the default and validated backend;
+- `force_provider.type: fast_jax_oracle` is parsed but intentionally stops at
+  driver startup until parity validation exists;
+- `projects/jamil_replication/fast_backend/build_oracle_dataset.py` can extract
+  JSONL reference cases from exact Jamil restart output for JAX/native backend
+  development;
+- `projects/jamil_replication/fast_backend/jax_backend.py` is a fail-closed
+  optional entrypoint for JAX availability and dataset self-tests;
+- the force-provider base now has a batched result type so future backends can
+  evaluate all beads in one compiled/vectorized request.

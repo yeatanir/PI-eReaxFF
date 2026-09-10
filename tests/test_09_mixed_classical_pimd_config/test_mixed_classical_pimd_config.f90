@@ -86,6 +86,11 @@ program test_mixed_classical_pimd_config
   call assert_close("parsed second PIMD mass", cfg%groups(3)%mass_amu, 0.00109716_dp, 1.0e-12_dp)
   call assert_true("parsed production oracle mode", .not. cfg%force_provider%repeatability_check)
   call assert_true("parsed initial PIMD velocity rescale", cfg%simulation%rescale_initial_pimd_velocities)
+  call assert_true("parsed fast backend command", &
+      trim(cfg%force_provider%fast_backend_command) == "python3 projects/jamil_replication/fast_backend/jax_backend.py")
+  call assert_true("parsed fast backend dataset", &
+      trim(cfg%force_provider%fast_backend_dataset) == "build/jamil_replication/fast_backend/oracle_cases.jsonl")
+  call assert_true("parsed fast backend remains gated", .not. cfg%force_provider%fast_backend_allow_unvalidated)
 
   write(*,'(a)') "test_09_mixed_classical_pimd_config: PASS"
   write(*,'(a,i0)') "  classical_count = ", count_particles_with_dynamics(assignment, dynamics_classical)
@@ -108,6 +113,9 @@ contains
     write(unit,'(a)') "force_provider:"
     write(unit,'(a)') "  type: ereaxff_oracle"
     write(unit,'(a)') "  repeatability_check: false"
+    write(unit,'(a)') "  fast_backend_command: ""python3 projects/jamil_replication/fast_backend/jax_backend.py"""
+    write(unit,'(a)') "  fast_backend_dataset: ""build/jamil_replication/fast_backend/oracle_cases.jsonl"""
+    write(unit,'(a)') "  fast_backend_allow_unvalidated: false"
     write(unit,'(a)') "ring_polymer:"
     write(unit,'(a)') "  default_beads: 16"
     write(unit,'(a)') "charge_coupling:"

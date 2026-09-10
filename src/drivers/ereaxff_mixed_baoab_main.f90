@@ -66,7 +66,7 @@ program ereaxff_mixed_baoab_main
   integer :: pimd_count, output_stride, nquantum, q, primary_quantum, primary_beads
   real(dp) :: temperature_K, dt_fs, pimd_mass_amu
   type(rng_state) :: rng
-  logical :: config_mode, exists, force_off_mode
+  logical :: config_mode, exists, force_off_mode, exact_oracle_mode
 
   call get_command_argument(1, arg1)
   call get_command_argument(2, arg2)
@@ -109,6 +109,10 @@ program ereaxff_mixed_baoab_main
   end if
   if (.not. charge_policy_is_valid(policy_arg)) error stop "ereaxff_mixed_baoab_main: invalid charge policy"
   force_off_mode = config_mode .and. trim(cfg%force_provider%provider_type) == "dummy"
+  exact_oracle_mode = .not. config_mode .or. trim(cfg%force_provider%provider_type) == "ereaxff_oracle"
+  if (config_mode .and. trim(cfg%force_provider%provider_type) == "fast_jax_oracle") then
+    error stop "ereaxff_mixed_baoab_main: fast_jax_oracle is configured but the validated fast backend is not implemented"
+  end if
   call get_environment_variable("EREAXFF_V1_ROOT", v1_root)
   call get_environment_variable("EREAXFF_V2_ROOT", v2_root)
   if (len_trim(v1_root) == 0) v1_root = "/Users/yeatanir/PhD/PIMD/ereaxff_pimd/V1"
@@ -137,10 +141,12 @@ program ereaxff_mixed_baoab_main
   write(*,'(a)') "charge coupling mode: " // trim(policy_arg)
   if (force_off_mode) then
     write(*,'(a)') "force provider: dummy zero-force"
-  else
+  else if (exact_oracle_mode) then
     write(*,'(a)') "force provider: eReaxFF adapter"
+  else
+    write(*,'(a)') "force provider: fast backend"
   end if
-  if (config_mode .and. .not. force_off_mode) then
+  if (config_mode .and. exact_oracle_mode) then
     write(*,'(a,l1)') "oracle repeatability_check=", cfg%force_provider%repeatability_check
   end if
   write(*,'(a)') "geometry template: " // trim(cfg%geometry%template)
@@ -300,7 +306,7 @@ program ereaxff_mixed_baoab_main
         stagger_launch_ms=cfg%force_provider%oracle_stagger_launch_ms, fail_fast=cfg%force_provider%oracle_fail_fast, &
         timeout_s=cfg%force_provider%oracle_timeout_s, repeatability_check=cfg%force_provider%repeatability_check, &
         persistent_worker_binary=trim(cfg%force_provider%persistent_worker_binary))
-  else if (.not. force_off_mode) then
+  else if (exact_oracle_mode) then
     call oracle_adapter_init(adapter, state, trim(v1_root), trim(v2_root), join_path(output_dir, "adapter_work"))
   end if
   primary_quantum = quantum_indices(1)
@@ -372,7 +378,7 @@ program ereaxff_mixed_baoab_main
   write(*,'(a,es12.4)') "classical_thermostat_heat_eV = ", classical_heat_eV
   write(*,'(a,es12.4)') "quantum_thermostat_heat_eV = ", sum(quantum_heat_eV)
 
-  if (.not. force_off_mode) call oracle_adapter_shutdown(adapter)
+  if (exact_oracle_mode) call oracle_adapter_shutdown(adapter)
 
 contains
 

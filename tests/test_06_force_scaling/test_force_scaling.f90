@@ -1,6 +1,6 @@
 program test_force_scaling
   use ereaxff_kinds, only: dp
-  use ereaxff_force_provider_base, only: force_result
+  use ereaxff_force_provider_base, only: force_result, batched_force_result, allocate_batched_force_result
   use ereaxff_harmonic_force_provider, only: harmonic_force_provider_state, &
       harmonic_force_provider_init, harmonic_force_provider_evaluate
   use ereaxff_dummy_force_provider, only: dummy_force_provider_state, &
@@ -16,6 +16,7 @@ program test_force_scaling
   type(harmonic_force_provider_state) :: harmonic
   type(dummy_force_provider_state) :: dummy
   type(force_result) :: result
+  type(batched_force_result) :: batched_result
   type(bead_force_summary) :: harmonic_summary, dummy_summary
   real(dp) :: positions(ndim, nparticles)
   real(dp) :: bead_positions(ndim, nparticles, p)
@@ -61,6 +62,12 @@ program test_force_scaling
   call assert_array_close("dummy bead forces", dummy_summary%scaled_forces_eV_per_A, &
       0.0_dp * dummy_summary%scaled_forces_eV_per_A, 0.0_dp)
 
+  call allocate_batched_force_result(batched_result, ndim, nparticles, p, with_charges=.true.)
+  call assert_int("batched result bead count", batched_result%nbeads, p)
+  call assert_int("batched energy shape", size(batched_result%energies_eV), p)
+  call assert_int("batched force bead shape", size(batched_result%forces_eV_per_A, 3), p)
+  call assert_int("batched charge bead shape", size(batched_result%charges, 2), p)
+
   write(*,'(a)') "test_06_force_scaling: PASS"
   write(*,'(a,es12.4)') "  harmonic_energy_eV       = ", expected_energy
   write(*,'(a,es12.4)') "  pimd_average_energy_eV   = ", harmonic_summary%pimd_potential_eV
@@ -80,6 +87,18 @@ contains
       error stop "force scaling regression failed"
     end if
   end subroutine assert_close
+
+  subroutine assert_int(label, value, expected)
+    character(len=*), intent(in) :: label
+    integer, intent(in) :: value, expected
+
+    if (value /= expected) then
+      write(*,'(a)') "FAIL: " // trim(label)
+      write(*,'(a,i0)') "  value    = ", value
+      write(*,'(a,i0)') "  expected = ", expected
+      error stop "force integer regression failed"
+    end if
+  end subroutine assert_int
 
   subroutine assert_array_close(label, value, expected, threshold)
     character(len=*), intent(in) :: label
@@ -118,4 +137,3 @@ contains
   end subroutine assert_array_close
 
 end program test_force_scaling
-

@@ -1,0 +1,5 @@
+# Optional acceleration dependencies.  The validated exact Fortran path does
+# not require these.
+jax
+jaxlib
+
