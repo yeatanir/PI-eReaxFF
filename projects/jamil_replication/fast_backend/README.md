@@ -22,10 +22,18 @@ python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
   --output build/jamil_replication/fast_backend/oracle_cases.jsonl
 ```
 
+Prefer the adapter-work mode when exact oracle call directories are available:
+
+```sh
+python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
+  --adapter-work build/jamil_replication/verify_p4_pool_steps1/out/adapter_work \
+  --output build/jamil_replication/fast_backend/oracle_labeled_p4.jsonl
+```
+
 The generated JSONL is intentionally kept under `build/` and out of git.  Each
 case records positions, bead-local charge memory, solver guesses, and run-level
-metadata.  Energy and force labels are added when a compatible oracle export is
-found for that bead/stage.
+metadata.  Adapter-work extraction also records exact energy, force, charge,
+solver, status, stage, bead, and timing labels from the legacy oracle outputs.
 
 Validate the generated JSONL line-by-line:
 
@@ -43,6 +51,14 @@ Check the optional JAX entrypoint:
 python3 projects/jamil_replication/fast_backend/jax_backend.py \
   --self-test \
   --dataset build/jamil_replication/fast_backend/oracle_cases.jsonl
+```
+
+Run the first JAX-side labeled readiness gate:
+
+```sh
+.venv-fast/bin/python projects/jamil_replication/fast_backend/jax_backend.py \
+  --parity-check \
+  --dataset build/jamil_replication/fast_backend/oracle_labeled_p4.jsonl
 ```
 
 The entrypoint currently fails closed for force evaluation.  That is deliberate:

@@ -13,6 +13,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+KCAL_TO_EV = 0.043364
+SCHEMA = "ereaxff_fast_backend_oracle_case_v1"
+
 
 def parse_restart(path: Path) -> dict[str, Any]:
     lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
@@ -161,6 +164,8 @@ def build_cases(run_dir: Path) -> list[dict[str, Any]]:
                 "source_run_dir": str(run_dir),
                 "step": header["step"],
                 "bead": bead_index,
+                "stage": "restart",
+                "call_slot": None,
                 "ndim": header["ndim"],
                 "nparticles": header["nparticles"],
                 "nbeads": header["beads"],
@@ -176,13 +181,206 @@ def build_cases(run_dir: Path) -> list[dict[str, Any]]:
     return cases
 
 
+def parse_timing_calls(adapter_work: Path) -> list[dict[str, Any]]:
+    timing_path = adapter_work / "persistent_oracle_timing.log"
+    if not timing_path.exists():
+        timing_path = adapter_work / "oracle_timing.log"
+    if not timing_path.exists():
+        return []
+
+    calls: list[dict[str, Any]] = []
+    for line in timing_path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split()
+        if fields[0] != "CALL":
+            continue
+        calls.append(
+            {
+                "step": int(fields[1]),
+                "batch": int(fields[2]),
+                "call_slot": int(fields[3]),
+                "bead": int(fields[4]),
+                "worker": int(fields[5]),
+                "dispatch_mode": fields[6],
+                "stage_kind": fields[7],
+                "stage": fields[8],
+                "worker_state": fields[9],
+                "elapsed_s": float(fields[12]),
+                "status": int(fields[13]),
+            }
+        )
+    return calls
+
+
+def find_call_dir(adapter_work: Path, call_slot: int) -> Path:
+    name = f"adapter_call_{call_slot:04d}"
+    direct = adapter_work / name
+    if direct.is_dir():
+        return direct
+    matches = sorted(adapter_work.glob(f"**/{name}"))
+    matches = [path for path in matches if path.is_dir()]
+    if not matches:
+        raise FileNotFoundError(f"could not find {name} under {adapter_work}")
+    if len(matches) > 1:
+        matches = sorted(matches, key=lambda path: len(path.parts))
+    return matches[0]
+
+
+def parse_geo(path: Path) -> tuple[list[str], list[list[float]], list[float] | None]:
+    atom_types: list[str] = []
+    positions: list[list[float]] = []
+    crystx: list[float] | None = None
+    for line in path.read_text().splitlines():
+        if line.startswith("CRYSTX"):
+            crystx = [float(value) for value in line.split()[1:7]]
+        elif line.startswith("HETATM"):
+            fields = line.split()
+            if len(fields) < 7:
+                raise ValueError(f"{path}: malformed HETATM line")
+            atom_types.append(fields[3])
+            positions.append([float(fields[4]), float(fields[5]), float(fields[6])])
+    if not positions:
+        raise ValueError(f"{path} contains no HETATM positions")
+    return atom_types, positions, crystx
+
+
+def parse_charge_memory(path: Path) -> tuple[list[float], list[float]]:
+    charge_in: list[float] = []
+    solver_in: list[float] = []
+    for expected, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        fields = line.split()
+        atom_index = int(fields[0])
+        if atom_index != expected:
+            raise ValueError(f"{path}: expected atom {expected}, got {atom_index}")
+        charge_in.append(float(fields[1]))
+        solver_in.append(float(fields[2]))
+    return charge_in, solver_in
+
+
+def parse_summary(path: Path) -> dict[str, Any]:
+    rows = [
+        line.split()
+        for line in path.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if len(rows) != 1:
+        raise ValueError(f"{path}: expected exactly one summary row")
+    row = rows[0]
+    energy_kcal = float(row[0])
+    return {
+        "energy_kcal": energy_kcal,
+        "energy_eV": energy_kcal * KCAL_TO_EV,
+        "max_force": float(row[1]),
+        "charge_sum": float(row[2]),
+        "status": int(row[3]),
+        "nparticles": int(row[4]),
+    }
+
+
+def parse_forces(path: Path, nparticles: int) -> tuple[list[list[float]], list[float], list[float]]:
+    forces: list[list[float]] = []
+    charges: list[float] = []
+    solver: list[float] = []
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split()
+        atom_index = int(fields[0])
+        expected = len(forces) + 1
+        if atom_index != expected:
+            raise ValueError(f"{path}: expected atom {expected}, got {atom_index}")
+        forces.append([float(fields[1]), float(fields[2]), float(fields[3])])
+        charges.append(float(fields[4]))
+        solver.append(float(fields[5]))
+    if len(forces) != nparticles:
+        raise ValueError(f"{path}: expected {nparticles} atoms, got {len(forces)}")
+    return forces, charges, solver
+
+
+def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
+    calls = parse_timing_calls(adapter_work)
+    if not calls:
+        slots = []
+        for path in sorted(adapter_work.glob("**/adapter_call_*")):
+            if path.is_dir():
+                slots.append(int(path.name.rsplit("_", 1)[1]))
+        calls = [
+            {
+                "step": -1,
+                "batch": -1,
+                "call_slot": slot,
+                "bead": -1,
+                "worker": -1,
+                "dispatch_mode": "unknown",
+                "stage_kind": "unknown",
+                "stage": "unknown",
+                "worker_state": "unknown",
+                "elapsed_s": 0.0,
+                "status": 0,
+            }
+            for slot in sorted(slots)
+        ]
+
+    cases: list[dict[str, Any]] = []
+    for call in sorted(calls, key=lambda item: item["call_slot"]):
+        call_dir = find_call_dir(adapter_work, call["call_slot"])
+        atom_types, positions, crystx = parse_geo(call_dir / "geo")
+        charge_in, solver_in = parse_charge_memory(call_dir / "charge_memory.in")
+        summary = parse_summary(call_dir / "phase4_single_point_oracle.out")
+        forces, charge_out, solver_out = parse_forces(call_dir / "single_point_forces.out", summary["nparticles"])
+        nparticles = summary["nparticles"]
+        if len(positions) != nparticles or len(charge_in) != nparticles or len(solver_in) != nparticles:
+            raise ValueError(f"{call_dir}: inconsistent particle counts")
+        cases.append(
+            {
+                "schema": SCHEMA,
+                "source_adapter_work": str(adapter_work),
+                "source_call_dir": str(call_dir),
+                "step": call["step"],
+                "bead": call["bead"],
+                "stage": call["stage"],
+                "stage_kind": call["stage_kind"],
+                "call_slot": call["call_slot"],
+                "worker": call["worker"],
+                "dispatch_mode": call["dispatch_mode"],
+                "elapsed_s": call["elapsed_s"],
+                "ndim": 3,
+                "nparticles": nparticles,
+                "nbeads": max(1, max(item["bead"] for item in calls)),
+                "atom_types": atom_types,
+                "crystx": crystx,
+                "charge_policy": "bead_local_acks2",
+                "quantum": [],
+                "positions_A": positions,
+                "charge_in": charge_in,
+                "solver_guess_in": solver_in,
+                "run_energy_tail": None,
+                "labels": {
+                    "energy_kcal": summary["energy_kcal"],
+                    "energy_eV": summary["energy_eV"],
+                    "forces_eV_per_A": forces,
+                    "charge_out": charge_out,
+                    "solver_guess_out": solver_out,
+                    "max_force": summary["max_force"],
+                    "charge_sum": summary["charge_sum"],
+                    "status": summary["status"],
+                },
+            }
+        )
+    return cases
+
+
 def check_jsonl(path: Path) -> int:
     count = 0
+    labeled = 0
     for line_number, line in enumerate(path.read_text().splitlines(), start=1):
         if not line.strip():
             continue
         case = json.loads(line)
-        if case.get("schema") != "ereaxff_fast_backend_oracle_case_v1":
+        if case.get("schema") != SCHEMA:
             raise ValueError(f"{path}:{line_number}: unexpected schema")
         if len(case["positions_A"]) != case["nparticles"]:
             raise ValueError(f"{path}:{line_number}: position particle count mismatch")
@@ -190,14 +388,24 @@ def check_jsonl(path: Path) -> int:
             raise ValueError(f"{path}:{line_number}: charge particle count mismatch")
         if len(case["solver_guess_in"]) != case["nparticles"]:
             raise ValueError(f"{path}:{line_number}: solver particle count mismatch")
+        labels = case.get("labels")
+        if labels is not None:
+            if len(labels["forces_eV_per_A"]) != case["nparticles"]:
+                raise ValueError(f"{path}:{line_number}: force label particle count mismatch")
+            if len(labels["charge_out"]) != case["nparticles"]:
+                raise ValueError(f"{path}:{line_number}: charge label particle count mismatch")
+            if len(labels["solver_guess_out"]) != case["nparticles"]:
+                raise ValueError(f"{path}:{line_number}: solver label particle count mismatch")
+            labeled += 1
         count += 1
-    print(f"checked {count} cases in {path}")
+    print(f"checked {count} cases in {path}; labeled={labeled}; labels_ready={labeled == count and count > 0}")
     return count
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", type=Path, help="Directory containing restart.dat")
+    parser.add_argument("--adapter-work", type=Path, help="Adapter work directory containing oracle call outputs")
     parser.add_argument("--output", type=Path, help="JSONL output path")
     parser.add_argument("--check", type=Path, help="Validate an existing JSONL dataset")
     args = parser.parse_args()
@@ -205,10 +413,15 @@ def main() -> int:
     if args.check is not None:
         check_jsonl(args.check)
         return 0
-    if args.run_dir is None or args.output is None:
-        parser.error("--run-dir and --output are required unless --check is used")
+    if args.output is None:
+        parser.error("--output is required unless --check is used")
+    if args.adapter_work is None and args.run_dir is None:
+        parser.error("--adapter-work or --run-dir is required unless --check is used")
 
-    cases = build_cases(args.run_dir)
+    if args.adapter_work is not None:
+        cases = build_labeled_cases(args.adapter_work)
+    else:
+        cases = build_cases(args.run_dir)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w") as handle:
         for case in cases:

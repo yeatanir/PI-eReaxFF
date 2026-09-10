@@ -216,9 +216,10 @@ The fast-backend work has started behind a gated interface:
 - `force_provider.type: fast_jax_oracle` is parsed but intentionally stops at
   driver startup until parity validation exists;
 - `projects/jamil_replication/fast_backend/build_oracle_dataset.py` can extract
-  JSONL reference cases from exact Jamil restart output for JAX/native backend
-  development;
+  JSONL reference cases from exact Jamil restart or adapter-work output for
+  JAX/native backend development;
 - `projects/jamil_replication/fast_backend/jax_backend.py` is a fail-closed
-  optional entrypoint for JAX availability and dataset self-tests;
+  optional entrypoint for JAX availability, dataset self-tests, and labeled
+  oracle readiness checks;
 - the force-provider base now has a batched result type so future backends can
   evaluate all beads in one compiled/vectorized request.

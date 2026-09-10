@@ -40,6 +40,74 @@ def jax_status() -> dict[str, Any]:
         return {"available": False, "error": str(exc)}
 
 
+def dataset_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    labeled = [case for case in cases if case.get("labels") is not None]
+    stages = sorted({case.get("stage", "unknown") for case in cases})
+    beads = sorted({case.get("bead", -1) for case in cases})
+    first = cases[0]
+    return {
+        "cases": len(cases),
+        "labeled_cases": len(labeled),
+        "labels_ready": len(labeled) == len(cases) and len(cases) > 0,
+        "nparticles": first["nparticles"],
+        "nbeads": first["nbeads"],
+        "stages": stages,
+        "beads": beads,
+    }
+
+
+def parity_check(dataset: Path) -> int:
+    status = jax_status()
+    if not status.get("available"):
+        print(json.dumps({"jax": status, "parity_ready": False}, sort_keys=True))
+        return 2
+
+    import jax.numpy as jnp  # type: ignore
+
+    cases = load_cases(dataset)
+    summary = dataset_summary(cases)
+    if not summary["labels_ready"]:
+        print(json.dumps({"dataset": summary, "parity_ready": False}, sort_keys=True))
+        return 2
+
+    max_force_abs = 0.0
+    max_charge_abs = 0.0
+    max_solver_abs = 0.0
+    energy_min = None
+    energy_max = None
+    for case in cases:
+        labels = case["labels"]
+        forces = jnp.asarray(labels["forces_eV_per_A"], dtype=jnp.float64)
+        charges = jnp.asarray(labels["charge_out"], dtype=jnp.float64)
+        solver = jnp.asarray(labels["solver_guess_out"], dtype=jnp.float64)
+        max_force_abs = max(max_force_abs, float(jnp.max(jnp.abs(forces))))
+        max_charge_abs = max(max_charge_abs, float(jnp.max(jnp.abs(charges))))
+        max_solver_abs = max(max_solver_abs, float(jnp.max(jnp.abs(solver))))
+        energy = float(labels["energy_eV"])
+        energy_min = energy if energy_min is None else min(energy_min, energy)
+        energy_max = energy if energy_max is None else max(energy_max, energy)
+
+    print(
+        json.dumps(
+            {
+                "dataset": str(dataset),
+                "jax": status,
+                "summary": summary,
+                "oracle_label_stats": {
+                    "energy_min_eV": energy_min,
+                    "energy_max_eV": energy_max,
+                    "max_force_abs_eV_per_A": max_force_abs,
+                    "max_charge_abs": max_charge_abs,
+                    "max_solver_abs": max_solver_abs,
+                },
+                "parity_ready": True,
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def self_test(dataset: Path | None) -> int:
     status = jax_status()
     print(json.dumps({"jax": status}, sort_keys=True))
@@ -47,19 +115,9 @@ def self_test(dataset: Path | None) -> int:
         cases = load_cases(dataset)
         if not cases:
             raise ValueError(f"{dataset} contains no cases")
-        first = cases[0]
-        print(
-            json.dumps(
-                {
-                    "dataset": str(dataset),
-                    "cases": len(cases),
-                    "nparticles": first["nparticles"],
-                    "nbeads": first["nbeads"],
-                    "labels_ready": all(case.get("labels") is not None for case in cases),
-                },
-                sort_keys=True,
-            )
-        )
+        summary = dataset_summary(cases)
+        summary["dataset"] = str(dataset)
+        print(json.dumps(summary, sort_keys=True))
     return 0
 
 
@@ -80,6 +138,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, help="Oracle JSONL dataset for self-test/parity work")
     parser.add_argument("--self-test", action="store_true", help="Report optional JAX and dataset status")
+    parser.add_argument("--parity-check", action="store_true", help="Validate labeled oracle cases with JAX arrays")
     parser.add_argument(
         "--allow-unvalidated",
         action="store_true",
@@ -89,9 +148,12 @@ def main() -> int:
 
     if args.self_test:
         return self_test(args.dataset)
+    if args.parity_check:
+        if args.dataset is None:
+            parser.error("--parity-check requires --dataset")
+        return parity_check(args.dataset)
     return evaluate_from_stdin(args.allow_unvalidated)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

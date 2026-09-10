@@ -23,3 +23,12 @@ removing the exact legacy oracle.
 - Long target: P=16 Jamil dynamics within roughly 2-5x the same-system
   classical ReaxFF cost.
 
+## Current Implementation Slice
+
+- Adapter-work JSONL extraction now produces labeled oracle cases from
+  `geo`, `charge_memory.in`, `phase4_single_point_oracle.out`, and
+  `single_point_forces.out`.
+- The JAX entrypoint can run a labeled dataset readiness check using x64 JAX
+  arrays.
+- Force evaluation remains fail-closed until ACKS2 and energy/force parity
+  kernels are implemented.

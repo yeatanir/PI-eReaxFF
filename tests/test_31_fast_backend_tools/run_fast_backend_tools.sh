@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+WORK_DIR="build/test_31_fast_backend_tools/adapter_work"
+CALL_DIR="$WORK_DIR/persistent_worker_001/adapter_call_0001"
+OUT_JSONL="build/test_31_fast_backend_tools/labeled_cases.jsonl"
+
+mkdir -p "$CALL_DIR"
+cat > "$WORK_DIR/persistent_oracle_timing.log" <<'EOF'
+# kind request step bead stage worker_state elapsed_s status natom
+CALL 0 1 1 1 1 bounded_pool bead_local initial_force pool 0.0 0.1 0.1 0 build/test_31_fast_backend_tools/adapter_work/adapter_call_0001
+EOF
+cat > "$CALL_DIR/geo" <<'EOF'
+BIOGRF 200
+DESCRP tiny
+FORMAT ATOM   (a6,1x,i5,1x,a5,1x,a3,1x,a1,1x,a5,3f10.5,1x,a5,i3,i2,1x,f8.5)
+CRYSTX      9.00000      9.00000      9.00000     90.00000     90.00000     90.00000
+HETATM     1 C           C       0.00000   0.00000   0.00000        0 0  0.00000
+HETATM     2 El          El      1.00000   0.00000   0.00000        0 0  0.00000
+END
+EOF
+cat > "$CALL_DIR/charge_memory.in" <<'EOF'
+1 0.0 0.0
+2 0.0 0.0
+EOF
+cat > "$CALL_DIR/phase4_single_point_oracle.out" <<'EOF'
+# energy_kcal max_force charge_sum status natom
+ -1.000000000000000E+01  2.000000000000000E+00  0.000000000000000E+00 0 2
+EOF
+cat > "$CALL_DIR/single_point_forces.out" <<'EOF'
+# atom Fx Fy Fz charge solver_guess
+1  1.0  0.0  0.0  0.5  0.1
+2 -1.0  0.0  0.0 -0.5 -0.1
+EOF
+
+python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
+  --adapter-work "$WORK_DIR" \
+  --output "$OUT_JSONL"
+python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py --check "$OUT_JSONL"
+
+if [[ -x ".venv-fast/bin/python" ]]; then
+  .venv-fast/bin/python projects/jamil_replication/fast_backend/jax_backend.py \
+    --parity-check \
+    --dataset "$OUT_JSONL"
+else
+  python3 projects/jamil_replication/fast_backend/jax_backend.py \
+    --self-test \
+    --dataset "$OUT_JSONL"
+fi
+
+echo "test_31_fast_backend_tools: PASS"
