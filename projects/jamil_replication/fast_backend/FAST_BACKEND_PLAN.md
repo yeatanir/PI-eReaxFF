@@ -30,5 +30,7 @@ removing the exact legacy oracle.
   `single_point_forces.out`.
 - The JAX entrypoint can run a labeled dataset readiness check using x64 JAX
   arrays.
-- Force evaluation remains fail-closed until ACKS2 and energy/force parity
-  kernels are implemented.
+- The first JAX charge kernel supports the actual Jamil `icharg=8`
+  fixed-`MOLCHARGE` path and reports charge parity against oracle labels.
+- Full dynamic ACKS2 matrix solving and energy/force evaluation remain
+  fail-closed until their parity kernels are implemented.

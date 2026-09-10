@@ -227,10 +227,22 @@ def find_call_dir(adapter_work: Path, call_slot: int) -> Path:
     return matches[0]
 
 
-def parse_geo(path: Path) -> tuple[list[str], list[list[float]], list[float] | None]:
+def parse_control(path: Path) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    if not path.exists():
+        return values
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[1] == "icharg":
+            values["icharg"] = int(fields[0])
+    return values
+
+
+def parse_geo(path: Path) -> tuple[list[str], list[list[float]], list[float] | None, list[dict[str, Any]]]:
     atom_types: list[str] = []
     positions: list[list[float]] = []
     crystx: list[float] | None = None
+    molcharges: list[dict[str, Any]] = []
     for line in path.read_text().splitlines():
         if line.startswith("CRYSTX"):
             crystx = [float(value) for value in line.split()[1:7]]
@@ -240,9 +252,39 @@ def parse_geo(path: Path) -> tuple[list[str], list[list[float]], list[float] | N
                 raise ValueError(f"{path}: malformed HETATM line")
             atom_types.append(fields[3])
             positions.append([float(fields[4]), float(fields[5]), float(fields[6])])
+        elif line.startswith("MOLCHARGE"):
+            fields = line.split()
+            if len(fields) != 4:
+                raise ValueError(f"{path}: malformed MOLCHARGE line")
+            molcharges.append(
+                {
+                    "start_atom": int(fields[1]),
+                    "end_atom": int(fields[2]),
+                    "charge": float(fields[3]),
+                }
+            )
     if not positions:
         raise ValueError(f"{path} contains no HETATM positions")
-    return atom_types, positions, crystx
+    return atom_types, positions, crystx, molcharges
+
+
+def fixed_charges_from_molcharges(nparticles: int, molcharges: list[dict[str, Any]]) -> list[float] | None:
+    if not molcharges:
+        return None
+    charges = [0.0] * nparticles
+    touched = [False] * nparticles
+    for group in molcharges:
+        start = group["start_atom"]
+        end = group["end_atom"]
+        if start < 1 or end > nparticles or start > end:
+            raise ValueError(f"invalid MOLCHARGE range {start}:{end} for {nparticles} atoms")
+        per_atom = group["charge"] / float(end - start + 1)
+        for index in range(start - 1, end):
+            charges[index] = per_atom
+            touched[index] = True
+    if not all(touched):
+        return None
+    return charges
 
 
 def parse_charge_memory(path: Path) -> tuple[list[float], list[float]]:
@@ -327,11 +369,14 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
     for call in sorted(calls, key=lambda item: item["call_slot"]):
         call_dir = find_call_dir(adapter_work, call["call_slot"])
-        atom_types, positions, crystx = parse_geo(call_dir / "geo")
+        atom_types, positions, crystx, molcharges = parse_geo(call_dir / "geo")
+        control = parse_control(call_dir / "control")
         charge_in, solver_in = parse_charge_memory(call_dir / "charge_memory.in")
         summary = parse_summary(call_dir / "phase4_single_point_oracle.out")
         forces, charge_out, solver_out = parse_forces(call_dir / "single_point_forces.out", summary["nparticles"])
         nparticles = summary["nparticles"]
+        fixed_charges = fixed_charges_from_molcharges(nparticles, molcharges)
+        charge_model = "fixed_molcharge" if control.get("icharg") == 8 and fixed_charges is not None else "acks2"
         if len(positions) != nparticles or len(charge_in) != nparticles or len(solver_in) != nparticles:
             raise ValueError(f"{call_dir}: inconsistent particle counts")
         cases.append(
@@ -352,6 +397,12 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
                 "nbeads": max(1, max(item["bead"] for item in calls)),
                 "atom_types": atom_types,
                 "crystx": crystx,
+                "control": control,
+                "charge_model": charge_model,
+                "charge_constraints": {
+                    "molcharges": molcharges,
+                    "fixed_charges": fixed_charges,
+                },
                 "charge_policy": "bead_local_acks2",
                 "quantum": [],
                 "positions_A": positions,

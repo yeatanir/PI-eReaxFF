@@ -221,5 +221,7 @@ The fast-backend work has started behind a gated interface:
 - `projects/jamil_replication/fast_backend/jax_backend.py` is a fail-closed
   optional entrypoint for JAX availability, dataset self-tests, and labeled
   oracle readiness checks;
+- the first JAX charge kernel reproduces the current Jamil `icharg=8`
+  fixed-`MOLCHARGE` charge path in batched form;
 - the force-provider base now has a batched result type so future backends can
   evaluate all beads in one compiled/vectorized request.

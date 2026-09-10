@@ -34,6 +34,8 @@ The generated JSONL is intentionally kept under `build/` and out of git.  Each
 case records positions, bead-local charge memory, solver guesses, and run-level
 metadata.  Adapter-work extraction also records exact energy, force, charge,
 solver, status, stage, bead, and timing labels from the legacy oracle outputs.
+For the current Jamil target it also records the legacy `icharg=8`
+`MOLCHARGE` constraints used by the first JAX charge kernel.
 
 Validate the generated JSONL line-by-line:
 
@@ -62,5 +64,19 @@ Run the first JAX-side labeled readiness gate:
 ```
 
 The entrypoint currently fails closed for force evaluation.  That is deliberate:
-the exact oracle dataset has to exist before a JAX/native force kernel can be
-accepted as a dynamics backend.
+the exact oracle dataset and charge parity have to exist before a JAX/native
+force kernel can be accepted as a dynamics backend.
+
+## Charge Kernel Status
+
+The current Jamil target uses legacy `icharg=8` with explicit `MOLCHARGE`
+constraints.  `jax_charge_kernel.py` implements that fixed-charge path and the
+backend can evaluate it in batches with:
+
+```json
+{"command": "charge_batch", "cases": [ ... ]}
+```
+
+Full dynamic ACKS2 matrix construction/solve is still intentionally
+unimplemented and will fail closed until it has oracle labels that exercise
+nonzero solver state.

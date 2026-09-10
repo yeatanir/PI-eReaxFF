@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from jax_charge_kernel import charge_parity_metrics, evaluate_charge_batch
+
 
 SCHEMA = "ereaxff_fast_backend_oracle_case_v1"
 
@@ -73,20 +75,28 @@ def parity_check(dataset: Path) -> int:
     max_force_abs = 0.0
     max_charge_abs = 0.0
     max_solver_abs = 0.0
+    max_charge_error = 0.0
+    max_solver_error = 0.0
     energy_min = None
     energy_max = None
+    charge_models = set()
     for case in cases:
         labels = case["labels"]
+        charge_models.add(case.get("charge_model", "acks2"))
         forces = jnp.asarray(labels["forces_eV_per_A"], dtype=jnp.float64)
         charges = jnp.asarray(labels["charge_out"], dtype=jnp.float64)
         solver = jnp.asarray(labels["solver_guess_out"], dtype=jnp.float64)
+        charge_metrics = charge_parity_metrics(case)
         max_force_abs = max(max_force_abs, float(jnp.max(jnp.abs(forces))))
         max_charge_abs = max(max_charge_abs, float(jnp.max(jnp.abs(charges))))
         max_solver_abs = max(max_solver_abs, float(jnp.max(jnp.abs(solver))))
+        max_charge_error = max(max_charge_error, charge_metrics["max_charge_abs_error"])
+        max_solver_error = max(max_solver_error, charge_metrics["max_solver_abs_error"])
         energy = float(labels["energy_eV"])
         energy_min = energy if energy_min is None else min(energy_min, energy)
         energy_max = energy if energy_max is None else max(energy_max, energy)
 
+    charge_passes = max_charge_error <= 1.0e-12 and max_solver_error <= 1.0e-12
     print(
         json.dumps(
             {
@@ -100,12 +110,18 @@ def parity_check(dataset: Path) -> int:
                     "max_charge_abs": max_charge_abs,
                     "max_solver_abs": max_solver_abs,
                 },
+                "charge_kernel": {
+                    "models": sorted(charge_models),
+                    "max_charge_abs_error": max_charge_error,
+                    "max_solver_abs_error": max_solver_error,
+                    "passes": charge_passes,
+                },
                 "parity_ready": True,
             },
             sort_keys=True,
         )
     )
-    return 0
+    return 0 if charge_passes else 2
 
 
 def self_test(dataset: Path | None) -> int:
@@ -123,6 +139,18 @@ def self_test(dataset: Path | None) -> int:
 
 def evaluate_from_stdin(allow_unvalidated: bool) -> int:
     request = json.load(sys.stdin)
+    if request.get("command") == "charge_batch":
+        batch = evaluate_charge_batch(request.get("cases", []))
+        response = {
+            "status": 0,
+            "command": "charge_batch",
+            "charge_models": batch["charge_models"],
+            "charge_out": batch["charge_out"].tolist(),
+            "solver_guess_out": batch["solver_guess_out"].tolist(),
+            "case_status": batch["status"],
+        }
+        print(json.dumps(response, sort_keys=True))
+        return 0
     response = {
         "status": 2,
         "diagnostic": "fast_jax_oracle force evaluation is not implemented or validated yet",

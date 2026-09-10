@@ -20,6 +20,8 @@ FORMAT ATOM   (a6,1x,i5,1x,a5,1x,a3,1x,a1,1x,a5,3f10.5,1x,a5,i3,i2,1x,f8.5)
 CRYSTX      9.00000      9.00000      9.00000     90.00000     90.00000     90.00000
 HETATM     1 C           C       0.00000   0.00000   0.00000        0 0  0.00000
 HETATM     2 El          El      1.00000   0.00000   0.00000        0 0  0.00000
+MOLCHARGE    1    1   0.50
+MOLCHARGE    2    2  -0.50
 END
 EOF
 cat > "$CALL_DIR/charge_memory.in" <<'EOF'
@@ -30,10 +32,13 @@ cat > "$CALL_DIR/phase4_single_point_oracle.out" <<'EOF'
 # energy_kcal max_force charge_sum status natom
  -1.000000000000000E+01  2.000000000000000E+00  0.000000000000000E+00 0 2
 EOF
+cat > "$CALL_DIR/control" <<'EOF'
+      8 icharg
+EOF
 cat > "$CALL_DIR/single_point_forces.out" <<'EOF'
 # atom Fx Fy Fz charge solver_guess
-1  1.0  0.0  0.0  0.5  0.1
-2 -1.0  0.0  0.0 -0.5 -0.1
+1  1.0  0.0  0.0  0.5  0.0
+2 -1.0  0.0  0.0 -0.5  0.0
 EOF
 
 python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
@@ -45,6 +50,26 @@ if [[ -x ".venv-fast/bin/python" ]]; then
   .venv-fast/bin/python projects/jamil_replication/fast_backend/jax_backend.py \
     --parity-check \
     --dataset "$OUT_JSONL"
+  .venv-fast/bin/python - <<'PY'
+import json
+import subprocess
+from pathlib import Path
+
+case = json.loads(Path("build/test_31_fast_backend_tools/labeled_cases.jsonl").read_text())
+request = json.dumps({"command": "charge_batch", "cases": [case, case]})
+completed = subprocess.run(
+    [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
+    input=request,
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["charge_models"] == ["fixed_molcharge"]
+assert response["charge_out"] == [[0.5, -0.5], [0.5, -0.5]]
+assert response["solver_guess_out"] == [[0.0, 0.0], [0.0, 0.0]]
+PY
 else
   python3 projects/jamil_replication/fast_backend/jax_backend.py \
     --self-test \
