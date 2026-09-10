@@ -571,6 +571,26 @@ assert abs(electron_terms["electron_electron"]) < 1.0e-12
 assert abs(sum(electron_terms.values()) - float(electron_output["energy_eV"])) < 1.0e-12
 assert abs(float(electron_output["energy_eV"]) + 0.2249949320658194) < 1.0e-12
 
+periodic_electron_case = json.loads(json.dumps(electron_case))
+periodic_electron_case["atom_types"] = ["C", "El", "El"]
+periodic_electron_case["positions_A"] = [
+    [0.0, 0.0, 0.0],
+    [0.2, 0.0, 0.0],
+    [9.8, 0.0, 0.0],
+]
+periodic_electron_case["charge_constraints"]["fixed_charges"] = [0.0, 0.0, 0.0]
+periodic_electron_case["charge_in"] = [0.0, 0.0, 0.0]
+periodic_electron_case["solver_guess_in"] = [0.0, 0.0, 0.0]
+periodic_electron_case["crystx"] = [10.0, 10.0, 10.0, 90.0, 90.0, 90.0]
+periodic_electron_output = evaluate_reaxff_corrected_bond_nonbonded_valence_case(periodic_electron_case)
+periodic_electron_terms = {
+    key: float(value)
+    for key, value in periodic_electron_output["energy_terms_eV"].items()
+}
+assert abs(periodic_electron_terms["electron_core"] + 1.0956432714254907) < 1.0e-12
+assert abs(periodic_electron_terms["electron_electron"] - 1.9507120300148208e-05) < 1.0e-12
+assert periodic_electron_terms["electron_electron"] < 1.0e-3
+
 hole_case = json.loads(json.dumps(electron_case))
 hole_case["atom_types"] = ["C", "Ho"]
 try:

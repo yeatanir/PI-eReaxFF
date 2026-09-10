@@ -500,8 +500,9 @@ def reaxff_electron_pair_terms(
     from jax.scipy.special import erf
 
     positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    # The Jamil legacy electron bucket matches central-cell distances here;
+    # applying minimum image over-counts El-El repulsion for the 112C/113El cell.
     displacements = positions[:, None, :] - positions[None, :, :]
-    displacements = _minimum_image(displacements, cell_lengths)
     n_atoms = positions.shape[0]
     off_diagonal = ~jnp.eye(n_atoms, dtype=bool)
     r2 = jnp.sum(displacements * displacements, axis=-1)
