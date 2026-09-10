@@ -1201,8 +1201,11 @@ def raw_bond_orders(
     import jax.numpy as jnp
 
     positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    # The current legacy oracle bond-order labels match central-cell pairs.
+    # Full periodic-image covalent BO needs an explicit image-list path rather
+    # than collapsing all images into one minimum-image matrix.
+    del cell_lengths
     displacements = positions[:, None, :] - positions[None, :, :]
-    displacements = _minimum_image(displacements, cell_lengths)
     n_atoms = positions.shape[0]
     off_diagonal = ~jnp.eye(n_atoms, dtype=bool)
     r2 = jnp.sum(displacements * displacements, axis=-1)
@@ -1458,6 +1461,7 @@ def electron_corrected_valencies(
     vincr,
     electron_valence_sign,
     is_electron,
+    cell_lengths=None,
 ):
     """Legacy `elecpos` electron sharing for electron-only eReaxFF inputs."""
 
@@ -1465,6 +1469,7 @@ def electron_corrected_valencies(
 
     positions = jnp.asarray(positions_A, dtype=jnp.float64)
     displacement = positions[:, None, :] - positions[None, :, :]
+    displacement = _minimum_image(displacement, cell_lengths)
     distance2 = jnp.sum(displacement * displacement, axis=-1)
     is_core = ~is_electron
     share = jnp.exp(-vincr[:, None] * distance2)
@@ -1521,6 +1526,7 @@ def reaxff_lone_pair_overcoordination_terms(
         bond_inputs["vincr"],
         bond_inputs["electron_valence_sign"],
         electron_inputs["is_electron"],
+        cell_lengths,
     )
     abo = jnp.sum(total, axis=1)
     vund = abo - stlpc
@@ -2161,6 +2167,52 @@ def evaluate_reaxff_no_inner_shielded_nonbonded_case(case: dict[str, Any]) -> di
         "energy_terms_eV": terms,
         "forces_eV_per_A": -grad,
         "status": 0,
+    }
+
+
+def evaluate_bond_order_state_case(case: dict[str, Any]) -> dict[str, Any]:
+    _enable_jax_x64()
+    import jax.numpy as jnp
+
+    positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
+    cell_lengths = _orthorhombic_cell_lengths(case)
+    parameters = _coulomb_parameters_from_case(case)
+    bond_inputs = _bond_energy_inputs(case, parameters)
+    total, _, pi, pipi, active = corrected_bond_orders(
+        positions,
+        bond_inputs["rat"],
+        bond_inputs["rapt"],
+        bond_inputs["vnq"],
+        bond_inputs["rob1"],
+        bond_inputs["rob2"],
+        bond_inputs["rob3"],
+        bond_inputs["de1"],
+        bond_inputs["pdo"],
+        bond_inputs["popi"],
+        bond_inputs["pdp"],
+        bond_inputs["ptp"],
+        bond_inputs["bop1"],
+        bond_inputs["bop2"],
+        bond_inputs["bond_mask"],
+        bond_inputs["cutoff"],
+        bond_inputs["aval"],
+        bond_inputs["vval3"],
+        bond_inputs["bo131"],
+        bond_inputs["bo132"],
+        bond_inputs["bo133"],
+        bond_inputs["ovc"],
+        bond_inputs["v13cor"],
+        bond_inputs["overcoordination_parameter"],
+        bond_inputs["overcoordination_log_parameter"],
+        cell_lengths,
+    )
+    return {
+        "fingerprint": geometry_fingerprint(case),
+        "abo": jnp.sum(total, axis=1),
+        "bo_matrix": total,
+        "bopi_matrix": pi,
+        "bopi2_matrix": pipi,
+        "active_matrix": active,
     }
 
 

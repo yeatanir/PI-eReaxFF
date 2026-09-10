@@ -118,6 +118,12 @@ external_field 0.0
 electron -0.5
 total -10.0
 EOF
+cat > "$CALL_DIR/single_point_bond_orders.out" <<'EOF'
+# kind index atom_i atom_j value bopi bopi2
+ATOM 1 0.75
+ATOM 2 0.75
+BOND 1 1 2 0.75 0.25 0.125
+EOF
 
 python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
   --adapter-work "$WORK_DIR" \
@@ -139,6 +145,9 @@ terms = case["labels"]["energy_terms_kcal"]
 assert terms["bond"] == -4.0
 assert terms["electron"] == -0.5
 assert abs(sum(case["labels"]["energy_terms_eV"].values()) - case["labels"]["energy_eV"]) < 1.0e-12
+bond_orders = case["labels"]["bond_orders"]
+assert bond_orders["abo"] == [0.75, 0.75]
+assert bond_orders["bonds"] == [{"index": 1, "atom_i": 1, "atom_j": 2, "bo": 0.75, "bopi": 0.25, "bopi2": 0.125}]
 
 import sys
 sys.path.insert(0, "projects/jamil_replication/fast_backend")

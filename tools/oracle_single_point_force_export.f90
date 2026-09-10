@@ -2,10 +2,13 @@ program oracle_single_point_force_export
   implicit none
   integer, parameter :: dp = selected_real_kind(15, 300)
   integer, parameter :: natmax = 2600
-  integer :: natom, status, i
+  integer, parameter :: nbondmax = 400000
+  integer :: natom, status, i, nbond
+  integer :: bond_atoms(2,nbondmax), bo_natom
   real(dp) :: x(3,natmax), force(3,natmax), charge_in(natmax), solver_in(natmax)
   real(dp) :: charge_out(natmax), solver_out(natmax), energy
   real(dp) :: energy_terms(14), energy_terms_total
+  real(dp) :: abo(natmax), bo(nbondmax), bopi(nbondmax), bopi2(nbondmax)
   real(dp) :: max_force, charge_sum
 
   interface
@@ -27,6 +30,11 @@ program oracle_single_point_force_export
     subroutine ereaxff_oracle_get_energy_terms(terms_kcal, total_kcal)
       double precision :: terms_kcal(14), total_kcal
     end subroutine ereaxff_oracle_get_energy_terms
+    subroutine ereaxff_oracle_get_bond_orders(natom_eval, nbond_eval, abo_out, bond_atoms_out, bo_out, bopi_out, bopi2_out)
+      integer :: natom_eval, nbond_eval
+      integer :: bond_atoms_out(2,*)
+      double precision :: abo_out(*), bo_out(*), bopi_out(*), bopi2_out(*)
+    end subroutine ereaxff_oracle_get_bond_orders
   end interface
 
   call ereaxff_force_oracle_init()
@@ -37,6 +45,9 @@ program oracle_single_point_force_export
       charge_out, solver_out, status)
   if (status /= 0) stop 'oracle_single_point_force_export: oracle failure'
   call ereaxff_oracle_get_energy_terms(energy_terms, energy_terms_total)
+  call ereaxff_oracle_get_bond_orders(bo_natom, nbond, abo, bond_atoms, bo, bopi, bopi2)
+  if (bo_natom /= natom) stop 'oracle_single_point_force_export: bond-order atom count mismatch'
+  if (nbond > nbondmax) stop 'oracle_single_point_force_export: too many bond-order rows'
 
   max_force = 0.0d0
   charge_sum = 0.0d0
@@ -60,6 +71,7 @@ program oracle_single_point_force_export
   end do
   close(21)
   call write_energy_terms('single_point_energy_terms.out', energy_terms, energy_terms_total)
+  call write_bond_orders('single_point_bond_orders.out', natom, nbond, abo, bond_atoms, bo, bopi, bopi2)
 
   write(*,'(a,1x,es12.4,1x,es12.4,1x,es12.4,1x,i0)') &
       'oracle_single_point_force_export PASS', energy, max_force, charge_sum, status
@@ -86,4 +98,22 @@ contains
     write(unit,'(a,1x,es24.15)') 'total', total_kcal
     close(unit)
   end subroutine write_energy_terms
+
+  subroutine write_bond_orders(path, natom_in, nbond_in, abo_in, bond_atoms_in, bo_in, bopi_in, bopi2_in)
+    character(len=*), intent(in) :: path
+    integer, intent(in) :: natom_in, nbond_in, bond_atoms_in(2,*)
+    real(dp), intent(in) :: abo_in(*), bo_in(*), bopi_in(*), bopi2_in(*)
+    integer :: unit, i
+
+    open(newunit=unit, file=trim(path), status='replace', action='write')
+    write(unit,'(a)') '# kind index atom_i atom_j value bopi bopi2'
+    do i = 1, natom_in
+      write(unit,'(a,1x,i8,1x,es24.15)') 'ATOM', i, abo_in(i)
+    end do
+    do i = 1, nbond_in
+      write(unit,'(a,1x,i8,2(1x,i8),3es24.15)') 'BOND', i, bond_atoms_in(1,i), bond_atoms_in(2,i), &
+          bo_in(i), bopi_in(i), bopi2_in(i)
+    end do
+    close(unit)
+  end subroutine write_bond_orders
 end program oracle_single_point_force_export

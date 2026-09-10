@@ -44,6 +44,10 @@ output available.  The term keys follow the Jamil `reac.f` output order:
 `angle_conjugation`, `hydrogen_bond`, `torsion`, `torsion_conjugation`, `vdw`,
 `coulomb`, `charge`, `external_field`, and `electron`.
 
+Repo-built oracle exporters also write `single_point_bond_orders.out` with
+legacy `abo`, `bo`, `bopi`, and `bopi2` values.  The dataset builder records
+those labels when present.
+
 Validate the generated JSONL line-by-line:
 
 ```sh
@@ -76,6 +80,14 @@ Compare unvalidated JAX energy contributions against labeled legacy terms:
 .venv-fast/bin/python projects/jamil_replication/fast_backend/compare_energy_terms.py \
   --dataset build/jamil_replication/fast_backend/oracle_labeled_p4_terms_latest.jsonl \
   --output build/jamil_replication/fast_backend/term_compare_p4_latest.json
+```
+
+Compare JAX corrected bond-order state against legacy labels:
+
+```sh
+.venv-fast/bin/python projects/jamil_replication/fast_backend/compare_bond_orders.py \
+  --dataset build/jamil_replication/fast_backend/oracle_labeled_p4_bond_orders_latest.jsonl \
+  --output build/jamil_replication/fast_backend/bond_order_compare_p4_latest.json
 ```
 
 The entrypoint currently fails closed for force evaluation.  That is deliberate:
@@ -128,13 +140,15 @@ attenuation before the covalent bond-energy expression.  The
 `reaxff_corrected_bond_nonbonded` path combines the implemented corrected bond,
 vdW, and Coulomb slices.  The
 `reaxff_corrected_bond_nonbonded_valence` path additionally reports valence,
-penalty, angle-conjugation, torsion, torsion-conjugation, `electron_core`, and
-`electron_electron` contributions.  It is electron-only for the current Jamil
-target and fails fast on `Ho`/hole particles.  It still omits full dynamic
-ACKS2 charge solving, electron-corrected lone-pair/overcoordination parity
-(`lonpar`/`ovcor`), self-image details beyond minimum image, and other
-total-energy terms.  These kernels must not be used for production dynamics or
-total-force parity.
+penalty, angle-conjugation, torsion, torsion-conjugation, `lone_pair`,
+`overcoordination`, `electron_core`, and `electron_electron` contributions.  It
+is electron-only for the current Jamil target and fails fast on `Ho`/hole
+particles.  Corrected covalent bond orders, bond energy, valence/penalty,
+torsion, torsion-conjugation, lone-pair, and electron-pair terms now have direct
+oracle labels for comparison.  Full dynamic ACKS2 charge solving, the remaining
+overcoordination scalar mismatch, nonbonded vdW/Coulomb parity, and other
+total-energy terms are still unvalidated.  These kernels must not be used for
+production dynamics or total-force parity.
 
 Force evaluation fails closed by default:
 

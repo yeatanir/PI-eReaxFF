@@ -387,6 +387,51 @@ def parse_optional_energy_terms(call_dir: Path) -> tuple[dict[str, float], dict[
     return parse_energy_terms(call_dir / "fort.73")
 
 
+def parse_bond_orders(path: Path, nparticles: int) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    abo = [None] * nparticles
+    bonds: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split()
+        kind = fields[0]
+        if kind == "ATOM":
+            if len(fields) != 3:
+                raise ValueError(f"{path}: malformed ATOM bond-order row")
+            atom_index = int(fields[1])
+            if atom_index < 1 or atom_index > nparticles:
+                raise ValueError(f"{path}: ATOM index out of range")
+            abo[atom_index - 1] = float(fields[2])
+        elif kind == "BOND":
+            if len(fields) != 7:
+                raise ValueError(f"{path}: malformed BOND bond-order row")
+            bonds.append(
+                {
+                    "index": int(fields[1]),
+                    "atom_i": int(fields[2]),
+                    "atom_j": int(fields[3]),
+                    "bo": float(fields[4]),
+                    "bopi": float(fields[5]),
+                    "bopi2": float(fields[6]),
+                }
+            )
+        else:
+            raise ValueError(f"{path}: unexpected bond-order row kind {kind!r}")
+    if any(value is None for value in abo):
+        raise ValueError(f"{path}: missing ATOM bond-order rows")
+    for expected, row in enumerate(bonds, start=1):
+        if row["index"] != expected:
+            raise ValueError(f"{path}: expected BOND index {expected}, got {row['index']}")
+        if row["atom_i"] < 1 or row["atom_i"] > nparticles or row["atom_j"] < 1 or row["atom_j"] > nparticles:
+            raise ValueError(f"{path}: BOND atom index out of range")
+    return {
+        "abo": [float(value) for value in abo],
+        "bonds": bonds,
+    }
+
+
 def parse_forces(path: Path, nparticles: int) -> tuple[list[list[float]], list[float], list[float]]:
     forces: list[list[float]] = []
     charges: list[float] = []
@@ -441,6 +486,7 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
         energy_terms = parse_optional_energy_terms(call_dir)
         forces, charge_out, solver_out = parse_forces(call_dir / "single_point_forces.out", summary["nparticles"])
         nparticles = summary["nparticles"]
+        bond_orders = parse_bond_orders(call_dir / "single_point_bond_orders.out", nparticles)
         fixed_charges = fixed_charges_from_molcharges(nparticles, molcharges)
         charge_model = "fixed_molcharge" if control.get("icharg") == 8 and fixed_charges is not None else "acks2"
         if len(positions) != nparticles or len(charge_in) != nparticles or len(solver_in) != nparticles:
@@ -459,6 +505,8 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
             terms_kcal, terms_eV = energy_terms
             labels["energy_terms_kcal"] = terms_kcal
             labels["energy_terms_eV"] = terms_eV
+        if bond_orders is not None:
+            labels["bond_orders"] = bond_orders
 
         cases.append(
             {
@@ -527,6 +575,24 @@ def check_jsonl(path: Path) -> int:
                     if name not in ENERGY_TERM_NAMES:
                         raise ValueError(f"{path}:{line_number}: unexpected energy term {name!r}")
                     float(value)
+            if "bond_orders" in labels:
+                bond_orders = labels["bond_orders"]
+                if len(bond_orders["abo"]) != case["nparticles"]:
+                    raise ValueError(f"{path}:{line_number}: bond-order abo particle count mismatch")
+                for value in bond_orders["abo"]:
+                    float(value)
+                previous_index = 0
+                for row in bond_orders["bonds"]:
+                    previous_index += 1
+                    if row["index"] != previous_index:
+                        raise ValueError(f"{path}:{line_number}: bond-order index mismatch")
+                    if row["atom_i"] < 1 or row["atom_i"] > case["nparticles"]:
+                        raise ValueError(f"{path}:{line_number}: bond-order atom_i out of range")
+                    if row["atom_j"] < 1 or row["atom_j"] > case["nparticles"]:
+                        raise ValueError(f"{path}:{line_number}: bond-order atom_j out of range")
+                    float(row["bo"])
+                    float(row["bopi"])
+                    float(row["bopi2"])
             labeled += 1
         count += 1
     print(f"checked {count} cases in {path}; labeled={labeled}; labels_ready={labeled == count and count > 0}")

@@ -63,10 +63,16 @@ program test_persistent_oracle_worker
   call assert_true("pool timing log", file_exists(trim(work_root) // "/pool/persistent_oracle_timing.log"))
   call assert_true("external energy terms", &
       file_exists(trim(work_root) // "/external/adapter_call_0001/single_point_energy_terms.out"))
+  call assert_true("external bond orders", &
+      file_exists(trim(work_root) // "/external/adapter_call_0001/single_point_bond_orders.out"))
   call assert_true("persistent energy terms", &
       file_exists(trim(work_root) // "/persistent/persistent_worker/adapter_call_0001/single_point_energy_terms.out"))
+  call assert_true("persistent bond orders", &
+      file_exists(trim(work_root) // "/persistent/persistent_worker/adapter_call_0001/single_point_bond_orders.out"))
   call assert_true("pool energy terms", &
       file_exists(trim(work_root) // "/pool/persistent_worker_001/adapter_call_0001/single_point_energy_terms.out"))
+  call assert_true("pool bond orders", &
+      file_exists(trim(work_root) // "/pool/persistent_worker_001/adapter_call_0001/single_point_bond_orders.out"))
 
   write(*,'(a)') "test_30_persistent_oracle_worker: PASS"
   write(*,'(a,es24.15)') "  energy_eV = ", persistent_summary%pimd_potential_eV
