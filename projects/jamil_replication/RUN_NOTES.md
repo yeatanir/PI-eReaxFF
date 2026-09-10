@@ -319,3 +319,48 @@ Observed so far for `oracle_max_workers=2`:
 - after 5 batches the run had already spent about `484 s` just on `initial_force`
 
 That is the same negative shape as before: two-way concurrency did not improve throughput. The full sweep was stopped before `workers=4,6,8` because the `workers=2` result already showed that bounded process-level concurrency is not fixing the legacy backend cost.
+
+## 2026-09-10 Fast JAX Mixed-Driver Timing
+
+Added `projects/jamil_replication/run_fast_vs_oracle_timing.sh` to compare the connected fast JAX driver path against the exact persistent oracle pool on the same Jamil 112C/113El one-step BAOAB schedule.
+
+Command:
+
+```bash
+projects/jamil_replication/run_fast_vs_oracle_timing.sh
+```
+
+Default benchmark set:
+
+- fast JAX: `P=4`, `P=8`
+- exact oracle pool: `P=4`
+- `steps=1`, `dt_fs=0.1`, `OMP_NUM_THREADS=4`, `oracle_max_workers=4`
+
+Results:
+
+| backend | P | steps | wall_s | force stages | bead force cases | s/stage | s/bead case | electron_T_K | extended_T_K | carbon_T_K | energy_eV | status |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| fast JAX | 4 | 1 | 12.139 | 5 | 20 | 2.428 | 0.607 | 295.036 | 1180.146 | 293.429 | -510.332554 | PASS |
+| fast JAX | 8 | 1 | 12.003 | 5 | 40 | 2.401 | 0.300 | 297.356 | 2378.850 | 293.475 | -517.060030 | PASS |
+| oracle pool | 4 | 1 | 146.497 | 5 | 20 | 29.299 | 7.325 | 295.036 | 1180.146 | 293.429 | -510.332544 | PASS |
+
+Fast P=16 was run separately with the oracle leg skipped:
+
+```bash
+JAMIL_FAST_TIMING_FAST_CASES=16 JAMIL_FAST_TIMING_ORACLE_CASES= \
+  projects/jamil_replication/run_fast_vs_oracle_timing.sh
+```
+
+Result:
+
+| backend | P | steps | wall_s | force stages | bead force cases | s/stage | s/bead case | electron_T_K | extended_T_K | carbon_T_K | energy_eV | status |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| fast JAX | 16 | 1 | 12.745 | 5 | 80 | 2.549 | 0.159 | 400.393 | 6406.292 | 293.394 | -511.895829 | PASS |
+
+Interpretation:
+
+- The connected fast path is already about `12.1x` faster than the exact P=4 oracle pool for the same one-step schedule.
+- Fast JAX wall time is nearly flat from `P=4` to `P=16`, which means batching all beads through one JAX call is doing the right thing.
+- The P=4 fast/oracle physical diagnostics match closely; the scalar potential differs by about `9.9e-6 eV`, consistent with the current force-kernel parity gate.
+- P=16 fast clears the near-term target from `FAST_BACKEND_PLAN.md`: one-step Jamil wall time is below `60 s`.
+- The next speed target is not process-level parallelism. It is profiling and simplifying the JAX kernel itself, then removing redundant force stages only if trajectory-equivalence tests allow it.

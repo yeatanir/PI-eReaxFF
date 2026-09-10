@@ -20,6 +20,8 @@ removing the exact legacy oracle.
 - Exact oracle remains the default backend.
 - No fast backend can run production MD until its parity test passes.
 - First useful target: P=16 one-step Jamil wall time below 60 seconds.
+  Achieved for the connected JAX path on 2026-09-10: `12.745 s` for
+  `P=16`, one 0.1 fs step, 5 force stages, and 80 bead-force cases.
 - Long target: P=16 Jamil dynamics within roughly 2-5x the same-system
   classical ReaxFF cost.
 
@@ -50,7 +52,14 @@ removing the exact legacy oracle.
   formulas before the `covbon` energy expression.
 - An experimental aggregate kernel now sums the implemented corrected-bond,
   shielded-vdW, and shielded/tapered-Coulomb slices in one batched JAX call.
-- Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
-  fail-closed until their parity kernels are implemented.  The next force work
-  should add valence-angle, torsion, lone-pair, and over/undercoordination
-  energy terms against oracle labels.
+- The mixed BAOAB driver can now launch the persistent JAX worker through
+  `force_provider.type: fast_jax_oracle`, guarded by
+  `fast_backend_allow_unvalidated: true`, and batch all beads in one force
+  request per force stage.
+- The connected fast path is about `12.1x` faster than the exact P=4
+  persistent oracle pool for the same Jamil one-step schedule, with near-flat
+  wall time from `P=4` to `P=16`.
+- Full dynamic ACKS2 matrix construction/solve remains fail-closed until it has
+  oracle labels that exercise nonzero solver state.  The connected Jamil force
+  path is still explicitly unvalidated and should remain behind the opt-in gate
+  while profiling and longer trajectory checks are added.
