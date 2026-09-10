@@ -432,6 +432,37 @@ def parse_bond_orders(path: Path, nparticles: int) -> dict[str, Any] | None:
     }
 
 
+def parse_nonbonded_buckets(path: Path) -> list[dict[str, Any]] | None:
+    if not path.exists():
+        return None
+    buckets: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) != 6:
+            raise ValueError(f"{path}: malformed nonbonded bucket row")
+        left_type = int(fields[0])
+        right_type = int(fields[1])
+        self_image = bool(int(fields[2]))
+        count = int(fields[3])
+        vdw_kcal = float(fields[4])
+        coulomb_kcal = float(fields[5])
+        buckets.append(
+            {
+                "left_type": left_type,
+                "right_type": right_type,
+                "self_image": self_image,
+                "count": count,
+                "vdw_kcal": vdw_kcal,
+                "coulomb_kcal": coulomb_kcal,
+                "vdw_eV": vdw_kcal * KCAL_TO_EV,
+                "coulomb_eV": coulomb_kcal * KCAL_TO_EV,
+            }
+        )
+    return buckets
+
+
 def parse_forces(path: Path, nparticles: int) -> tuple[list[list[float]], list[float], list[float]]:
     forces: list[list[float]] = []
     charges: list[float] = []
@@ -487,6 +518,7 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
         forces, charge_out, solver_out = parse_forces(call_dir / "single_point_forces.out", summary["nparticles"])
         nparticles = summary["nparticles"]
         bond_orders = parse_bond_orders(call_dir / "single_point_bond_orders.out", nparticles)
+        nonbonded_buckets = parse_nonbonded_buckets(call_dir / "single_point_nonbonded_buckets.out")
         fixed_charges = fixed_charges_from_molcharges(nparticles, molcharges)
         charge_model = "fixed_molcharge" if control.get("icharg") == 8 and fixed_charges is not None else "acks2"
         if len(positions) != nparticles or len(charge_in) != nparticles or len(solver_in) != nparticles:
@@ -507,6 +539,8 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
             labels["energy_terms_eV"] = terms_eV
         if bond_orders is not None:
             labels["bond_orders"] = bond_orders
+        if nonbonded_buckets is not None:
+            labels["nonbonded_buckets"] = nonbonded_buckets
 
         cases.append(
             {
@@ -593,6 +627,17 @@ def check_jsonl(path: Path) -> int:
                     float(row["bo"])
                     float(row["bopi"])
                     float(row["bopi2"])
+            if "nonbonded_buckets" in labels:
+                for row in labels["nonbonded_buckets"]:
+                    if row["left_type"] < 1 or row["right_type"] < 1:
+                        raise ValueError(f"{path}:{line_number}: nonbonded bucket type out of range")
+                    if row["count"] < 0:
+                        raise ValueError(f"{path}:{line_number}: nonbonded bucket count out of range")
+                    bool(row["self_image"])
+                    float(row["vdw_kcal"])
+                    float(row["coulomb_kcal"])
+                    float(row["vdw_eV"])
+                    float(row["coulomb_eV"])
             labeled += 1
         count += 1
     print(f"checked {count} cases in {path}; labeled={labeled}; labels_ready={labeled == count and count > 0}")

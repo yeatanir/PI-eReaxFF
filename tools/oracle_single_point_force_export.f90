@@ -3,12 +3,15 @@ program oracle_single_point_force_export
   integer, parameter :: dp = selected_real_kind(15, 300)
   integer, parameter :: natmax = 2600
   integer, parameter :: nbondmax = 400000
-  integer :: natom, status, i, nbond
+  integer, parameter :: nbucketmax = 256
+  integer :: natom, status, i, nbond, nbuckets
   integer :: bond_atoms(2,nbondmax), bo_natom
+  integer :: bucket_left(nbucketmax), bucket_right(nbucketmax), bucket_self(nbucketmax), bucket_count(nbucketmax)
   real(dp) :: x(3,natmax), force(3,natmax), charge_in(natmax), solver_in(natmax)
   real(dp) :: charge_out(natmax), solver_out(natmax), energy
   real(dp) :: energy_terms(14), energy_terms_total
   real(dp) :: abo(natmax), bo(nbondmax), bopi(nbondmax), bopi2(nbondmax)
+  real(dp) :: bucket_vdw(nbucketmax), bucket_coulomb(nbucketmax)
   real(dp) :: max_force, charge_sum
 
   interface
@@ -35,6 +38,11 @@ program oracle_single_point_force_export
       integer :: bond_atoms_out(2,*)
       double precision :: abo_out(*), bo_out(*), bopi_out(*), bopi2_out(*)
     end subroutine ereaxff_oracle_get_bond_orders
+    subroutine ereaxff_oracle_get_nonbonded_buckets(max_rows, nrows, left_type_out, right_type_out, self_out, count_out, vdw_out, coulomb_out)
+      integer :: max_rows, nrows
+      integer :: left_type_out(*), right_type_out(*), self_out(*), count_out(*)
+      double precision :: vdw_out(*), coulomb_out(*)
+    end subroutine ereaxff_oracle_get_nonbonded_buckets
   end interface
 
   call ereaxff_force_oracle_init()
@@ -46,6 +54,8 @@ program oracle_single_point_force_export
   if (status /= 0) stop 'oracle_single_point_force_export: oracle failure'
   call ereaxff_oracle_get_energy_terms(energy_terms, energy_terms_total)
   call ereaxff_oracle_get_bond_orders(bo_natom, nbond, abo, bond_atoms, bo, bopi, bopi2)
+  call ereaxff_oracle_get_nonbonded_buckets(nbucketmax, nbuckets, bucket_left, bucket_right, bucket_self, &
+      bucket_count, bucket_vdw, bucket_coulomb)
   if (bo_natom /= natom) stop 'oracle_single_point_force_export: bond-order atom count mismatch'
   if (nbond > nbondmax) stop 'oracle_single_point_force_export: too many bond-order rows'
 
@@ -72,6 +82,8 @@ program oracle_single_point_force_export
   close(21)
   call write_energy_terms('single_point_energy_terms.out', energy_terms, energy_terms_total)
   call write_bond_orders('single_point_bond_orders.out', natom, nbond, abo, bond_atoms, bo, bopi, bopi2)
+  call write_nonbonded_buckets('single_point_nonbonded_buckets.out', nbuckets, bucket_left, bucket_right, &
+      bucket_self, bucket_count, bucket_vdw, bucket_coulomb)
 
   write(*,'(a,1x,es12.4,1x,es12.4,1x,es12.4,1x,i0)') &
       'oracle_single_point_force_export PASS', energy, max_force, charge_sum, status
@@ -116,4 +128,18 @@ contains
     end do
     close(unit)
   end subroutine write_bond_orders
+
+  subroutine write_nonbonded_buckets(path, nrows, left_type, right_type, self_image, bucket_count, vdw_kcal, coulomb_kcal)
+    character(len=*), intent(in) :: path
+    integer, intent(in) :: nrows, left_type(*), right_type(*), self_image(*), bucket_count(*)
+    real(dp), intent(in) :: vdw_kcal(*), coulomb_kcal(*)
+    integer :: unit, i
+
+    open(newunit=unit, file=trim(path), status='replace', action='write')
+    write(unit,'(a)') '# left_type right_type self_image count vdw_kcal coulomb_kcal'
+    do i = 1, nrows
+      write(unit,'(4i8,2es24.15)') left_type(i), right_type(i), self_image(i), bucket_count(i), vdw_kcal(i), coulomb_kcal(i)
+    end do
+    close(unit)
+  end subroutine write_nonbonded_buckets
 end program oracle_single_point_force_export

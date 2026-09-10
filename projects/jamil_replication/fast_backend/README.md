@@ -48,6 +48,11 @@ Repo-built oracle exporters also write `single_point_bond_orders.out` with
 legacy `abo`, `bo`, `bopi`, and `bopi2` values.  The dataset builder records
 those labels when present.
 
+Repo-built oracle exporters also write `single_point_nonbonded_buckets.out`
+with legacy `nonbonnoinS` vdW/Coulomb sums grouped by atom-type pair.  The
+dataset builder records those buckets when present so JAX nonbonded parity can
+be debugged by interaction class instead of only by total energy.
+
 Validate the generated JSONL line-by-line:
 
 ```sh
@@ -90,6 +95,14 @@ Compare JAX corrected bond-order state against legacy labels:
   --output build/jamil_replication/fast_backend/bond_order_compare_p4_latest.json
 ```
 
+Compare JAX nonbonded buckets against legacy labels:
+
+```sh
+.venv-fast/bin/python projects/jamil_replication/fast_backend/compare_nonbonded_buckets.py \
+  --dataset build/jamil_replication/fast_backend/oracle_labeled_p4_nonbonded_latest.jsonl \
+  --output build/jamil_replication/fast_backend/nonbonded_bucket_compare_p4_latest.json
+```
+
 The entrypoint currently fails closed for force evaluation.  That is deliberate:
 the exact oracle dataset and charge parity have to exist before a JAX/native
 force kernel can be accepted as a dynamics backend.
@@ -128,13 +141,17 @@ nonzero solver state.
   no-inner-wall vdW, shielded/tapered Coulomb, sparse valence/torsion terms,
   and electron-only `El` pair terms in one JAX force call.
 
-The Coulomb kernels are orthorhombic-minimum-image only.  The
+The ReaxFF shielded Coulomb and vdW kernels use central-cell pair distances for
+the current Jamil oracle-parity target.  That matches the legacy V2
+`nonbonnoinS` bucket labels for the checked 112C/113El periodic cases; expanding
+all 27 neighbor images overcounts relative to the legacy Verlet list.  The
 `reaxff_shielded_coulomb` path follows the Jamil source `poten.f` Coulomb
 expression and `reac.f` seventh-order taper polynomial.  The
 `reaxff_nonbonded_no_inner_shielded` path follows the same `poten.f`
 `nonbonnoinS` routine for the no-inner-wall, shielded-vdW case selected by the
-current Jamil C/El parameters.  The `reaxff_uncorrected_bond` path builds raw
-sigma/pi/pi-pi bond orders and the direct covalent bond term.  The
+current Jamil C/El parameters, including off-diagonal vdW pair overrides from
+`ffield`.  The `reaxff_uncorrected_bond` path builds raw sigma/pi/pi-pi bond
+orders and the direct covalent bond term.  The
 `reaxff_corrected_bond` path applies the source-derived `boncor` bond-order
 attenuation before the covalent bond-energy expression.  The
 `reaxff_corrected_bond_nonbonded` path combines the implemented corrected bond,
@@ -144,9 +161,9 @@ penalty, angle-conjugation, torsion, torsion-conjugation, `lone_pair`,
 `overcoordination`, `electron_core`, and `electron_electron` contributions.  It
 is electron-only for the current Jamil target and fails fast on `Ho`/hole
 particles.  Corrected covalent bond orders, bond energy, valence/penalty,
-torsion, torsion-conjugation, lone-pair, and electron-pair terms now have direct
-oracle labels for comparison.  Full dynamic ACKS2 charge solving, the remaining
-overcoordination scalar mismatch, nonbonded vdW/Coulomb parity, and other
+torsion, torsion-conjugation, lone-pair, electron-pair terms, and nonbonded
+vdW/Coulomb buckets now have direct oracle labels for comparison.  Full dynamic
+ACKS2 charge solving, the remaining overcoordination scalar mismatch, and other
 total-energy terms are still unvalidated.  These kernels must not be used for
 production dynamics or total-force parity.
 

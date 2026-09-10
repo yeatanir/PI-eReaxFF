@@ -3,15 +3,18 @@ program persistent_oracle_worker
   integer, parameter :: dp = selected_real_kind(15, 300)
   integer, parameter :: natmax = 2600
   integer, parameter :: nbondmax = 400000
+  integer, parameter :: nbucketmax = 256
   real(dp), parameter :: kcal2eV = 0.043364_dp
 
-  integer :: request_id, step_index, bead_id, natom, status, ios, nbond, bo_natom
+  integer :: request_id, step_index, bead_id, natom, status, ios, nbond, bo_natom, nbuckets
   integer :: bond_atoms(2, nbondmax)
+  integer :: bucket_left(nbucketmax), bucket_right(nbucketmax), bucket_self(nbucketmax), bucket_count(nbucketmax)
   integer :: start_count, end_count, clock_rate
   real(dp) :: x(3, natmax), force(3, natmax), charge_in(natmax), solver_in(natmax)
   real(dp) :: charge_out(natmax), solver_out(natmax), energy_kcal, max_force, charge_sum
   real(dp) :: energy_terms(14), energy_terms_total
   real(dp) :: abo(natmax), bo(nbondmax), bopi(nbondmax), bopi2(nbondmax)
+  real(dp) :: bucket_vdw(nbucketmax), bucket_coulomb(nbucketmax)
   character(len=512) :: control_path, ffield_path, iopt_path, geo_path, timing_log_path, worker_root, smoke_binary
   character(len=512) :: make_geo_script
   character(len=128) :: stage_label
@@ -38,6 +41,11 @@ program persistent_oracle_worker
       integer :: bond_atoms_out(2,*)
       double precision :: abo_out(*), bo_out(*), bopi_out(*), bopi2_out(*)
     end subroutine ereaxff_oracle_get_bond_orders
+    subroutine ereaxff_oracle_get_nonbonded_buckets(max_rows, nrows, left_type_out, right_type_out, self_out, count_out, vdw_out, coulomb_out)
+      integer :: max_rows, nrows
+      integer :: left_type_out(*), right_type_out(*), self_out(*), count_out(*)
+      double precision :: vdw_out(*), coulomb_out(*)
+    end subroutine ereaxff_oracle_get_nonbonded_buckets
   end interface
 
   call get_command_argument(1, control_path)
@@ -69,7 +77,8 @@ program persistent_oracle_worker
     if (file_exists(trim(request_file))) then
       call process_request(trim(worker_root), trim(request_file), trim(response_file), trim(timing_log_path), trim(smoke_binary), &
       trim(make_geo_script), first_request, request_id, step_index, bead_id, stage_label, natom, energy_kcal, force, charge_out, solver_out, status, charge_sum, &
-          max_force, energy_terms, energy_terms_total, bo_natom, nbond, abo, bond_atoms, bo, bopi, bopi2, work_dir)
+          max_force, energy_terms, energy_terms_total, bo_natom, nbond, abo, bond_atoms, bo, bopi, bopi2, &
+          nbuckets, bucket_left, bucket_right, bucket_self, bucket_count, bucket_vdw, bucket_coulomb, work_dir)
       first_request = .false.
     else
       call wait_milliseconds(10)
@@ -82,15 +91,18 @@ contains
 
   subroutine process_request(worker_root, request_path, response_path, timing_log, smoke_binary, make_geo_script, first_request_inout, request_id_out, step_out, &
       bead_out, stage_out, natom_out, energy_out, force_out, charge_out, solver_out, status_out, charge_sum_out, max_force_out, &
-      energy_terms_out, energy_terms_total_out, bo_natom_out, nbond_out, abo_out, bond_atoms_out, bo_out, bopi_out, bopi2_out, work_dir_out)
+      energy_terms_out, energy_terms_total_out, bo_natom_out, nbond_out, abo_out, bond_atoms_out, bo_out, bopi_out, bopi2_out, &
+      nbuckets_out, bucket_left_out, bucket_right_out, bucket_self_out, bucket_count_out, bucket_vdw_out, bucket_coulomb_out, work_dir_out)
     character(len=*), intent(in) :: worker_root, request_path, response_path, timing_log, smoke_binary, make_geo_script
     logical, intent(inout) :: first_request_inout
     integer, intent(out) :: request_id_out, step_out, bead_out, natom_out, status_out
     integer, intent(out) :: bo_natom_out, nbond_out, bond_atoms_out(:, :)
+    integer, intent(out) :: nbuckets_out, bucket_left_out(:), bucket_right_out(:), bucket_self_out(:), bucket_count_out(:)
     character(len=*), intent(out) :: stage_out, work_dir_out
     real(dp), intent(out) :: energy_out, force_out(:, :), charge_out(:), solver_out(:), charge_sum_out, max_force_out
     real(dp), intent(out) :: energy_terms_out(14), energy_terms_total_out
     real(dp), intent(out) :: abo_out(:), bo_out(:), bopi_out(:), bopi2_out(:)
+    real(dp), intent(out) :: bucket_vdw_out(:), bucket_coulomb_out(:)
     integer :: unit, i, atom_index, start_count_local, end_count_local, rate
     character(len=512) :: line
     character(len=64) :: worker_state
@@ -126,6 +138,8 @@ contains
     call ereaxff_force_eval(x, natom_out, charge_in, solver_in, energy_out, force_out, charge_out, solver_out, status_out)
     call ereaxff_oracle_get_energy_terms(energy_terms_out, energy_terms_total_out)
     call ereaxff_oracle_get_bond_orders(bo_natom_out, nbond_out, abo_out, bond_atoms_out, bo_out, bopi_out, bopi2_out)
+    call ereaxff_oracle_get_nonbonded_buckets(nbucketmax, nbuckets_out, bucket_left_out, bucket_right_out, bucket_self_out, &
+        bucket_count_out, bucket_vdw_out, bucket_coulomb_out)
     if (bo_natom_out /= natom_out) stop "persistent_oracle_worker: bond-order atom count mismatch"
     if (nbond_out > nbondmax) stop "persistent_oracle_worker: too many bond-order rows"
     call system_clock(end_count_local)
@@ -135,6 +149,8 @@ contains
     call write_force_file(trim(forces_path), natom_out, force_out, charge_out, solver_out)
     call write_energy_terms(trim(work_dir_out) // "/single_point_energy_terms.out", energy_terms_out, energy_terms_total_out)
     call write_bond_orders(trim(work_dir_out) // "/single_point_bond_orders.out", natom_out, nbond_out, abo_out, bond_atoms_out, bo_out, bopi_out, bopi2_out)
+    call write_nonbonded_buckets(trim(work_dir_out) // "/single_point_nonbonded_buckets.out", nbuckets_out, bucket_left_out, bucket_right_out, &
+        bucket_self_out, bucket_count_out, bucket_vdw_out, bucket_coulomb_out)
     if (first_request_inout) then
       worker_state = "startup"
     else
@@ -396,6 +412,20 @@ contains
     end do
     close(unit)
   end subroutine write_bond_orders
+
+  subroutine write_nonbonded_buckets(path, nrows, left_type, right_type, self_image, bucket_count, vdw_kcal, coulomb_kcal)
+    character(len=*), intent(in) :: path
+    integer, intent(in) :: nrows, left_type(:), right_type(:), self_image(:), bucket_count(:)
+    real(dp), intent(in) :: vdw_kcal(:), coulomb_kcal(:)
+    integer :: unit, i
+
+    open(newunit=unit, file=trim(path), status="replace", action="write")
+    write(unit,'(a)') '# left_type right_type self_image count vdw_kcal coulomb_kcal'
+    do i = 1, nrows
+      write(unit,'(4i8,2es24.15)') left_type(i), right_type(i), self_image(i), bucket_count(i), vdw_kcal(i), coulomb_kcal(i)
+    end do
+    close(unit)
+  end subroutine write_nonbonded_buckets
 
   subroutine write_charge_trace(path, natom, charge_in, solver_in)
     character(len=*), intent(in) :: path

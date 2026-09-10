@@ -165,6 +165,14 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
     rob1_by_pair = _default_pair_average(symbols_by_index, rat_by_symbol)
     rob2_by_pair = _default_pair_average(symbols_by_index, rapt_by_symbol)
     rob3_by_pair = _default_pair_average(symbols_by_index, vnq_by_symbol)
+    p1co_by_pair: dict[str, float] = {}
+    p2co_by_pair: dict[str, float] = {}
+    p3co_by_pair: dict[str, float] = {}
+    for left in symbols_by_index.values():
+        for right in symbols_by_index.values():
+            p1co_by_pair[_pair_key(left, right)] = (4.0 * rvdw_by_symbol[left] * rvdw_by_symbol[right]) ** 0.5
+            p2co_by_pair[_pair_key(left, right)] = (eps_by_symbol[left] * eps_by_symbol[right]) ** 0.5
+            p3co_by_pair[_pair_key(left, right)] = (alfa_by_symbol[left] * alfa_by_symbol[right]) ** 0.5
     bond_params_by_pair: dict[str, dict[str, float]] = {}
     angle_params: list[dict[str, Any]] = []
     torsion_params: list[dict[str, Any]] = []
@@ -225,9 +233,14 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
             rob3_by_pair[_pair_key(left_symbol, right_symbol)] = rpi2
             rob3_by_pair[_pair_key(right_symbol, left_symbol)] = rpi2
         if rodm > 0.0:
-            # Stored for the vdW path in the Fortran p1co table; the current
-            # vdW parser keeps atom-combination values to preserve old behavior.
-            pass
+            p1co_by_pair[_pair_key(left_symbol, right_symbol)] = 2.0 * rodm
+            p1co_by_pair[_pair_key(right_symbol, left_symbol)] = 2.0 * rodm
+        if float(fields[2]) > 0.0:
+            p2co_by_pair[_pair_key(left_symbol, right_symbol)] = float(fields[2])
+            p2co_by_pair[_pair_key(right_symbol, left_symbol)] = float(fields[2])
+        if float(fields[4]) > 0.0:
+            p3co_by_pair[_pair_key(left_symbol, right_symbol)] = float(fields[4])
+            p3co_by_pair[_pair_key(right_symbol, left_symbol)] = float(fields[4])
         idx += 1
 
     if idx < len(lines):
@@ -334,6 +347,9 @@ def parse_ffield_coulomb_parameters(path: Path) -> dict[str, Any]:
         "rob1_by_pair": rob1_by_pair,
         "rob2_by_pair": rob2_by_pair,
         "rob3_by_pair": rob3_by_pair,
+        "p1co_by_pair": p1co_by_pair,
+        "p2co_by_pair": p2co_by_pair,
+        "p3co_by_pair": p3co_by_pair,
         "bond_params_by_pair": bond_params_by_pair,
         "angle_params": angle_params,
         "torsion_params": torsion_params,
@@ -443,13 +459,16 @@ def reaxff_shielded_coulomb_energy(positions_A, charges, gamma_eem, taper_coeffi
     positions = jnp.asarray(positions_A, dtype=jnp.float64)
     charges = jnp.asarray(charges, dtype=jnp.float64)
     gamma_eem = jnp.asarray(gamma_eem, dtype=jnp.float64)
-    displacements = positions[:, None, :] - positions[None, :, :]
-    displacements = _minimum_image(displacements, cell_lengths)
     n_atoms = positions.shape[0]
+    gamma_pair = 1.0 / (jnp.sqrt(gamma_eem[:, None] * gamma_eem[None, :]) ** 3)
+    # The Jamil legacy V2 oracle's nonbonded bucket labels match central-cell
+    # pair distances here; enumerating periodic images overcounts relative to
+    # the stored Verlet list used by `nonbonnoinS`.
+    del cell_lengths
+    displacements = positions[:, None, :] - positions[None, :, :]
     off_diagonal = ~jnp.eye(n_atoms, dtype=bool)
     r2 = jnp.sum(displacements * displacements, axis=-1)
     safe_r = jnp.sqrt(jnp.where(off_diagonal, r2, 1.0))
-    gamma_pair = 1.0 / (jnp.sqrt(gamma_eem[:, None] * gamma_eem[None, :]) ** 3)
     shielded_r = (safe_r * r2 + gamma_pair) ** (1.0 / 3.0)
     taper = taper_value(safe_r, taper_coefficients)
     in_cutoff = safe_r <= upper_taper_A
@@ -557,6 +576,9 @@ def reaxff_no_inner_shielded_vdw_energy(
     taper_coefficients,
     upper_taper_A,
     cell_lengths=None,
+    p1co=None,
+    p2co=None,
+    p3co=None,
 ):
     """eReaxFF shielded Morse vdW energy in eV for `nonbonnoinS`."""
 
@@ -567,16 +589,17 @@ def reaxff_no_inner_shielded_vdw_energy(
     eps = jnp.asarray(eps, dtype=jnp.float64)
     alfa = jnp.asarray(alfa, dtype=jnp.float64)
     gammavdw = jnp.asarray(gammavdw, dtype=jnp.float64)
-    displacements = positions[:, None, :] - positions[None, :, :]
-    displacements = _minimum_image(displacements, cell_lengths)
     n_atoms = positions.shape[0]
+    p1 = jnp.sqrt(4.0 * rvdw[:, None] * rvdw[None, :]) if p1co is None else jnp.asarray(p1co, dtype=jnp.float64)
+    p2 = jnp.sqrt(eps[:, None] * eps[None, :]) if p2co is None else jnp.asarray(p2co, dtype=jnp.float64)
+    p3 = jnp.sqrt(alfa[:, None] * alfa[None, :]) if p3co is None else jnp.asarray(p3co, dtype=jnp.float64)
+    gamwco = 1.0 / (jnp.sqrt(gammavdw[:, None] * gammavdw[None, :]) ** vdw_shielding_power)
+    # Match the same central-cell legacy nonbonded list used for Coulomb.
+    del cell_lengths
+    displacements = positions[:, None, :] - positions[None, :, :]
     off_diagonal = ~jnp.eye(n_atoms, dtype=bool)
     r2 = jnp.sum(displacements * displacements, axis=-1)
     safe_r = jnp.sqrt(jnp.where(off_diagonal, r2, 1.0))
-    p1 = jnp.sqrt(4.0 * rvdw[:, None] * rvdw[None, :])
-    p2 = jnp.sqrt(eps[:, None] * eps[None, :])
-    p3 = jnp.sqrt(alfa[:, None] * alfa[None, :])
-    gamwco = 1.0 / (jnp.sqrt(gammavdw[:, None] * gammavdw[None, :]) ** vdw_shielding_power)
     rrw = (safe_r**vdw_shielding_power + gamwco) ** (1.0 / vdw_shielding_power)
     h1 = jnp.exp(p3 * (1.0 - rrw / p1))
     h2 = jnp.exp(0.5 * p3 * (1.0 - rrw / p1))
@@ -598,6 +621,9 @@ def reaxff_no_inner_shielded_nonbonded_energy(
     taper_coefficients,
     upper_taper_A,
     cell_lengths=None,
+    p1co=None,
+    p2co=None,
+    p3co=None,
 ):
     coulomb = reaxff_shielded_coulomb_energy(
         positions_A,
@@ -617,6 +643,9 @@ def reaxff_no_inner_shielded_nonbonded_energy(
         taper_coefficients,
         upper_taper_A,
         cell_lengths,
+        p1co,
+        p2co,
+        p3co,
     )
     return coulomb + vdw
 
@@ -633,6 +662,9 @@ def reaxff_no_inner_shielded_nonbonded_terms(
     taper_coefficients,
     upper_taper_A,
     cell_lengths=None,
+    p1co=None,
+    p2co=None,
+    p3co=None,
 ):
     return {
         "coulomb": reaxff_shielded_coulomb_energy(
@@ -653,6 +685,9 @@ def reaxff_no_inner_shielded_nonbonded_terms(
             taper_coefficients,
             upper_taper_A,
             cell_lengths,
+            p1co,
+            p2co,
+            p3co,
         ),
     }
 
@@ -719,6 +754,9 @@ def reaxff_corrected_bond_nonbonded_terms(
         taper_coefficients,
         upper_taper_A,
         cell_lengths,
+        bond_inputs["p1co"],
+        bond_inputs["p2co"],
+        bond_inputs["p3co"],
     )
     terms["bond"] = reaxff_corrected_bond_energy(
         positions_A,
@@ -2253,6 +2291,9 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
     v13cor, _ = _bond_parameter_matrix(case, parameters, "v13cor")
     pxel1, _ = _bond_parameter_matrix(case, parameters, "pxel1")
     vover, _ = _bond_parameter_matrix(case, parameters, "vover")
+    p1co = _pair_parameter_matrix(case, parameters["p1co_by_pair"], "vdW radius pair")
+    p2co = _pair_parameter_matrix(case, parameters["p2co_by_pair"], "vdW epsilon pair")
+    p3co = _pair_parameter_matrix(case, parameters["p3co_by_pair"], "vdW alpha pair")
     return {
         "amas": amas,
         "aval": aval,
@@ -2291,6 +2332,9 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
         "v13cor": v13cor,
         "pxel1": pxel1,
         "vover": vover,
+        "p1co": p1co,
+        "p2co": p2co,
+        "p3co": p3co,
         "bond_mask": bond_mask,
         "cutoff": float(parameters["bond_order_cutoff"]),
         "overcoordination_parameter": float(parameters["overcoordination_parameter"]),

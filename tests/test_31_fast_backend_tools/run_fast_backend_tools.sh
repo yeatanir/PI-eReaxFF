@@ -124,6 +124,11 @@ ATOM 1 0.75
 ATOM 2 0.75
 BOND 1 1 2 0.75 0.25 0.125
 EOF
+cat > "$CALL_DIR/single_point_nonbonded_buckets.out" <<'EOF'
+# left_type right_type self_image count vdw_kcal coulomb_kcal
+1 2 0 3 1.5 -2.0
+1 1 1 1 0.25 0.5
+EOF
 
 python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \
   --adapter-work "$WORK_DIR" \
@@ -148,6 +153,11 @@ assert abs(sum(case["labels"]["energy_terms_eV"].values()) - case["labels"]["ene
 bond_orders = case["labels"]["bond_orders"]
 assert bond_orders["abo"] == [0.75, 0.75]
 assert bond_orders["bonds"] == [{"index": 1, "atom_i": 1, "atom_j": 2, "bo": 0.75, "bopi": 0.25, "bopi2": 0.125}]
+nonbonded_buckets = case["labels"]["nonbonded_buckets"]
+assert nonbonded_buckets == [
+    {"left_type": 1, "right_type": 2, "self_image": False, "count": 3, "vdw_kcal": 1.5, "coulomb_kcal": -2.0, "vdw_eV": 1.5 * 0.043364, "coulomb_eV": -2.0 * 0.043364},
+    {"left_type": 1, "right_type": 1, "self_image": True, "count": 1, "vdw_kcal": 0.25, "coulomb_kcal": 0.5, "vdw_eV": 0.25 * 0.043364, "coulomb_eV": 0.5 * 0.043364},
+]
 
 import sys
 sys.path.insert(0, "projects/jamil_replication/fast_backend")
