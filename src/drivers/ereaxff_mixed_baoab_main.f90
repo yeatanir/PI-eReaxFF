@@ -61,12 +61,14 @@ program ereaxff_mixed_baoab_main
   character(len=512) :: geometry_path
   character(len=1100) :: mkdir_command
   integer :: beads, steps, ios, step, start_step, energy_unit, spread_unit, heat_unit, xyz_unit
+  integer :: centroid_traj_unit, bead_traj_unit
   integer :: carbon_temp_unit, electron_temp_unit, electron_mode_temp_unit, electron_mode_partition_unit
   integer :: nparticles
   integer :: pimd_count, output_stride, nquantum, q, primary_quantum, primary_beads
   real(dp) :: temperature_K, dt_fs, pimd_mass_amu
   type(rng_state) :: rng
   logical :: config_mode, exists, force_off_mode, exact_oracle_mode
+  logical :: output_centroid_xyz, output_beads_xyz
 
   call get_command_argument(1, arg1)
   call get_command_argument(2, arg2)
@@ -324,11 +326,26 @@ program ereaxff_mixed_baoab_main
   call evaluate_mixed_force_beads(start_step, "initial_force")
   output_stride = 1
   if (config_mode) output_stride = max(1, cfg%simulation%output_stride)
+  output_centroid_xyz = .true.
+  output_beads_xyz = .false.
+  if (config_mode) then
+    output_centroid_xyz = cfg%output%centroid_xyz
+    output_beads_xyz = cfg%output%beads_xyz
+  end if
+  centroid_traj_unit = -1
+  bead_traj_unit = -1
 
   open(newunit=energy_unit, file=join_path(output_dir, "pimd_energy.out"), status="replace", action="write")
   open(newunit=spread_unit, file=join_path(output_dir, "bead_spread.out"), status="replace", action="write")
   open(newunit=heat_unit, file=join_path(output_dir, "thermostat_heat.out"), status="replace", action="write")
   open(newunit=xyz_unit, file=join_path(output_dir, "centroid.xyz"), status="replace", action="write")
+  if (output_centroid_xyz) then
+    open(newunit=centroid_traj_unit, file=join_path(output_dir, "trajectory_centroid.xyz"), &
+        status="replace", action="write")
+  end if
+  if (output_beads_xyz) then
+    open(newunit=bead_traj_unit, file=join_path(output_dir, "trajectory_beads.xyz"), status="replace", action="write")
+  end if
   open(newunit=carbon_temp_unit, file=join_path(output_dir, "carbon_temperature.out"), status="replace", action="write")
   open(newunit=electron_temp_unit, file=join_path(output_dir, "electron_temperature.out"), status="replace", action="write")
   open(newunit=electron_mode_temp_unit, &
@@ -366,6 +383,8 @@ program ereaxff_mixed_baoab_main
   close(spread_unit)
   close(heat_unit)
   close(xyz_unit)
+  if (centroid_traj_unit /= -1) close(centroid_traj_unit)
+  if (bead_traj_unit /= -1) close(bead_traj_unit)
   close(carbon_temp_unit)
   close(electron_temp_unit)
   close(electron_mode_temp_unit)
@@ -642,6 +661,7 @@ contains
   subroutine write_step_outputs(step_in)
     integer, intent(in) :: step_in
     real(dp) :: q_bead_local(3, primary_beads)
+    real(dp) :: centroid_positions(ndim, nparticles)
     real(dp) :: free_ring_eV
     integer :: coord
 
@@ -669,6 +689,9 @@ contains
     write(spread_unit,'(i8,4(1x,es22.14))') step_in, centroid_A(1), centroid_A(2), centroid_A(3), bead_spread_A
     write(heat_unit,'(i8,3(1x,es22.14))') step_in, thermostat_heat_eV, classical_heat_eV, sum(quantum_heat_eV)
     call write_centroid_xyz_frame(xyz_unit, step_in, centroid_A)
+    centroid_positions = sum(positions_A, dim=3) / real(beads, dp)
+    if (centroid_traj_unit /= -1) call write_full_centroid_xyz_frame(centroid_traj_unit, step_in, centroid_positions)
+    if (bead_traj_unit /= -1) call write_bead_xyz_frames(bead_traj_unit, step_in, positions_A)
     call write_charge_by_bead_summary(join_path(output_dir, "charge_by_bead.out"), charge_memory%charges_by_bead)
     call write_charge_centroid_summary(join_path(output_dir, "charge_centroid.out"), &
         charge_memory%charges_by_bead, solver_guess)
@@ -732,6 +755,34 @@ contains
     write(unit,'(a,i0)') "step=", step_in
     write(unit,'(a,3(1x,es22.14))') "El", centroid(1), centroid(2), centroid(3)
   end subroutine write_centroid_xyz_frame
+
+  subroutine write_full_centroid_xyz_frame(unit, step_in, centroid_positions)
+    integer, intent(in) :: unit, step_in
+    real(dp), intent(in) :: centroid_positions(:, :)
+    integer :: i
+
+    write(unit,'(i0)') nparticles
+    write(unit,'(a,i0,1x,a,i0)') "step=", step_in, "beads=", beads
+    do i = 1, nparticles
+      write(unit,'(a,3(1x,es22.14))') trim(state%element(i)), centroid_positions(1, i), &
+          centroid_positions(2, i), centroid_positions(3, i)
+    end do
+  end subroutine write_full_centroid_xyz_frame
+
+  subroutine write_bead_xyz_frames(unit, step_in, bead_positions)
+    integer, intent(in) :: unit, step_in
+    real(dp), intent(in) :: bead_positions(:, :, :)
+    integer :: bead, i
+
+    do bead = 1, size(bead_positions, 3)
+      write(unit,'(i0)') nparticles
+      write(unit,'(a,i0,1x,a,i0)') "step=", step_in, "bead=", bead
+      do i = 1, nparticles
+        write(unit,'(a,3(1x,es22.14))') trim(state%element(i)), bead_positions(1, i, bead), &
+            bead_positions(2, i, bead), bead_positions(3, i, bead)
+      end do
+    end do
+  end subroutine write_bead_xyz_frames
 
   subroutine evaluate_mixed_force_beads(step_index, stage_label)
     integer, intent(in) :: step_index

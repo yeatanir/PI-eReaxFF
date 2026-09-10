@@ -40,6 +40,11 @@ The Fortran input parser currently accepts:
 - `groups`: `name`, `selector`, `dynamics`, `mobile`, `beads`, `thermostat`,
   `temperature_K`, `gamma_fs_inv`, `centroid_gamma_fs_inv`, and `mass_amu`;
 - `output`: `centroid_xyz`, `beads_xyz`, `reaxff_compat`, `diagnostics`.
+  In the mixed BAOAB driver, `centroid_xyz` writes a full-system
+  `trajectory_centroid.xyz` file at the simulation output stride.  `beads_xyz`
+  writes a bead-resolved `trajectory_beads.xyz` file and should be treated as a
+  debug output for long PIMD runs because it scales with both atom count and
+  bead count.
 
 The parser is intentionally strict about structure and selector validity, but
 it does not yet implement full YAML features such as anchors, nested maps, or

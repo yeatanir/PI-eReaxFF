@@ -440,7 +440,8 @@ if real_dataset.exists():
         "angle_conjugation",
         "bond",
         "coulomb",
-        "electron",
+        "electron_core",
+        "electron_electron",
         "penalty",
         "torsion",
         "torsion_conjugation",
@@ -449,7 +450,8 @@ if real_dataset.exists():
     }
     assert abs(response["energy_terms_eV"]["valence"][0] - 4.930837527913495) < 1.0e-10
     assert abs(response["energy_terms_eV"]["penalty"][0] - 0.04994792351223957) < 1.0e-10
-    assert abs(response["energy_terms_eV"]["electron"][0]) < 1.0e-12
+    assert abs(response["energy_terms_eV"]["electron_core"][0]) < 1.0e-12
+    assert abs(response["energy_terms_eV"]["electron_electron"][0]) < 1.0e-12
     assert abs(response["energy_eV"][0] + 10.791805565593878) < 1.0e-10
     assert abs(response["forces_eV_per_A"][0][2][1] + 12.263151967963509) < 1.0e-10
 
@@ -534,9 +536,19 @@ electron_case["solver_guess_in"] = [0.0, 0.0]
 electron_case["crystx"] = None
 electron_output = evaluate_reaxff_corrected_bond_nonbonded_valence_case(electron_case)
 electron_terms = {key: float(value) for key, value in electron_output["energy_terms_eV"].items()}
-assert abs(electron_terms["electron"] + 0.2326373860870282) < 1.0e-12
+assert abs(electron_terms["electron_core"] + 0.2326373860870282) < 1.0e-12
+assert abs(electron_terms["electron_electron"]) < 1.0e-12
 assert abs(sum(electron_terms.values()) - float(electron_output["energy_eV"])) < 1.0e-12
 assert abs(float(electron_output["energy_eV"]) + 0.2249949320658194) < 1.0e-12
+
+hole_case = json.loads(json.dumps(electron_case))
+hole_case["atom_types"] = ["C", "Ho"]
+try:
+    evaluate_reaxff_corrected_bond_nonbonded_valence_case(hole_case)
+except ValueError as exc:
+    assert "electron-only" in str(exc)
+else:
+    raise AssertionError("Ho/hole input should fail fast in the JAX backend")
 
 electron_eps = 1.0e-6
 electron_plus = json.loads(json.dumps(electron_case))

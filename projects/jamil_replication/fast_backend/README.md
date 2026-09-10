@@ -98,7 +98,8 @@ nonzero solver state.
   slice that applies the Jamil `poten.f:boncor` overcoordination and 1-3
   bond-order corrections before `covbon`.
 - an experimental aggregate slice that sums corrected covalent bond energy,
-  no-inner-wall vdW, and shielded/tapered Coulomb in one JAX force call.
+  no-inner-wall vdW, shielded/tapered Coulomb, sparse valence/torsion terms,
+  and electron-only `El` pair terms in one JAX force call.
 
 The Coulomb kernels are orthorhombic-minimum-image only.  The
 `reaxff_shielded_coulomb` path follows the Jamil source `poten.f` Coulomb
@@ -110,10 +111,15 @@ sigma/pi/pi-pi bond orders and the direct covalent bond term.  The
 `reaxff_corrected_bond` path applies the source-derived `boncor` bond-order
 attenuation before the covalent bond-energy expression.  The
 `reaxff_corrected_bond_nonbonded` path combines the implemented corrected bond,
-vdW, and Coulomb slices, but still omits valence-angle, torsion, lone-pair,
-over/undercoordination penalty, ACKS2 dynamic charge solving, self-image
-details beyond minimum image, and other total-energy terms.  These kernels must
-not be used for production dynamics or total-force parity.
+vdW, and Coulomb slices.  The
+`reaxff_corrected_bond_nonbonded_valence` path additionally reports valence,
+penalty, angle-conjugation, torsion, torsion-conjugation, `electron_core`, and
+`electron_electron` contributions.  It is electron-only for the current Jamil
+target and fails fast on `Ho`/hole particles.  It still omits full dynamic
+ACKS2 charge solving, electron-corrected lone-pair/overcoordination parity
+(`lonpar`/`ovcor`), self-image details beyond minimum image, and other
+total-energy terms.  These kernels must not be used for production dynamics or
+total-force parity.
 
 Force evaluation fails closed by default:
 

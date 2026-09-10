@@ -65,7 +65,7 @@ module ereaxff_input_config
 
   type, public :: output_config
     logical :: centroid_xyz = .true.
-    logical :: beads_xyz = .true.
+    logical :: beads_xyz = .false.
     logical :: reaxff_compat = .true.
     logical :: diagnostics = .true.
   end type output_config

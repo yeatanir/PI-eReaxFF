@@ -26,12 +26,27 @@ PY
 
 "$ROOT_DIR/build/ereaxff_mixed_baoab_main" "$CFG" "$WORK_DIR" > "$WORK_DIR/stdout.log"
 
-for file in pimd_energy.out bead_spread.out charge_by_bead.out charge_centroid.out electron_localization.out centroid.xyz fort.7 fort.8 molfra.out xmolout restart.dat; do
+for file in pimd_energy.out bead_spread.out charge_by_bead.out charge_centroid.out electron_localization.out centroid.xyz trajectory_centroid.xyz trajectory_beads.xyz fort.7 fort.8 molfra.out xmolout restart.dat; do
   if [[ ! -s "$WORK_DIR/$file" ]]; then
     echo "test_21_ereaxff_mixed_baoab_config_smoke: FAIL missing $file" | tee "$SUMMARY"
     exit 1
   fi
 done
+
+python3 - "$WORK_DIR/centroid.xyz" "$WORK_DIR/trajectory_centroid.xyz" "$WORK_DIR/trajectory_beads.xyz" <<'PY'
+import pathlib
+import sys
+
+legacy = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+centroid = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+beads = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8").splitlines()
+
+assert legacy[0] == "1"
+assert centroid[0] == "61"
+assert beads[0] == "61"
+assert "step=0" in centroid[1]
+assert "bead=1" in beads[1]
+PY
 
 grep -q "input file: $CFG" "$WORK_DIR/stdout.log"
 grep -q "config-driven legacy V1/V2 fixtures" "$WORK_DIR/stdout.log"

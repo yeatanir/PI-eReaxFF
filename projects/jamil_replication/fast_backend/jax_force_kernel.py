@@ -468,6 +468,34 @@ def reaxff_electron_pair_energy(
 ):
     """Jamil eReaxFF `electron` pair term for core/El and El/El interactions."""
 
+    return _total_from_terms(
+        reaxff_electron_pair_terms(
+            positions_A,
+            is_electron,
+            is_hole,
+            core_charge,
+            betael,
+            alphag,
+            taper_coefficients,
+            upper_taper_A,
+            cell_lengths,
+        )
+    )
+
+
+def reaxff_electron_pair_terms(
+    positions_A,
+    is_electron,
+    is_hole,
+    core_charge,
+    betael,
+    alphag,
+    taper_coefficients,
+    upper_taper_A,
+    cell_lengths=None,
+):
+    """Electron-only eReaxFF pair terms split by physical contribution."""
+
     import jax.numpy as jnp
     from jax.scipy.special import erf
 
@@ -481,7 +509,7 @@ def reaxff_electron_pair_energy(
     taper = taper_value(safe_r, taper_coefficients)
     in_cutoff = (safe_r <= upper_taper_A) & (safe_r >= 0.001)
 
-    is_core = ~(is_electron | is_hole)
+    is_core = ~is_electron
     electron_core = (is_electron[:, None] & is_core[None, :]) | (is_core[:, None] & is_electron[None, :])
     core_beta = jnp.where(is_core[:, None], betael[:, None], betael[None, :])
     core_alpha = jnp.maximum(jnp.where(is_core[:, None], alphag[:, None], alphag[None, :]), 0.0)
@@ -504,10 +532,15 @@ def reaxff_electron_pair_energy(
         * erf(jnp.sqrt(electron_alpha) * safe_r)
     )
 
-    pair_energy_kcal = jnp.where(electron_core, electron_core_kcal, 0.0) + jnp.where(
-        electron_electron, electron_electron_kcal, 0.0
-    )
-    return 0.5 * KCAL_TO_EV * jnp.sum(jnp.where(off_diagonal & in_cutoff, pair_energy_kcal * taper, 0.0))
+    active = off_diagonal & in_cutoff
+    return {
+        "electron_core": 0.5
+        * KCAL_TO_EV
+        * jnp.sum(jnp.where(active & electron_core, electron_core_kcal * taper, 0.0)),
+        "electron_electron": 0.5
+        * KCAL_TO_EV
+        * jnp.sum(jnp.where(active & electron_electron, electron_electron_kcal * taper, 0.0)),
+    }
 
 
 def reaxff_no_inner_shielded_vdw_energy(
@@ -760,7 +793,7 @@ def reaxff_corrected_bond_nonbonded_valence_terms(
     elif topology is not None:
         terms.update(reaxff_sparse_torsion_terms(positions_A, bond_inputs, topology, cell_lengths))
     if electron_inputs is not None:
-        terms["electron"] = reaxff_electron_pair_energy(
+        terms.update(reaxff_electron_pair_terms(
             positions_A,
             electron_inputs["is_electron"],
             electron_inputs["is_hole"],
@@ -770,7 +803,7 @@ def reaxff_corrected_bond_nonbonded_valence_terms(
             taper_coefficients,
             upper_taper_A,
             cell_lengths,
-        )
+        ))
     return terms
 
 
@@ -1081,6 +1114,7 @@ def _electron_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
         "F": 9.0,
         "P": 15.0,
     }
+    _assert_electron_only_case(case)
     atom_types = case["atom_types"]
     return {
         "is_electron": jnp.asarray([symbol == "El" for symbol in atom_types], dtype=bool),
@@ -1089,6 +1123,11 @@ def _electron_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
         "betael": _parameter_array(case, parameters["betael_by_symbol"], "electron beta"),
         "alphag": _parameter_array(case, parameters["alphag_by_symbol"], "Gaussian electron alpha"),
     }
+
+
+def _assert_electron_only_case(case: dict[str, Any]) -> None:
+    if any(symbol == "Ho" for symbol in case["atom_types"]):
+        raise ValueError("JAX eReaxFF fast backend supports electron-only inputs; Ho/hole particles are unsupported")
 
 
 def _bond_parameter_matrix(case: dict[str, Any], parameters: dict[str, Any], name: str):
@@ -2229,6 +2268,7 @@ def evaluate_reaxff_corrected_bond_nonbonded_valence_case(case: dict[str, Any]) 
     import jax.numpy as jnp
 
     jax.config.update("jax_enable_x64", True)
+    _assert_electron_only_case(case)
     positions = jnp.asarray(case["positions_A"], dtype=jnp.float64)
     charges = _fixed_charges(case)
     cell_lengths = _orthorhombic_cell_lengths(case)

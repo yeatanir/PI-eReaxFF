@@ -956,9 +956,9 @@ contains
     integer :: exitstat
 
     if (len_trim(path) == 0) error stop "ensure_workdir: empty path"
-    cmd = "mkdir -p " // shell_quote(path)
+    cmd = 'mkdir -p "' // trim(path) // '"'
     call run_shell(cmd, exitstat)
-    if (exitstat /= 0) error stop "ensure_workdir: unable to create working directory"
+    if (exitstat /= 0) error stop "ensure_workdir: unable to create working directory: " // trim(path)
   end subroutine ensure_workdir
 
   subroutine copy_fixture(source, target)
@@ -1018,7 +1018,7 @@ contains
 
     n = len_trim(text)
     allocate(character(len=n + 2) :: quoted)
-    quoted = "'" // trim(text) // "'"
+    quoted = '"' // trim(text) // '"'
   end function shell_quote
 
   pure function pad_int(value, width) result(text)
