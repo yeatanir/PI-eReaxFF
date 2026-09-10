@@ -8,6 +8,7 @@ module ereaxff_oracle_adapter
 
   integer, parameter :: shell_path_len = 16384
   real(dp), parameter :: kcal2eV = 0.043364_dp
+  real(dp), parameter :: legacy_force_accel_scale = 9.6485e-3_dp
 
   type, public :: oracle_adapter_state
     logical :: initialized = .false.
@@ -755,7 +756,7 @@ contains
       read(unit,*,iostat=ios) idx, fx, fy, fz, charge, solver
       if (ios /= 0) error stop "parse_single_point_forces: malformed force line"
       if (idx /= i) error stop "parse_single_point_forces: atom index mismatch"
-      result%force%forces_eV_per_A(:, i) = [fx, fy, fz]
+      result%force%forces_eV_per_A(:, i) = [fx, fy, fz] / legacy_force_accel_scale
       result%force%charges(i) = charge
       result%solver_guess(i) = solver
     end do

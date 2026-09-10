@@ -62,7 +62,7 @@ program test_oracle_adapter
     call assert_close("energy matches legacy kcal->eV", result_first%force%energy_eV, &
         -10916.85308542530_dp * kcal2eV, 1.0e-10_dp)
     call assert_close("max force matches legacy", maxval(abs(result_first%force%forces_eV_per_A)), &
-        9.555556877514268e-04_dp, tol_force_entry)
+        9.903670910000796e-02_dp, tol_force_entry)
     call assert_close("charge sum matches legacy", sum(result_first%force%charges), &
         -5.717690199427694e-08_dp, tol_charge)
     call assert_close("atom 1 charge matches legacy", result_first%force%charges(1), &

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 KCAL_TO_EV = 0.043364
+LEGACY_FORCE_ACCEL_SCALE = 9.6485e-3
 SCHEMA = "ereaxff_fast_backend_oracle_case_v1"
 ENERGY_TERM_NAMES = [
     "bond",
@@ -475,7 +476,13 @@ def parse_forces(path: Path, nparticles: int) -> tuple[list[list[float]], list[f
         expected = len(forces) + 1
         if atom_index != expected:
             raise ValueError(f"{path}: expected atom {expected}, got {atom_index}")
-        forces.append([float(fields[1]), float(fields[2]), float(fields[3])])
+        forces.append(
+            [
+                float(fields[1]) / LEGACY_FORCE_ACCEL_SCALE,
+                float(fields[2]) / LEGACY_FORCE_ACCEL_SCALE,
+                float(fields[3]) / LEGACY_FORCE_ACCEL_SCALE,
+            ]
+        )
         charges.append(float(fields[4]))
         solver.append(float(fields[5]))
     if len(forces) != nparticles:
@@ -523,13 +530,15 @@ def build_labeled_cases(adapter_work: Path) -> list[dict[str, Any]]:
         charge_model = "fixed_molcharge" if control.get("icharg") == 8 and fixed_charges is not None else "acks2"
         if len(positions) != nparticles or len(charge_in) != nparticles or len(solver_in) != nparticles:
             raise ValueError(f"{call_dir}: inconsistent particle counts")
+        max_force_eV_per_A = max(abs(value) for atom_forces in forces for value in atom_forces)
         labels = {
             "energy_kcal": summary["energy_kcal"],
             "energy_eV": summary["energy_eV"],
             "forces_eV_per_A": forces,
             "charge_out": charge_out,
             "solver_guess_out": solver_out,
-            "max_force": summary["max_force"],
+            "max_force": max_force_eV_per_A,
+            "legacy_max_force_accel_units": summary["max_force"],
             "charge_sum": summary["charge_sum"],
             "status": summary["status"],
         }

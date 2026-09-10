@@ -38,7 +38,7 @@ program test_oracle_force_manager_p1
   call assert_close("manager energy matches legacy", summary%pimd_potential_eV, &
       -10916.85308542530_dp * kcal2eV, 1.0e-10_dp)
   call assert_close("manager max force matches legacy", &
-      maxval(abs(summary%scaled_forces_eV_per_A(:, :, 1))), 9.555556877514268e-04_dp, 1.0e-12_dp)
+      maxval(abs(summary%scaled_forces_eV_per_A(:, :, 1))), 9.903670910000796e-02_dp, 1.0e-12_dp)
   call assert_close("manager charge sum matches legacy", sum(summary%bead_charges(:, 1)), &
       -5.717690199427694e-08_dp, 1.0e-12_dp)
   call assert_close("manager solver memory matches legacy", summary%bead_solver_guess(1, 1), &

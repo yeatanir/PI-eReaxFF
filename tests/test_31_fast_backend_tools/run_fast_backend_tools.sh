@@ -446,7 +446,7 @@ response = json.loads(completed.stdout)
 assert response["status"] == 0
 assert response["kernel"] == ["oracle_replay"]
 assert response["energy_eV"] == [-0.43364, -0.43364]
-assert response["forces_eV_per_A"][0] == [[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
+assert response["forces_eV_per_A"][0] == [[103.64305332435093, 0.0, 0.0], [-103.64305332435093, 0.0, 0.0]]
 
 if real_dataset.exists():
     real_case = json.loads(real_dataset.read_text().splitlines()[0])

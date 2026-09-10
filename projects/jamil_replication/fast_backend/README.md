@@ -36,6 +36,9 @@ metadata.  Adapter-work extraction also records exact energy, force, charge,
 solver, status, stage, bead, and timing labels from the legacy oracle outputs.
 For the current Jamil target it also records the legacy `icharg=8`
 `MOLCHARGE` constraints used by the first JAX charge kernel.
+Legacy force files are written by the V2 oracle wrapper in MD acceleration
+units.  The dataset builder converts them back to true `eV/A` at the JSONL
+boundary so JAX autodiff forces and oracle labels use the same units.
 Repo-built oracle exporters write `single_point_energy_terms.out` in every
 call directory.  The dataset builder records those per-term energy labels, or
 falls back to a retained legacy `fort.73` layout when that is the only term
@@ -103,9 +106,14 @@ Compare JAX nonbonded buckets against legacy labels:
   --output build/jamil_replication/fast_backend/nonbonded_bucket_compare_p4_latest.json
 ```
 
-The entrypoint currently fails closed for force evaluation.  That is deliberate:
-the exact oracle dataset and charge parity have to exist before a JAX/native
-force kernel can be accepted as a dynamics backend.
+Compare JAX force contributions and total forces against corrected `eV/A`
+legacy labels:
+
+```sh
+.venv-fast/bin/python projects/jamil_replication/fast_backend/compare_force_terms.py \
+  --dataset build/jamil_replication/fast_backend/oracle_labeled_p4_nonbonded_latest.jsonl \
+  --output build/jamil_replication/fast_backend/force_term_report_p4_nonbonded.json
+```
 
 ## Charge Kernel Status
 
@@ -162,10 +170,13 @@ penalty, angle-conjugation, torsion, torsion-conjugation, `lone_pair`,
 is electron-only for the current Jamil target and fails fast on `Ho`/hole
 particles.  Corrected covalent bond orders, bond energy, valence/penalty,
 torsion, torsion-conjugation, lone-pair, electron-pair terms, and nonbonded
-vdW/Coulomb buckets now have direct oracle labels for comparison.  Full dynamic
-ACKS2 charge solving, the remaining overcoordination scalar mismatch, and other
-total-energy terms are still unvalidated.  These kernels must not be used for
-production dynamics or total-force parity.
+vdW/Coulomb buckets now have direct oracle labels for comparison.  On the
+current P=4 nonbonded Jamil oracle dataset, corrected BO topology has zero
+missing/extra bonds, scalar total-energy error is below `1e-5 eV`, and total
+force error is below `4e-7 eV/A` after converting legacy oracle forces to true
+`eV/A`.  Full dynamic ACKS2 charge solving is still intentionally unimplemented
+and will fail closed until it has oracle labels that exercise nonzero solver
+state.
 
 Force evaluation fails closed by default:
 

@@ -11,6 +11,7 @@ program test_persistent_oracle_worker
   integer, parameter :: ndim = 3
   integer, parameter :: nparticles = 61
   integer, parameter :: p = 2
+  real(dp), parameter :: force_tol_eV_per_A = 2.0e-4_dp
   type(system_state) :: state
   real(dp) :: positions(ndim, nparticles, p)
   type(oracle_bead_summary) :: external_summary, persistent_summary, pool_summary
@@ -43,7 +44,7 @@ program test_persistent_oracle_worker
 
   call assert_close("energy", external_summary%pimd_potential_eV, persistent_summary%pimd_potential_eV, 1.0e-4_dp)
   call assert_close("forces", maxval(abs(external_summary%scaled_forces_eV_per_A - persistent_summary%scaled_forces_eV_per_A)), &
-      0.0_dp, 1.0e-5_dp)
+      0.0_dp, force_tol_eV_per_A)
   call assert_close("charges", maxval(abs(external_summary%bead_charges - persistent_summary%bead_charges)), 0.0_dp, 1.0e-5_dp)
   call assert_close("solver", maxval(abs(external_summary%bead_solver_guess - persistent_summary%bead_solver_guess)), &
       0.0_dp, 1.0e-5_dp)
@@ -51,7 +52,7 @@ program test_persistent_oracle_worker
       0.0_dp, 1.0e-5_dp)
   call assert_close("pool energy", persistent_summary%pimd_potential_eV, pool_summary%pimd_potential_eV, 1.0e-4_dp)
   call assert_close("pool forces", maxval(abs(persistent_summary%scaled_forces_eV_per_A - pool_summary%scaled_forces_eV_per_A)), &
-      0.0_dp, 1.0e-5_dp)
+      0.0_dp, force_tol_eV_per_A)
   call assert_close("pool charges", maxval(abs(persistent_summary%bead_charges - pool_summary%bead_charges)), 0.0_dp, 1.0e-5_dp)
   call assert_close("pool solver", maxval(abs(persistent_summary%bead_solver_guess - pool_summary%bead_solver_guess)), &
       0.0_dp, 1.0e-5_dp)
