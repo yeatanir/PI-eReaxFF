@@ -32,5 +32,7 @@ removing the exact legacy oracle.
   arrays.
 - The first JAX charge kernel supports the actual Jamil `icharg=8`
   fixed-`MOLCHARGE` path and reports charge parity against oracle labels.
-- Full dynamic ACKS2 matrix solving and energy/force evaluation remain
+- A strict oracle-replay force kernel now validates batched response shape and
+  parity plumbing, while failing closed unless replay is explicitly requested.
+- Full dynamic ACKS2 matrix solving and physics energy/force evaluation remain
   fail-closed until their parity kernels are implemented.

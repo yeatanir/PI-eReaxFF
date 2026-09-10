@@ -69,6 +69,28 @@ assert response["status"] == 0
 assert response["charge_models"] == ["fixed_molcharge"]
 assert response["charge_out"] == [[0.5, -0.5], [0.5, -0.5]]
 assert response["solver_guess_out"] == [[0.0, 0.0], [0.0, 0.0]]
+
+failed = subprocess.run(
+    [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
+    input=json.dumps({"command": "force_batch", "cases": [case]}),
+    text=True,
+    capture_output=True,
+)
+assert failed.returncode == 2
+assert "physics force kernel is not implemented" in failed.stdout
+
+completed = subprocess.run(
+    [".venv-fast/bin/python", "projects/jamil_replication/fast_backend/jax_backend.py"],
+    input=json.dumps({"command": "force_batch", "allow_oracle_replay": True, "cases": [case, case]}),
+    text=True,
+    capture_output=True,
+    check=True,
+)
+response = json.loads(completed.stdout)
+assert response["status"] == 0
+assert response["kernel"] == ["oracle_replay"]
+assert response["energy_eV"] == [-0.43364, -0.43364]
+assert response["forces_eV_per_A"][0] == [[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
 PY
 else
   python3 projects/jamil_replication/fast_backend/jax_backend.py \

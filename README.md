@@ -223,5 +223,7 @@ The fast-backend work has started behind a gated interface:
   oracle readiness checks;
 - the first JAX charge kernel reproduces the current Jamil `icharg=8`
   fixed-`MOLCHARGE` charge path in batched form;
+- the first JAX force path is strict oracle-label replay for protocol and
+  parity testing only; physics force evaluation still fails closed;
 - the force-provider base now has a batched result type so future backends can
   evaluate all beads in one compiled/vectorized request.

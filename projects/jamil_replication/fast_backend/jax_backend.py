@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from jax_charge_kernel import charge_parity_metrics, evaluate_charge_batch
+from jax_force_kernel import evaluate_force_batch, force_parity_metrics
 
 
 SCHEMA = "ereaxff_fast_backend_oracle_case_v1"
@@ -77,6 +78,8 @@ def parity_check(dataset: Path) -> int:
     max_solver_abs = 0.0
     max_charge_error = 0.0
     max_solver_error = 0.0
+    max_energy_error = 0.0
+    max_force_error = 0.0
     energy_min = None
     energy_max = None
     charge_models = set()
@@ -87,16 +90,20 @@ def parity_check(dataset: Path) -> int:
         charges = jnp.asarray(labels["charge_out"], dtype=jnp.float64)
         solver = jnp.asarray(labels["solver_guess_out"], dtype=jnp.float64)
         charge_metrics = charge_parity_metrics(case)
+        force_metrics = force_parity_metrics(case, allow_replay=True)
         max_force_abs = max(max_force_abs, float(jnp.max(jnp.abs(forces))))
         max_charge_abs = max(max_charge_abs, float(jnp.max(jnp.abs(charges))))
         max_solver_abs = max(max_solver_abs, float(jnp.max(jnp.abs(solver))))
         max_charge_error = max(max_charge_error, charge_metrics["max_charge_abs_error"])
         max_solver_error = max(max_solver_error, charge_metrics["max_solver_abs_error"])
+        max_energy_error = max(max_energy_error, force_metrics["abs_energy_error_eV"])
+        max_force_error = max(max_force_error, force_metrics["max_force_abs_error_eV_per_A"])
         energy = float(labels["energy_eV"])
         energy_min = energy if energy_min is None else min(energy_min, energy)
         energy_max = energy if energy_max is None else max(energy_max, energy)
 
     charge_passes = max_charge_error <= 1.0e-12 and max_solver_error <= 1.0e-12
+    force_replay_passes = max_energy_error <= 1.0e-12 and max_force_error <= 1.0e-12
     print(
         json.dumps(
             {
@@ -116,12 +123,17 @@ def parity_check(dataset: Path) -> int:
                     "max_solver_abs_error": max_solver_error,
                     "passes": charge_passes,
                 },
+                "force_replay_kernel": {
+                    "max_energy_abs_error_eV": max_energy_error,
+                    "max_force_abs_error_eV_per_A": max_force_error,
+                    "passes": force_replay_passes,
+                },
                 "parity_ready": True,
             },
             sort_keys=True,
         )
     )
-    return 0 if charge_passes else 2
+    return 0 if charge_passes and force_replay_passes else 2
 
 
 def self_test(dataset: Path | None) -> int:
@@ -147,6 +159,35 @@ def evaluate_from_stdin(allow_unvalidated: bool) -> int:
             "charge_models": batch["charge_models"],
             "charge_out": batch["charge_out"].tolist(),
             "solver_guess_out": batch["solver_guess_out"].tolist(),
+            "case_status": batch["status"],
+        }
+        print(json.dumps(response, sort_keys=True))
+        return 0
+    if request.get("command") == "force_batch":
+        try:
+            batch = evaluate_force_batch(
+                request.get("cases", []),
+                allow_replay=bool(request.get("allow_oracle_replay", False)),
+            )
+        except NotImplementedError as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": 2,
+                        "command": "force_batch",
+                        "diagnostic": str(exc),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 2
+        response = {
+            "status": 0,
+            "command": "force_batch",
+            "kernel": batch["kernel"],
+            "fingerprints": batch["fingerprints"],
+            "energy_eV": batch["energy_eV"].tolist(),
+            "forces_eV_per_A": batch["forces_eV_per_A"].tolist(),
             "case_status": batch["status"],
         }
         print(json.dumps(response, sort_keys=True))

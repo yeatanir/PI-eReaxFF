@@ -80,3 +80,22 @@ backend can evaluate it in batches with:
 Full dynamic ACKS2 matrix construction/solve is still intentionally
 unimplemented and will fail closed until it has oracle labels that exercise
 nonzero solver state.
+
+## Force Kernel Status
+
+`jax_force_kernel.py` currently provides only strict oracle-label replay.  It
+is not a physics kernel and it must not be used to extrapolate to new
+geometries.  Its purpose is to lock the batched force protocol and parity
+metrics before the eReaxFF energy terms are ported.
+
+Force evaluation fails closed by default:
+
+```json
+{"command": "force_batch", "cases": [ ... ]}
+```
+
+For protocol/parity tests only, replay can be enabled explicitly:
+
+```json
+{"command": "force_batch", "allow_oracle_replay": true, "cases": [ ... ]}
+```
