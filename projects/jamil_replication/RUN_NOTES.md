@@ -178,6 +178,28 @@ Interpretation:
 - The physical electron temperature still increases with P at fixed `dt_fs=0.1`, so the hot-electron issue is real and is not only a diagnostic-label problem.
 - Carbon temperature remains stable near `293 K`, so the P-sensitive heating is isolated to the electron PIMD path.
 
+## 2026-09-10 P Sweep At 4 Workers, 0.05 fs
+
+Command:
+
+```bash
+JAMIL_P_SWEEP_DT_FS=0.05 projects/jamil_replication/run_jamil_p_sweep.sh
+```
+
+Results:
+
+| P | Wall time | Oracle calls | Batches | Mean batch | Electron T | Extended T | Expected extended T | Ratio | Carbon T | Quantum heat | Bead RMS spread | Status |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 4 | 133.612 s | 20 | 5 | 19.957 s | 322.719 K | 1290.876 K | 1200.000 K | 4.000 | 292.973 K | 1.068152 eV | 0.002693 A | PASS |
+| 8 | 238.493 s | 40 | 10 | 20.073 s | 379.417 K | 3035.338 K | 2400.000 K | 8.000 | 292.973 K | -3.048897 eV | 0.004251 A | PASS |
+| 16 | 432.502 s | 80 | 20 | 19.666 s | 489.111 K | 7825.775 K | 4800.000 K | 16.000 | 292.972 K | 5.482156 eV | 0.006594 A | PASS |
+
+Interpretation:
+
+- Halving the timestep reduces bead spread and P=16 quantum heat, but it does not remove the P-dependent physical electron heating.
+- P=16 physical electron temperature only drops from `505.433 K` at `0.1 fs` to `489.111 K` at `0.05 fs`.
+- The next check should vary electron thermostat coupling/initialization, not just timestep.
+
 ## 2026-05-08 Partial Dispatch Sweep
 
 I started the strict bounded-pool sweep with `JAMIL_DISPATCH_SKIP_W1=1` and `OMP_NUM_THREADS=1`.
