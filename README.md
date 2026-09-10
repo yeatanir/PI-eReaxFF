@@ -70,7 +70,7 @@ standalone engine.  It should not become a second independent force path.
 ## Current Scope
 
 The current implementation now spans the validated modular foundation and the
-first mixed eReaxFF dynamics boundary:
+first working mixed RPMD/PIMD eReaxFF dynamics boundary:
 
 - repository scaffold and architecture documentation;
 - core numeric kinds and physical constants;
@@ -85,7 +85,16 @@ first mixed eReaxFF dynamics boundary:
 - mixed BAOAB restart and compatibility output handling;
 - multiple PIMD particles in one mixed run when they share a common bead
   count;
-- explicit pseudo-mass and restart state for each quantum particle.
+- explicit pseudo-mass and restart state for each quantum particle;
+- persistent eReaxFF oracle worker and bounded worker-pool backends;
+- Jamil 112C/113El graphene/electron replication inputs;
+- P=16 eReaxFF one-step runs through the persistent worker pool;
+- physical versus extended ring-polymer temperature diagnostics;
+- centroid/internal electron normal-mode kinetic partition diagnostics;
+- optional one-time initial PIMD normal-mode velocity rescaling for small
+  stochastic systems;
+- force-off mixed BAOAB diagnostics for separating thermostat/free-ring
+  behavior from eReaxFF force feedback.
 
 ## Build And Test
 
@@ -139,6 +148,9 @@ test_24_ereaxff_mixed_baoab_user_geo_matrix: PASS
 test_25_phase6_like_temperature_partition: PASS
 test_26_crystx_periodic_loader: PASS
 test_27_multi_quantum_restart: PASS
+test_28_paired_graphene_60el_60c_smoke: PASS
+test_29_oracle_dispatch_modes: PASS
+test_30_persistent_oracle_worker: PASS
 All implemented tests passed.
 ```
 
@@ -160,36 +172,40 @@ All implemented tests passed.
 
 ## Status
 
-This repository is pre-production research software.  The normal-mode,
-free-ring propagation, thermostat, dummy/harmonic force, mixed group
-assignment, adapter-mediated V2 oracle coverage, and force-manager P=1
-integration, centroid charge-policy, and mixed oracle-manager fixture/matrix
-foundations are tested.  A thin harmonic PIMD driver now writes PIMD-native
-diagnostic outputs and supports restart, and the mixed manager path now has a
-tested restart/output format for bead positions, charges, solver memory, and
-multiple quantum particles.  The mixed eReaxFF smoke driver now exercises that
-same restart/output boundary through the executable path.  Production eReaxFF
-coupling is intentionally still behind the validation gates described above.
-The mixed eReaxFF BAOAB driver now exercises the force-manager and free-ring
-propagator on top of that boundary across a wider bead-count matrix and a
-restart-continuity gate.
-The config-smoke gate now proves that the mixed BAOAB executable can read the
-YAML-subset config file directly, including the explicit legacy V1 paths for
-`control`, `ffield`, and `iopt`.
-The config-matrix gate then widens that path across bead count and charge
-policy while also checking that invalid selectors and overlapping groups fail
-cleanly.
-The geometry-matrix gate then varies the validated electron starting position
-within the phase4 helper contract and confirms the oracle boundary still holds.
-The geometry contract now also reserves explicit `structure_path`,
-`geo_path`, `periodic`, and `crystx` fields for the user-supplied legacy `geo`
-loader, which is now implemented for fixed-width HETATM files and exercised
-against the V2 background-revisit fixture. Legacy `CRYSTX` records are parsed
-into the shared cell state, and the compatibility writer now uses that shared
-cell for minimum-image connectivity instead of inferring a box from the
-centroid coordinates. Unsupported templates still fail cleanly.
+This repository is still pre-production research software, but the current
+mixed RPMD/PIMD eReaxFF plumbing is now working for the Jamil graphene/electron
+target.
 
-The mixed BAOAB path also accepts multiple quantum particles in one run so
-long as they share the same bead count.  Their pseudo-masses are set via
-`groups[].mass_amu`, and the restart format round-trips all quantum indices,
-masses, normal-mode coordinates, and cumulative heat.
+The normal-mode, free-ring propagation, thermostat, dummy/harmonic force,
+mixed group assignment, adapter-mediated V2 oracle coverage, P=1 force-manager
+integration, centroid charge policy, mixed oracle-manager fixture/matrix,
+restart/output, periodic geometry loading, and persistent oracle worker-pool
+foundations are tested.
+
+The mixed eReaxFF BAOAB executable now reads the YAML-subset config directly,
+loads user-supplied legacy `geo` files with `CRYSTX` cell data, runs P=16
+Jamil 112C/113El one-step eReaxFF dynamics through the persistent worker pool,
+and writes ReaxFF-compatible projections plus PIMD-native diagnostics.  The
+electron temperature diagnostics distinguish the physical aggregate temperature
+from the extended ring-polymer temperature, and
+`electron_mode_partition.out` splits kinetic energy into centroid and internal
+normal-mode contributions.
+
+For small stochastic systems, `simulation.rescale_initial_pimd_velocities:
+true` can be used to remove unlucky hot initial Maxwell draws.  On the Jamil
+P=16, `dt=0.05 fs` one-step oracle check, this reduced the physical electron
+temperature from about `489 K` to about `369 K`; the force-off validation starts
+exactly at `300 K` and averages near `300 K` over 10000 steps.
+
+The current Jamil production-style config uses `mass_amu: 1.0` for `El`, which
+is a fictitious eReaxFF electron mass convention rather than the physical
+electron mass.  Force-off mass checks show that the kinetic temperature
+diagnostic is mass-independent for the same random draw, but bead spread is not:
+using the physical electron mass produces much larger bead motion and is likely
+not stable unless the model is parameterized for it.
+
+The main remaining blocker is speed.  A P=16 one-step Jamil run currently makes
+80 eReaxFF oracle calls and takes about 7.5 minutes on the tested machine, even
+with four persistent workers.  The next engineering target is to bring the
+oracle path much closer to native ReaxFF throughput so this can become usable
+for longer MD trajectories.
