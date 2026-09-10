@@ -150,6 +150,25 @@ Run the end-to-end smoke test with:
 make test_32_fast_jax_driver_smoke
 ```
 
+Run the short P=16 stability regression with:
+
+```sh
+make test_33_fast_jax_stability
+```
+
+Run the heavier stability matrix manually with:
+
+```sh
+JAMIL_FAST_STABILITY_RUN_LONG=1 \
+  projects/jamil_replication/run_fast_stability_check.sh
+```
+
+As of 2026-09-10, 10-step P=16 fast runs pass finite/output/shutdown and
+thermal guards at `dt_fs=0.05` and `0.1`.  A 100-step `dt_fs=0.05` run remains
+thermally unacceptable because carbon temperature rises to about `2139 K` over
+5 fs; use that as the next off-equilibrium parity/profiling target before
+removing the unvalidated gate.
+
 ## Force Kernel Status
 
 `jax_force_kernel.py` currently provides these gated paths:

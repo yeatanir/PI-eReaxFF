@@ -59,7 +59,14 @@ removing the exact legacy oracle.
 - The connected fast path is about `12.1x` faster than the exact P=4
   persistent oracle pool for the same Jamil one-step schedule, with near-flat
   wall time from `P=4` to `P=16`.
+- Short P=16 fast MD checks pass finite/output/worker-shutdown guards for
+  10 steps at `dt_fs=0.05` and `0.1`, but the 100-step `dt_fs=0.05` run is not
+  thermally acceptable: carbon temperature rises to about `2139 K` over 5 fs.
+- Worker timing shows request parsing/writing is negligible; the current
+  bottleneck is the JAX force kernel itself at roughly `1.9-2.1 s` per P=16
+  force-stage request after startup.
 - Full dynamic ACKS2 matrix construction/solve remains fail-closed until it has
   oracle labels that exercise nonzero solver state.  The connected Jamil force
   path is still explicitly unvalidated and should remain behind the opt-in gate
-  while profiling and longer trajectory checks are added.
+  while off-equilibrium frame parity, drift diagnostics, and profiling are
+  added.

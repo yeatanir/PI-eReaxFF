@@ -152,6 +152,28 @@ def evaluate_request(request: dict[str, Any], parameters: dict[str, Any], kernel
     }
 
 
+def append_timing(
+    path: Path,
+    *,
+    request_id: int,
+    status: int,
+    natoms: int,
+    nbeads: int,
+    parse_s: float,
+    force_s: float,
+    response_s: float,
+    total_s: float,
+) -> None:
+    exists = path.exists()
+    with path.open("a") as fh:
+        if not exists:
+            fh.write("request_id,status,natoms,nbeads,parse_s,force_s,response_s,total_s\n")
+        fh.write(
+            f"{request_id},{status},{natoms},{nbeads},"
+            f"{parse_s:.9f},{force_s:.9f},{response_s:.9f},{total_s:.9f}\n"
+        )
+
+
 def run_worker(worker_root: Path, ffield: Path, kernel: str, poll_s: float) -> int:
     worker_root.mkdir(parents=True, exist_ok=True)
     request_path = worker_root / "request.in"
@@ -161,6 +183,7 @@ def run_worker(worker_root: Path, ffield: Path, kernel: str, poll_s: float) -> i
     shutdown_flag = worker_root / "shutdown.flag"
     done_path = worker_root / "worker.done"
     ready_path = worker_root / "worker.ready"
+    timing_path = worker_root / "worker_timing.csv"
     parameters = parse_ffield_coulomb_parameters(ffield)
     ready_path.write_text("ready\n")
     try:
@@ -168,10 +191,18 @@ def run_worker(worker_root: Path, ffield: Path, kernel: str, poll_s: float) -> i
             if not request_ready.exists():
                 time.sleep(poll_s)
                 continue
+            total_start = time.perf_counter()
             request_ready.unlink(missing_ok=True)
+            parse_s = 0.0
+            force_s = 0.0
+            response_s = 0.0
             try:
+                parse_start = time.perf_counter()
                 request = parse_request(request_path)
+                parse_s = time.perf_counter() - parse_start
+                force_start = time.perf_counter()
                 response = evaluate_request(request, parameters, kernel)
+                force_s = time.perf_counter() - force_start
             except Exception as exc:  # pragma: no cover - diagnostic path
                 response = {
                     "request_id": -1,
@@ -181,8 +212,21 @@ def run_worker(worker_root: Path, ffield: Path, kernel: str, poll_s: float) -> i
                     "natoms": 0,
                 }
                 (worker_root / "last_error.txt").write_text(traceback.format_exc())
+            response_start = time.perf_counter()
             write_response(response_path, response)
             response_ready.write_text("ready\n")
+            response_s = time.perf_counter() - response_start
+            append_timing(
+                timing_path,
+                request_id=int(response.get("request_id", -1)),
+                status=int(response.get("status", 2)),
+                natoms=int(response.get("natoms", 0)),
+                nbeads=int(response.get("nbeads", 0)),
+                parse_s=parse_s,
+                force_s=force_s,
+                response_s=response_s,
+                total_s=time.perf_counter() - total_start,
+            )
     finally:
         done_path.write_text("done\n")
     return 0

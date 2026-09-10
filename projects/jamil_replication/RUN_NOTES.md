@@ -364,3 +364,27 @@ Interpretation:
 - The P=4 fast/oracle physical diagnostics match closely; the scalar potential differs by about `9.9e-6 eV`, consistent with the current force-kernel parity gate.
 - P=16 fast clears the near-term target from `FAST_BACKEND_PLAN.md`: one-step Jamil wall time is below `60 s`.
 - The next speed target is not process-level parallelism. It is profiling and simplifying the JAX kernel itself, then removing redundant force stages only if trajectory-equivalence tests allow it.
+
+## 2026-09-10 Fast JAX Stability Checks
+
+Added `projects/jamil_replication/run_fast_stability_check.sh` and the short regression target `make test_33_fast_jax_stability`.  The script generates guarded `fast_jax_oracle` configs, runs the mixed BAOAB driver, checks finite diagnostics and `.xyz` outputs, verifies worker shutdown, and records per-request worker timing from `fast_jax_work/worker_timing.csv`.
+
+Short P=16 checks:
+
+| P | steps | dt_fs | wall_s | s/step | s/force stage | worker force sum_s | electron_T_K | extended_T_K | carbon_T_K | bead spread_A | conserved span_eV | status |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 16 | 10 | 0.05 | 83.530 | 8.353 | 2.037 | 80.513 | 283.339 | 4533.430 | 317.117 | 0.050581 | 88.720 | PASS |
+| 16 | 10 | 0.10 | 83.158 | 8.316 | 2.028 | 80.173 | 305.601 | 4889.609 | 395.333 | 0.090160 | 276.077 | PASS |
+
+Medium P=16 check:
+
+| P | steps | dt_fs | wall_s | s/step | s/force stage | worker force sum_s | electron_T_K | extended_T_K | carbon_T_K | bead spread_A | conserved span_eV | status |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 16 | 100 | 0.05 | 848.873 | 8.489 | 2.117 | 820.014 | 251.321 | 4021.139 | 2138.742 | 0.148771 | 1038.979 | THERMAL FAIL |
+
+Interpretation:
+
+- The fast driver path is numerically robust enough for short P=16 MD: no NaN/Inf diagnostics, `.xyz` trajectories are written, and the worker exits cleanly.
+- Worker timing shows the bottleneck clearly: the 10-step run spends about `80.5 s` of `83.5 s` in JAX force evaluation. Request parsing/writing is below `0.4 s` total, so protocol overhead is not the main limiter.
+- The 100-step `dt=0.05` trajectory is not acceptable production MD yet. Carbon temperature rises monotonically to about `2139 K` over 5 fs while electron temperature remains near target. This points to force/integrator energy drift or incomplete force parity over displaced carbon/electron configurations, not the original hot-electron initialization issue.
+- Next work should profile and validate the JAX force kernel on off-equilibrium frames from this 100-step run, then compare selected frames back to the exact oracle before optimizing for speed.
