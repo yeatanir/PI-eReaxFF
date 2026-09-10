@@ -116,6 +116,7 @@ coulomb -9.625
 charge 0.0
 external_field 0.0
 electron -0.5
+total -10.0
 EOF
 
 python3 projects/jamil_replication/fast_backend/build_oracle_dataset.py \

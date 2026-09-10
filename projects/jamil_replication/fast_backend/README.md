@@ -36,12 +36,13 @@ metadata.  Adapter-work extraction also records exact energy, force, charge,
 solver, status, stage, bead, and timing labels from the legacy oracle outputs.
 For the current Jamil target it also records the legacy `icharg=8`
 `MOLCHARGE` constraints used by the first JAX charge kernel.
-When present in each call directory, it also records per-term energy labels
-from `single_point_energy_terms.out` or the legacy `fort.73` layout.  The term
-keys follow the Jamil `reac.f` output order: `bond`, `overcoordination`,
-`lone_pair`, `molecule`, `valence_penalty`, `angle_conjugation`,
-`hydrogen_bond`, `torsion`, `torsion_conjugation`, `vdw`, `coulomb`, `charge`,
-`external_field`, and `electron`.
+Repo-built oracle exporters write `single_point_energy_terms.out` in every
+call directory.  The dataset builder records those per-term energy labels, or
+falls back to a retained legacy `fort.73` layout when that is the only term
+output available.  The term keys follow the Jamil `reac.f` output order:
+`bond`, `overcoordination`, `lone_pair`, `molecule`, `valence_penalty`,
+`angle_conjugation`, `hydrogen_bond`, `torsion`, `torsion_conjugation`, `vdw`,
+`coulomb`, `charge`, `external_field`, and `electron`.
 
 Validate the generated JSONL line-by-line:
 

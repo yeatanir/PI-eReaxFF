@@ -364,6 +364,8 @@ def parse_energy_terms(path: Path) -> tuple[dict[str, float], dict[str, float]] 
             if len(row) < 2:
                 raise ValueError(f"{path}: malformed named energy-term row")
             name = row[0]
+            if name == "total":
+                continue
             if name not in ENERGY_TERM_NAMES:
                 raise ValueError(f"{path}: unexpected energy term {name!r}")
             terms_kcal[name] = float(row[1])

@@ -61,6 +61,12 @@ program test_persistent_oracle_worker
   call assert_true("persistent forces finite", all(ieee_is_finite(persistent_summary%scaled_forces_eV_per_A)))
   call assert_true("persistent timing log", file_exists(trim(work_root) // "/persistent/persistent_oracle_timing.log"))
   call assert_true("pool timing log", file_exists(trim(work_root) // "/pool/persistent_oracle_timing.log"))
+  call assert_true("external energy terms", &
+      file_exists(trim(work_root) // "/external/adapter_call_0001/single_point_energy_terms.out"))
+  call assert_true("persistent energy terms", &
+      file_exists(trim(work_root) // "/persistent/persistent_worker/adapter_call_0001/single_point_energy_terms.out"))
+  call assert_true("pool energy terms", &
+      file_exists(trim(work_root) // "/pool/persistent_worker_001/adapter_call_0001/single_point_energy_terms.out"))
 
   write(*,'(a)') "test_30_persistent_oracle_worker: PASS"
   write(*,'(a,es24.15)') "  energy_eV = ", persistent_summary%pimd_potential_eV

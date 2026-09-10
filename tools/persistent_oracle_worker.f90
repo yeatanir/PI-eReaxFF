@@ -8,6 +8,7 @@ program persistent_oracle_worker
   integer :: start_count, end_count, clock_rate
   real(dp) :: x(3, natmax), force(3, natmax), charge_in(natmax), solver_in(natmax)
   real(dp) :: charge_out(natmax), solver_out(natmax), energy_kcal, max_force, charge_sum
+  real(dp) :: energy_terms(14), energy_terms_total
   character(len=512) :: control_path, ffield_path, iopt_path, geo_path, timing_log_path, worker_root, smoke_binary
   character(len=512) :: make_geo_script
   character(len=128) :: stage_label
@@ -26,6 +27,9 @@ program persistent_oracle_worker
       double precision :: forces_work(3,*), charge_out(*)
       double precision :: acks2_solver_guess_out(*)
     end subroutine ereaxff_force_eval
+    subroutine ereaxff_oracle_get_energy_terms(terms_kcal, total_kcal)
+      double precision :: terms_kcal(14), total_kcal
+    end subroutine ereaxff_oracle_get_energy_terms
   end interface
 
   call get_command_argument(1, control_path)
@@ -57,7 +61,7 @@ program persistent_oracle_worker
     if (file_exists(trim(request_file))) then
       call process_request(trim(worker_root), trim(request_file), trim(response_file), trim(timing_log_path), trim(smoke_binary), &
           trim(make_geo_script), first_request, request_id, step_index, bead_id, stage_label, natom, energy_kcal, force, charge_out, solver_out, status, charge_sum, &
-          max_force, work_dir)
+          max_force, energy_terms, energy_terms_total, work_dir)
       first_request = .false.
     else
       call wait_milliseconds(10)
@@ -70,12 +74,13 @@ contains
 
   subroutine process_request(worker_root, request_path, response_path, timing_log, smoke_binary, make_geo_script, first_request_inout, request_id_out, step_out, &
       bead_out, stage_out, natom_out, energy_out, force_out, charge_out, solver_out, status_out, charge_sum_out, max_force_out, &
-      work_dir_out)
+      energy_terms_out, energy_terms_total_out, work_dir_out)
     character(len=*), intent(in) :: worker_root, request_path, response_path, timing_log, smoke_binary, make_geo_script
     logical, intent(inout) :: first_request_inout
     integer, intent(out) :: request_id_out, step_out, bead_out, natom_out, status_out
     character(len=*), intent(out) :: stage_out, work_dir_out
     real(dp), intent(out) :: energy_out, force_out(:, :), charge_out(:), solver_out(:), charge_sum_out, max_force_out
+    real(dp), intent(out) :: energy_terms_out(14), energy_terms_total_out
     integer :: unit, i, atom_index, start_count_local, end_count_local, rate
     character(len=512) :: line
     character(len=64) :: worker_state
@@ -109,11 +114,13 @@ contains
     call system_clock(start_count_local, rate)
     if (rate <= 0) stop "persistent_oracle_worker: system clock unavailable"
     call ereaxff_force_eval(x, natom_out, charge_in, solver_in, energy_out, force_out, charge_out, solver_out, status_out)
+    call ereaxff_oracle_get_energy_terms(energy_terms_out, energy_terms_total_out)
     call system_clock(end_count_local)
 
     call summarize_force_result(natom_out, force_out, charge_out, max_force_out, charge_sum_out)
     call write_summary(trim(summary_path), energy_out, max_force_out, charge_sum_out, status_out, natom_out)
     call write_force_file(trim(forces_path), natom_out, force_out, charge_out, solver_out)
+    call write_energy_terms(trim(work_dir_out) // "/single_point_energy_terms.out", energy_terms_out, energy_terms_total_out)
     if (first_request_inout) then
       worker_state = "startup"
     else
@@ -336,6 +343,27 @@ contains
     end do
     close(unit)
   end subroutine write_force_file
+
+  subroutine write_energy_terms(path, terms_kcal, total_kcal)
+    character(len=*), intent(in) :: path
+    real(dp), intent(in) :: terms_kcal(14), total_kcal
+    character(len=32), parameter :: names(14) = [ &
+        character(len=32) :: &
+        'bond', 'overcoordination', 'lone_pair', 'molecule', &
+        'valence_penalty', 'angle_conjugation', 'hydrogen_bond', &
+        'torsion', 'torsion_conjugation', 'vdw', 'coulomb', &
+        'charge', 'external_field', 'electron' &
+    ]
+    integer :: unit, i
+
+    open(newunit=unit, file=trim(path), status="replace", action="write")
+    write(unit,'(a)') '# term energy_kcal'
+    do i = 1, size(names)
+      write(unit,'(a,1x,es24.15)') trim(names(i)), terms_kcal(i)
+    end do
+    write(unit,'(a,1x,es24.15)') 'total', total_kcal
+    close(unit)
+  end subroutine write_energy_terms
 
   subroutine write_charge_trace(path, natom, charge_in, solver_in)
     character(len=*), intent(in) :: path

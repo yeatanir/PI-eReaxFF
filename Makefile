@@ -59,14 +59,14 @@ $(BUILD_DIR) $(MOD_DIR):
 
 oracle_single_point_force_export: $(BUILD_DIR)
 	$(MAKE) -C $(V2_ROOT) v2_sources
-	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore \
-		tools/oracle_single_point_force_export.f90 $(V2_ORACLE_OBJS) \
+	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore -I$(V2_BUILD_DIR) \
+		tools/oracle_single_point_force_export.f90 tools/ereaxff_energy_terms_export.f $(V2_ORACLE_OBJS) \
 		-o $(BUILD_DIR)/oracle_single_point_force_export
 
 persistent_oracle_worker: $(BUILD_DIR)
 	$(MAKE) -C $(V2_ROOT) v2_sources
-	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore \
-		tools/persistent_oracle_worker.f90 $(V2_ORACLE_OBJS) \
+	$(FC) -O2 -fallow-argument-mismatch -std=legacy -fno-second-underscore -I$(V2_BUILD_DIR) \
+		tools/persistent_oracle_worker.f90 tools/ereaxff_energy_terms_export.f $(V2_ORACLE_OBJS) \
 		-o $(BUILD_DIR)/persistent_oracle_worker
 
 test_00_build: $(BUILD_DIR) $(MOD_DIR)
@@ -167,11 +167,11 @@ test_27_multi_quantum_restart: $(BUILD_DIR) $(MOD_DIR)
 test_28_paired_graphene_60el_60c_smoke: ereaxff_mixed_baoab_main $(BUILD_DIR) $(MOD_DIR)
 	tests/test_28_paired_graphene_60el_60c_smoke/run_paired_graphene_60el_60c_smoke.sh
 
-test_29_oracle_dispatch_modes: $(BUILD_DIR) $(MOD_DIR)
+test_29_oracle_dispatch_modes: oracle_single_point_force_export $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST29_SRCS) -o $(BUILD_DIR)/test_29_oracle_dispatch_modes_bin
 	tests/test_29_oracle_dispatch_modes/run_oracle_dispatch_modes.sh
 
-test_30_persistent_oracle_worker: persistent_oracle_worker $(BUILD_DIR) $(MOD_DIR)
+test_30_persistent_oracle_worker: oracle_single_point_force_export persistent_oracle_worker $(BUILD_DIR) $(MOD_DIR)
 	$(FC) $(FFLAGS) -J$(MOD_DIR) -I$(MOD_DIR) $(CORE_SRCS) $(FORCE_SRCS) $(TEST30_SRCS) -o $(BUILD_DIR)/test_30_persistent_oracle_worker_bin
 	tests/test_30_persistent_oracle_worker/run_persistent_oracle_worker.sh
 

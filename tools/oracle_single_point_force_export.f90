@@ -5,6 +5,7 @@ program oracle_single_point_force_export
   integer :: natom, status, i
   real(dp) :: x(3,natmax), force(3,natmax), charge_in(natmax), solver_in(natmax)
   real(dp) :: charge_out(natmax), solver_out(natmax), energy
+  real(dp) :: energy_terms(14), energy_terms_total
   real(dp) :: max_force, charge_sum
 
   interface
@@ -23,6 +24,9 @@ program oracle_single_point_force_export
       double precision :: forces_work(3,*), charge_out(*)
       double precision :: acks2_solver_guess_out(*)
     end subroutine ereaxff_force_eval
+    subroutine ereaxff_oracle_get_energy_terms(terms_kcal, total_kcal)
+      double precision :: terms_kcal(14), total_kcal
+    end subroutine ereaxff_oracle_get_energy_terms
   end interface
 
   call ereaxff_force_oracle_init()
@@ -32,6 +36,7 @@ program oracle_single_point_force_export
   call ereaxff_force_eval(x, natom, charge_in, solver_in, energy, force, &
       charge_out, solver_out, status)
   if (status /= 0) stop 'oracle_single_point_force_export: oracle failure'
+  call ereaxff_oracle_get_energy_terms(energy_terms, energy_terms_total)
 
   max_force = 0.0d0
   charge_sum = 0.0d0
@@ -54,7 +59,31 @@ program oracle_single_point_force_export
     write(21,'(i8,5es24.15)') i, force(1,i), force(2,i), force(3,i), charge_out(i), solver_out(i)
   end do
   close(21)
+  call write_energy_terms('single_point_energy_terms.out', energy_terms, energy_terms_total)
 
   write(*,'(a,1x,es12.4,1x,es12.4,1x,es12.4,1x,i0)') &
       'oracle_single_point_force_export PASS', energy, max_force, charge_sum, status
+
+contains
+
+  subroutine write_energy_terms(path, terms_kcal, total_kcal)
+    character(len=*), intent(in) :: path
+    real(dp), intent(in) :: terms_kcal(14), total_kcal
+    character(len=32), parameter :: names(14) = [ &
+        character(len=32) :: &
+        'bond', 'overcoordination', 'lone_pair', 'molecule', &
+        'valence_penalty', 'angle_conjugation', 'hydrogen_bond', &
+        'torsion', 'torsion_conjugation', 'vdw', 'coulomb', &
+        'charge', 'external_field', 'electron' &
+    ]
+    integer :: unit, i
+
+    open(newunit=unit, file=trim(path), status='replace', action='write')
+    write(unit,'(a)') '# term energy_kcal'
+    do i = 1, size(names)
+      write(unit,'(a,1x,es24.15)') trim(names(i)), terms_kcal(i)
+    end do
+    write(unit,'(a,1x,es24.15)') 'total', total_kcal
+    close(unit)
+  end subroutine write_energy_terms
 end program oracle_single_point_force_export
