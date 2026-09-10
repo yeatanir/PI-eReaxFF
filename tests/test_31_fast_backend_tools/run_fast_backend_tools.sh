@@ -453,6 +453,29 @@ if real_dataset.exists():
     assert abs(response["energy_eV"][0] + 10.791805565593878) < 1.0e-10
     assert abs(response["forces_eV_per_A"][0][2][1] + 12.263151967963509) < 1.0e-10
 
+    completed = subprocess.run(
+        [
+            ".venv-fast/bin/python",
+            "projects/jamil_replication/fast_backend/jax_backend.py",
+            "--allow-unvalidated",
+        ],
+        input=json.dumps(
+            {
+                "command": "force_batch",
+                "force_kernel": "reaxff_corrected_bond_nonbonded_valence",
+                "cases": [angle_case, angle_case],
+            }
+        ),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    batch_response = json.loads(completed.stdout)
+    assert batch_response["kernel"] == ["reaxff_corrected_bond_nonbonded_valence"]
+    assert batch_response["energy_eV"] == response["energy_eV"] * 2
+    for key in response["energy_terms_eV"]:
+        assert batch_response["energy_terms_eV"][key] == response["energy_terms_eV"][key] * 2
+
     angle_eps = 1.0e-6
     angle_plus = json.loads(json.dumps(angle_case))
     angle_minus = json.loads(json.dumps(angle_case))

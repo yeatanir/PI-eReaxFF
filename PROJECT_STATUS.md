@@ -256,6 +256,8 @@ angle/torsion implementation now uses sparse legacy-style topology lists built
 from corrected bond orders.  On the first 225-atom Jamil P4 labeled frame, the
 sparse topology contains 336 angles and 672 torsions and the one-case diagnostic
 aggregate runs in about 4 seconds including topology/JAX overhead on the tested
-Mac CPU.  The exact Fortran oracle remains the truth source until the remaining
-hydrogen-bond, dynamic lone-pair/overcoordination, and ACKS2 paths are ported
-and validated.
+Mac CPU.  The same aggregate now has a compiled `force_batch` path for stack-
+compatible cases; API batches of 1, 2, and 4 identical 225-atom frames took
+about 2.30, 2.40, and 2.43 seconds respectively on the tested Mac CPU.  The
+exact Fortran oracle remains the truth source until the remaining hydrogen-bond,
+dynamic lone-pair/overcoordination, and ACKS2 paths are ported and validated.

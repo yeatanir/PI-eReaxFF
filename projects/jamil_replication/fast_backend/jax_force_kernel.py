@@ -2370,6 +2370,7 @@ def evaluate_force_batch(
         "reaxff_uncorrected_bond",
         "reaxff_corrected_bond",
         "reaxff_corrected_bond_nonbonded",
+        "reaxff_corrected_bond_nonbonded_valence",
     )
     if kernel in experimental_kernels:
         positions = jnp.stack(
@@ -2386,17 +2387,41 @@ def evaluate_force_batch(
             "reaxff_shielded_coulomb",
             "reaxff_nonbonded_no_inner_shielded",
             "reaxff_corrected_bond_nonbonded",
+            "reaxff_corrected_bond_nonbonded_valence",
         ):
             parameters = [_coulomb_parameters_from_case(case) for case in cases]
             first_parameters = json.dumps(parameters[0], sort_keys=True)
             if any(json.dumps(item, sort_keys=True) != first_parameters for item in parameters):
                 raise ValueError("mixed source-derived nonbonded parameter batches are not supported")
             bond_inputs = None
-            if kernel == "reaxff_corrected_bond_nonbonded":
+            atom_type_indices = None
+            angle_inputs = None
+            torsion_inputs = None
+            topologies = None
+            electron_inputs_by_case = None
+            if kernel in ("reaxff_corrected_bond_nonbonded", "reaxff_corrected_bond_nonbonded_valence"):
                 first_atom_types = cases[0]["atom_types"]
                 if any(case["atom_types"] != first_atom_types for case in cases):
                     raise ValueError("mixed atom-type bond/nonbonded batches are not supported")
                 bond_inputs = _bond_energy_inputs(cases[0], parameters[0])
+                if kernel == "reaxff_corrected_bond_nonbonded_valence":
+                    atom_type_indices = _atom_type_index_array(cases[0], parameters[0])
+                    angle_inputs = _angle_parameter_tensors(parameters[0])
+                    torsion_inputs = _torsion_parameter_tensors(parameters[0])
+                    topologies = [
+                        _sparse_topology_from_bond_orders(case, parameters[0], bond_inputs, cell_lengths_by_case[idx])
+                        for idx, case in enumerate(cases)
+                    ]
+                    first_topology_shapes = {
+                        key: value.shape
+                        for key, value in topologies[0].items()
+                    }
+                    if any(
+                        {key: value.shape for key, value in topology.items()} != first_topology_shapes
+                        for topology in topologies
+                    ):
+                        raise ValueError("mixed sparse topology sizes are not supported in a compiled batch yet")
+                    electron_inputs_by_case = [_electron_energy_inputs(case, parameters[0]) for case in cases]
             gamma = jnp.stack([_gamma_array(case, parameters[0]) for case in cases], axis=0)
             rvdw = jnp.stack(
                 [_parameter_array(case, parameters[0]["rvdw_by_symbol"], "Rvdw") for case in cases],
@@ -2417,6 +2442,17 @@ def evaluate_force_batch(
             coefficients = _taper_coefficients(parameters[0]["lower_taper_A"], parameters[0]["upper_taper_A"])
             upper_taper = float(parameters[0]["upper_taper_A"])
             vdw_power = float(parameters[0]["vdw_shielding_power"])
+            stacked_topology = None
+            stacked_electron_inputs = None
+            if topologies is not None:
+                stacked_topology = {
+                    key: jnp.stack([topology[key] for topology in topologies], axis=0)
+                    for key in topologies[0]
+                }
+                stacked_electron_inputs = {
+                    key: jnp.stack([inputs[key] for inputs in electron_inputs_by_case], axis=0)
+                    for key in electron_inputs_by_case[0]
+                }
 
             if all(has_cell):
                 cells = jnp.stack(cell_lengths_by_case, axis=0)
@@ -2443,7 +2479,7 @@ def evaluate_force_batch(
                             cell,
                         )
 
-                else:
+                elif kernel == "reaxff_corrected_bond_nonbonded":
 
                     def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i, cell):
                         return reaxff_corrected_bond_nonbonded_energy(
@@ -2461,17 +2497,128 @@ def evaluate_force_batch(
                             cell,
                         )
 
+                else:
+
+                    def energy_fn(
+                        x,
+                        q,
+                        gam,
+                        rvdw_i,
+                        eps_i,
+                        alfa_i,
+                        gammavdw_i,
+                        cell,
+                        angle_indices,
+                        torsion_indices,
+                        angle_theta0_degrees,
+                        angle_vka,
+                        angle_vka3,
+                        angle_vka8,
+                        angle_vkac,
+                        angle_vkap,
+                        angle_vval2,
+                        torsion_v1,
+                        torsion_v2,
+                        torsion_v3,
+                        torsion_v4,
+                        torsion_vconj,
+                        torsion_v2bo,
+                        torsion_v3bo,
+                        is_electron,
+                        is_hole,
+                        core_charge,
+                        betael,
+                        alphag,
+                    ):
+                        topology = {
+                            "angle_indices": angle_indices,
+                            "torsion_indices": torsion_indices,
+                            "angle_theta0_degrees": angle_theta0_degrees,
+                            "angle_vka": angle_vka,
+                            "angle_vka3": angle_vka3,
+                            "angle_vka8": angle_vka8,
+                            "angle_vkac": angle_vkac,
+                            "angle_vkap": angle_vkap,
+                            "angle_vval2": angle_vval2,
+                            "torsion_v1": torsion_v1,
+                            "torsion_v2": torsion_v2,
+                            "torsion_v3": torsion_v3,
+                            "torsion_v4": torsion_v4,
+                            "torsion_vconj": torsion_vconj,
+                            "torsion_v2bo": torsion_v2bo,
+                            "torsion_v3bo": torsion_v3bo,
+                        }
+                        electron_inputs = {
+                            "is_electron": is_electron,
+                            "is_hole": is_hole,
+                            "core_charge": core_charge,
+                            "betael": betael,
+                            "alphag": alphag,
+                        }
+                        return reaxff_corrected_bond_nonbonded_valence_energy(
+                            x,
+                            q,
+                            gam,
+                            rvdw_i,
+                            eps_i,
+                            alfa_i,
+                            gammavdw_i,
+                            vdw_power,
+                            coefficients,
+                            upper_taper,
+                            bond_inputs,
+                            atom_type_indices,
+                            angle_inputs,
+                            torsion_inputs,
+                            topology,
+                            electron_inputs,
+                            cell_lengths=cell,
+                        )
+
                 energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
-                energies, grads = jax.jit(jax.vmap(energy_and_grad))(
-                    positions,
-                    charges,
-                    gamma,
-                    rvdw,
-                    eps,
-                    alfa,
-                    gammavdw,
-                    cells,
-                )
+                if kernel == "reaxff_corrected_bond_nonbonded_valence":
+                    energies, grads = jax.jit(jax.vmap(energy_and_grad))(
+                        positions,
+                        charges,
+                        gamma,
+                        rvdw,
+                        eps,
+                        alfa,
+                        gammavdw,
+                        cells,
+                        stacked_topology["angle_indices"],
+                        stacked_topology["torsion_indices"],
+                        stacked_topology["angle_theta0_degrees"],
+                        stacked_topology["angle_vka"],
+                        stacked_topology["angle_vka3"],
+                        stacked_topology["angle_vka8"],
+                        stacked_topology["angle_vkac"],
+                        stacked_topology["angle_vkap"],
+                        stacked_topology["angle_vval2"],
+                        stacked_topology["torsion_v1"],
+                        stacked_topology["torsion_v2"],
+                        stacked_topology["torsion_v3"],
+                        stacked_topology["torsion_v4"],
+                        stacked_topology["torsion_vconj"],
+                        stacked_topology["torsion_v2bo"],
+                        stacked_topology["torsion_v3bo"],
+                        stacked_electron_inputs["is_electron"],
+                        stacked_electron_inputs["is_hole"],
+                        stacked_electron_inputs["core_charge"],
+                        stacked_electron_inputs["betael"],
+                        stacked_electron_inputs["alphag"],
+                    )
+                else:
+                    energies, grads = jax.jit(jax.vmap(energy_and_grad))(
+                        positions,
+                        charges,
+                        gamma,
+                        rvdw,
+                        eps,
+                        alfa,
+                        gammavdw,
+                        cells,
+                    )
             else:
 
                 if kernel == "reaxff_shielded_coulomb":
@@ -2496,7 +2643,7 @@ def evaluate_force_batch(
                             None,
                         )
 
-                else:
+                elif kernel == "reaxff_corrected_bond_nonbonded":
 
                     def energy_fn(x, q, gam, rvdw_i, eps_i, alfa_i, gammavdw_i):
                         return reaxff_corrected_bond_nonbonded_energy(
@@ -2514,16 +2661,125 @@ def evaluate_force_batch(
                             None,
                         )
 
+                else:
+
+                    def energy_fn(
+                        x,
+                        q,
+                        gam,
+                        rvdw_i,
+                        eps_i,
+                        alfa_i,
+                        gammavdw_i,
+                        angle_indices,
+                        torsion_indices,
+                        angle_theta0_degrees,
+                        angle_vka,
+                        angle_vka3,
+                        angle_vka8,
+                        angle_vkac,
+                        angle_vkap,
+                        angle_vval2,
+                        torsion_v1,
+                        torsion_v2,
+                        torsion_v3,
+                        torsion_v4,
+                        torsion_vconj,
+                        torsion_v2bo,
+                        torsion_v3bo,
+                        is_electron,
+                        is_hole,
+                        core_charge,
+                        betael,
+                        alphag,
+                    ):
+                        topology = {
+                            "angle_indices": angle_indices,
+                            "torsion_indices": torsion_indices,
+                            "angle_theta0_degrees": angle_theta0_degrees,
+                            "angle_vka": angle_vka,
+                            "angle_vka3": angle_vka3,
+                            "angle_vka8": angle_vka8,
+                            "angle_vkac": angle_vkac,
+                            "angle_vkap": angle_vkap,
+                            "angle_vval2": angle_vval2,
+                            "torsion_v1": torsion_v1,
+                            "torsion_v2": torsion_v2,
+                            "torsion_v3": torsion_v3,
+                            "torsion_v4": torsion_v4,
+                            "torsion_vconj": torsion_vconj,
+                            "torsion_v2bo": torsion_v2bo,
+                            "torsion_v3bo": torsion_v3bo,
+                        }
+                        electron_inputs = {
+                            "is_electron": is_electron,
+                            "is_hole": is_hole,
+                            "core_charge": core_charge,
+                            "betael": betael,
+                            "alphag": alphag,
+                        }
+                        return reaxff_corrected_bond_nonbonded_valence_energy(
+                            x,
+                            q,
+                            gam,
+                            rvdw_i,
+                            eps_i,
+                            alfa_i,
+                            gammavdw_i,
+                            vdw_power,
+                            coefficients,
+                            upper_taper,
+                            bond_inputs,
+                            atom_type_indices,
+                            angle_inputs,
+                            torsion_inputs,
+                            topology,
+                            electron_inputs,
+                            cell_lengths=None,
+                        )
+
                 energy_and_grad = jax.value_and_grad(energy_fn, argnums=0)
-                energies, grads = jax.jit(jax.vmap(energy_and_grad))(
-                    positions,
-                    charges,
-                    gamma,
-                    rvdw,
-                    eps,
-                    alfa,
-                    gammavdw,
-                )
+                if kernel == "reaxff_corrected_bond_nonbonded_valence":
+                    energies, grads = jax.jit(jax.vmap(energy_and_grad))(
+                        positions,
+                        charges,
+                        gamma,
+                        rvdw,
+                        eps,
+                        alfa,
+                        gammavdw,
+                        stacked_topology["angle_indices"],
+                        stacked_topology["torsion_indices"],
+                        stacked_topology["angle_theta0_degrees"],
+                        stacked_topology["angle_vka"],
+                        stacked_topology["angle_vka3"],
+                        stacked_topology["angle_vka8"],
+                        stacked_topology["angle_vkac"],
+                        stacked_topology["angle_vkap"],
+                        stacked_topology["angle_vval2"],
+                        stacked_topology["torsion_v1"],
+                        stacked_topology["torsion_v2"],
+                        stacked_topology["torsion_v3"],
+                        stacked_topology["torsion_v4"],
+                        stacked_topology["torsion_vconj"],
+                        stacked_topology["torsion_v2bo"],
+                        stacked_topology["torsion_v3bo"],
+                        stacked_electron_inputs["is_electron"],
+                        stacked_electron_inputs["is_hole"],
+                        stacked_electron_inputs["core_charge"],
+                        stacked_electron_inputs["betael"],
+                        stacked_electron_inputs["alphag"],
+                    )
+                else:
+                    energies, grads = jax.jit(jax.vmap(energy_and_grad))(
+                        positions,
+                        charges,
+                        gamma,
+                        rvdw,
+                        eps,
+                        alfa,
+                        gammavdw,
+                    )
         else:
             if kernel in ("reaxff_uncorrected_bond", "reaxff_corrected_bond"):
                 parameters = [_coulomb_parameters_from_case(case) for case in cases]
@@ -2709,6 +2965,223 @@ def evaluate_force_batch(
                     )
 
                 energy_terms = jax.jit(jax.vmap(terms_fn))(positions, charges, gamma, rvdw, eps, alfa, gammavdw)
+        elif kernel == "reaxff_corrected_bond_nonbonded_valence":
+            if all(has_cell):
+
+                def terms_fn(
+                    x,
+                    q,
+                    gam,
+                    rvdw_i,
+                    eps_i,
+                    alfa_i,
+                    gammavdw_i,
+                    cell,
+                    angle_indices,
+                    torsion_indices,
+                    angle_theta0_degrees,
+                    angle_vka,
+                    angle_vka3,
+                    angle_vka8,
+                    angle_vkac,
+                    angle_vkap,
+                    angle_vval2,
+                    torsion_v1,
+                    torsion_v2,
+                    torsion_v3,
+                    torsion_v4,
+                    torsion_vconj,
+                    torsion_v2bo,
+                    torsion_v3bo,
+                    is_electron,
+                    is_hole,
+                    core_charge,
+                    betael,
+                    alphag,
+                ):
+                    topology = {
+                        "angle_indices": angle_indices,
+                        "torsion_indices": torsion_indices,
+                        "angle_theta0_degrees": angle_theta0_degrees,
+                        "angle_vka": angle_vka,
+                        "angle_vka3": angle_vka3,
+                        "angle_vka8": angle_vka8,
+                        "angle_vkac": angle_vkac,
+                        "angle_vkap": angle_vkap,
+                        "angle_vval2": angle_vval2,
+                        "torsion_v1": torsion_v1,
+                        "torsion_v2": torsion_v2,
+                        "torsion_v3": torsion_v3,
+                        "torsion_v4": torsion_v4,
+                        "torsion_vconj": torsion_vconj,
+                        "torsion_v2bo": torsion_v2bo,
+                        "torsion_v3bo": torsion_v3bo,
+                    }
+                    electron_inputs = {
+                        "is_electron": is_electron,
+                        "is_hole": is_hole,
+                        "core_charge": core_charge,
+                        "betael": betael,
+                        "alphag": alphag,
+                    }
+                    return reaxff_corrected_bond_nonbonded_valence_terms(
+                        x,
+                        q,
+                        gam,
+                        rvdw_i,
+                        eps_i,
+                        alfa_i,
+                        gammavdw_i,
+                        vdw_power,
+                        coefficients,
+                        upper_taper,
+                        bond_inputs,
+                        atom_type_indices,
+                        angle_inputs,
+                        torsion_inputs,
+                        topology,
+                        electron_inputs,
+                        cell_lengths=cell,
+                    )
+
+                energy_terms = jax.jit(jax.vmap(terms_fn))(
+                    positions,
+                    charges,
+                    gamma,
+                    rvdw,
+                    eps,
+                    alfa,
+                    gammavdw,
+                    cells,
+                    stacked_topology["angle_indices"],
+                    stacked_topology["torsion_indices"],
+                    stacked_topology["angle_theta0_degrees"],
+                    stacked_topology["angle_vka"],
+                    stacked_topology["angle_vka3"],
+                    stacked_topology["angle_vka8"],
+                    stacked_topology["angle_vkac"],
+                    stacked_topology["angle_vkap"],
+                    stacked_topology["angle_vval2"],
+                    stacked_topology["torsion_v1"],
+                    stacked_topology["torsion_v2"],
+                    stacked_topology["torsion_v3"],
+                    stacked_topology["torsion_v4"],
+                    stacked_topology["torsion_vconj"],
+                    stacked_topology["torsion_v2bo"],
+                    stacked_topology["torsion_v3bo"],
+                    stacked_electron_inputs["is_electron"],
+                    stacked_electron_inputs["is_hole"],
+                    stacked_electron_inputs["core_charge"],
+                    stacked_electron_inputs["betael"],
+                    stacked_electron_inputs["alphag"],
+                )
+            else:
+
+                def terms_fn(
+                    x,
+                    q,
+                    gam,
+                    rvdw_i,
+                    eps_i,
+                    alfa_i,
+                    gammavdw_i,
+                    angle_indices,
+                    torsion_indices,
+                    angle_theta0_degrees,
+                    angle_vka,
+                    angle_vka3,
+                    angle_vka8,
+                    angle_vkac,
+                    angle_vkap,
+                    angle_vval2,
+                    torsion_v1,
+                    torsion_v2,
+                    torsion_v3,
+                    torsion_v4,
+                    torsion_vconj,
+                    torsion_v2bo,
+                    torsion_v3bo,
+                    is_electron,
+                    is_hole,
+                    core_charge,
+                    betael,
+                    alphag,
+                ):
+                    topology = {
+                        "angle_indices": angle_indices,
+                        "torsion_indices": torsion_indices,
+                        "angle_theta0_degrees": angle_theta0_degrees,
+                        "angle_vka": angle_vka,
+                        "angle_vka3": angle_vka3,
+                        "angle_vka8": angle_vka8,
+                        "angle_vkac": angle_vkac,
+                        "angle_vkap": angle_vkap,
+                        "angle_vval2": angle_vval2,
+                        "torsion_v1": torsion_v1,
+                        "torsion_v2": torsion_v2,
+                        "torsion_v3": torsion_v3,
+                        "torsion_v4": torsion_v4,
+                        "torsion_vconj": torsion_vconj,
+                        "torsion_v2bo": torsion_v2bo,
+                        "torsion_v3bo": torsion_v3bo,
+                    }
+                    electron_inputs = {
+                        "is_electron": is_electron,
+                        "is_hole": is_hole,
+                        "core_charge": core_charge,
+                        "betael": betael,
+                        "alphag": alphag,
+                    }
+                    return reaxff_corrected_bond_nonbonded_valence_terms(
+                        x,
+                        q,
+                        gam,
+                        rvdw_i,
+                        eps_i,
+                        alfa_i,
+                        gammavdw_i,
+                        vdw_power,
+                        coefficients,
+                        upper_taper,
+                        bond_inputs,
+                        atom_type_indices,
+                        angle_inputs,
+                        torsion_inputs,
+                        topology,
+                        electron_inputs,
+                        cell_lengths=None,
+                    )
+
+                energy_terms = jax.jit(jax.vmap(terms_fn))(
+                    positions,
+                    charges,
+                    gamma,
+                    rvdw,
+                    eps,
+                    alfa,
+                    gammavdw,
+                    stacked_topology["angle_indices"],
+                    stacked_topology["torsion_indices"],
+                    stacked_topology["angle_theta0_degrees"],
+                    stacked_topology["angle_vka"],
+                    stacked_topology["angle_vka3"],
+                    stacked_topology["angle_vka8"],
+                    stacked_topology["angle_vkac"],
+                    stacked_topology["angle_vkap"],
+                    stacked_topology["angle_vval2"],
+                    stacked_topology["torsion_v1"],
+                    stacked_topology["torsion_v2"],
+                    stacked_topology["torsion_v3"],
+                    stacked_topology["torsion_v4"],
+                    stacked_topology["torsion_vconj"],
+                    stacked_topology["torsion_v2bo"],
+                    stacked_topology["torsion_v3bo"],
+                    stacked_electron_inputs["is_electron"],
+                    stacked_electron_inputs["is_hole"],
+                    stacked_electron_inputs["core_charge"],
+                    stacked_electron_inputs["betael"],
+                    stacked_electron_inputs["alphag"],
+                )
         else:
             energy_terms = {"total": energies}
 

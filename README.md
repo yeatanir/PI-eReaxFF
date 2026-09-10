@@ -246,6 +246,10 @@ The fast-backend work has started behind a gated interface:
   225-atom Jamil P4 labeled frame builds 336 angles and 672 torsions and runs
   the one-case diagnostic aggregate in about 4 seconds including topology/JAX
   overhead on the tested Mac CPU;
+- `force_batch` now has a compiled sparse-aggregate path for stack-compatible
+  cases.  On the first 225-atom Jamil P4 frame, API batches of 1, 2, and 4
+  identical cases took about 2.30, 2.40, and 2.43 seconds respectively on the
+  tested Mac CPU;
 - the force-provider base now has a batched result type so future backends can
   evaluate all beads in one compiled/vectorized request.
 
