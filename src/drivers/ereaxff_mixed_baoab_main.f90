@@ -324,9 +324,11 @@ program ereaxff_mixed_baoab_main
   write(heat_unit,'(a)') "# step thermostat_heat_eV classical_heat_eV quantum_heat_eV"
   write(carbon_temp_unit,'(a)') "# step carbon_temperature_K carbon_ke_eV"
   write(electron_temp_unit,'(a)') &
-      "# step electron_temperature_K raw_ring_polymer_temperature_K electron_ke_eV"
+      "# step physical_electron_temperature_K extended_ring_polymer_temperature_K expected_extended_temperature_K " // &
+      "extended_to_physical_ratio electron_ke_eV"
   write(electron_mode_temp_unit,'(a)') &
-      "# step mode mode_temperature_K raw_ring_polymer_temperature_K mode_ke_eV"
+      "# step mode physical_equivalent_mode_temperature_K extended_mode_temperature_K expected_extended_mode_temperature_K " // &
+      "extended_to_physical_ratio mode_ke_eV"
 
   if (mod(start_step, output_stride) == 0 .or. start_step == steps) call write_step_outputs(start_step)
   step = start_step
@@ -663,8 +665,9 @@ contains
   subroutine write_temperature_diagnostics(step_in, carbon_unit, electron_unit, mode_unit)
     integer, intent(in) :: step_in, carbon_unit, electron_unit, mode_unit
     real(dp) :: carbon_ke_eV, carbon_temp_K
-    real(dp) :: electron_ke_eV, electron_temp_K, raw_electron_temp_K
-    real(dp) :: mode_ke_eV, mode_temp_K, raw_mode_temp_K
+    real(dp) :: electron_ke_eV, electron_temp_K, extended_electron_temp_K, expected_extended_temp_K
+    real(dp) :: mode_ke_eV, mode_temp_K, extended_mode_temp_K, expected_extended_mode_temp_K
+    real(dp) :: extended_temp_ratio
     integer :: i, mode, carbon_count
 
     carbon_ke_eV = 0.0_dp
@@ -687,16 +690,31 @@ contains
     do mode = 1, primary_beads
       electron_ke_eV = electron_ke_eV + kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
     end do
-    raw_electron_temp_K = 2.0_dp * electron_ke_eV / (3.0_dp * real(primary_beads, dp) * boltzmann_eV_per_K)
-    electron_temp_K = raw_electron_temp_K / real(primary_beads, dp)
+    extended_electron_temp_K = 2.0_dp * electron_ke_eV / &
+        (3.0_dp * real(primary_beads, dp) * boltzmann_eV_per_K)
+    electron_temp_K = extended_electron_temp_K / real(primary_beads, dp)
+    expected_extended_temp_K = get_pimd_group_temperature(groups, assignment, primary_quantum) * real(primary_beads, dp)
+    if (electron_temp_K > 0.0_dp) then
+      extended_temp_ratio = extended_electron_temp_K / electron_temp_K
+    else
+      extended_temp_ratio = 0.0_dp
+    end if
 
     write(carbon_unit,'(i8,2(1x,es22.14))') step_in, carbon_temp_K, carbon_ke_eV
-    write(electron_unit,'(i8,3(1x,es22.14))') step_in, electron_temp_K, raw_electron_temp_K, electron_ke_eV
+    write(electron_unit,'(i8,5(1x,es22.14))') step_in, electron_temp_K, extended_electron_temp_K, &
+        expected_extended_temp_K, extended_temp_ratio, electron_ke_eV
     do mode = 1, primary_beads
       mode_ke_eV = kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
-      raw_mode_temp_K = 2.0_dp * mode_ke_eV / (3.0_dp * boltzmann_eV_per_K)
-      mode_temp_K = raw_mode_temp_K / real(primary_beads, dp)
-      write(mode_unit,'(i8,1x,i8,3(1x,es22.14))') step_in, mode, mode_temp_K, raw_mode_temp_K, mode_ke_eV
+      extended_mode_temp_K = 2.0_dp * mode_ke_eV / (3.0_dp * boltzmann_eV_per_K)
+      mode_temp_K = extended_mode_temp_K / real(primary_beads, dp)
+      expected_extended_mode_temp_K = expected_extended_temp_K
+      if (mode_temp_K > 0.0_dp) then
+        extended_temp_ratio = extended_mode_temp_K / mode_temp_K
+      else
+        extended_temp_ratio = 0.0_dp
+      end if
+      write(mode_unit,'(i8,1x,i8,5(1x,es22.14))') step_in, mode, mode_temp_K, extended_mode_temp_K, &
+          expected_extended_mode_temp_K, extended_temp_ratio, mode_ke_eV
     end do
   end subroutine write_temperature_diagnostics
 

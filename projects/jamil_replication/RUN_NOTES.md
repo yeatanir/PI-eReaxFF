@@ -141,7 +141,7 @@ P=4/one-step verification:
 - Parallel worker initialization took about `34.3 s` before the first batch.
 - Exact four-bead batches took `19.5-20.5 s` each on the 225-particle Jamil system.
 - Final carbon temperature: `292.973 K`.
-- Final electron physical temperature: `316.700 K`; raw ring-polymer temperature: `1266.801 K`, matching the expected P=4 scaling.
+- Final electron physical temperature: `316.700 K`; extended ring-polymer kinetic temperature: `1266.801 K`, matching the expected P=4 diagnostic scaling.
 - Thermostat heat after one step:
   - classical Berendsen: `-1.01771946427576E-04 eV`
   - electron PILE: `1.43071183013831 eV`
