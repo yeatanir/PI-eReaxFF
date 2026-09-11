@@ -1506,11 +1506,16 @@ def electron_corrected_valencies(
     import jax.numpy as jnp
 
     positions = jnp.asarray(positions_A, dtype=jnp.float64)
+    # The Jamil oracle's electron-sharing pass follows the same central-cell
+    # convention seen in its electron/nonbonded bucket labels.  Minimum-image
+    # sharing incorrectly couples periodic-corner atoms to electron images in
+    # displaced PIMD frames and breaks overcoordination force parity.
+    del cell_lengths
     displacement = positions[:, None, :] - positions[None, :, :]
-    displacement = _minimum_image(displacement, cell_lengths)
     distance2 = jnp.sum(displacement * displacement, axis=-1)
     is_core = ~is_electron
-    share = jnp.exp(-vincr[:, None] * distance2)
+    vincr_core = jnp.where(is_core, vincr, 0.0)
+    share = jnp.exp(-vincr_core[:, None] * distance2)
     core_electron_share = jnp.where(is_core[:, None] & is_electron[None, :], share, 0.0)
     eshare2 = jnp.sum(core_electron_share, axis=1)
     avalc = aval + electron_valence_sign * eshare2
@@ -1566,7 +1571,12 @@ def reaxff_lone_pair_overcoordination_terms(
         electron_inputs["is_electron"],
         cell_lengths,
     )
+    core_mask = ~electron_inputs["is_electron"]
+    avalc = jnp.where(core_mask, avalc, 1.0)
+    stlpc = jnp.where(core_mask, stlpc, 0.0)
+    eshare2 = jnp.where(core_mask, eshare2, 0.0)
     abo = jnp.sum(total, axis=1)
+    abo = jnp.where(core_mask, abo, 0.0)
     vund = abo - stlpc
     int_half_vund = jnp.trunc(vund / 2.0)
     vlpex = vund - 2.0 * int_half_vund
@@ -1576,7 +1586,7 @@ def reaxff_lone_pair_overcoordination_terms(
     hulp1 = 1.0 / (1.0 + jnp.exp(-75.0 * diffvlp))
     lone_pair = bond_inputs["vlp1"] * diffvlp * hulp1
 
-    first_row = bond_inputs["amas"] <= 31.0
+    first_row = core_mask & (bond_inputs["amas"] <= 31.0)
     dfvl = jnp.where(first_row, 1.0, 0.0)
     vlptemp = jnp.where(first_row, vlp, voptlp)
     diffvlph = dfvl * (voptlp - vlptemp)
@@ -1614,7 +1624,6 @@ def reaxff_lone_pair_overcoordination_terms(
         0.0,
     )
     legacy_ea = overcoordination + undercoordination
-    core_mask = ~electron_inputs["is_electron"]
     return {
         "lone_pair": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, lone_pair, 0.0)),
         "overcoordination": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, legacy_ea, 0.0)),

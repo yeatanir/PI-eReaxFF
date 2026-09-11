@@ -182,10 +182,12 @@ make test_34_fast_offequilibrium_parity
 ```
 
 As of 2026-09-10, the short-run subset (`step=0,10`, `bead=1`) matches the
-oracle to about `3.7e-7 eV/A`, while the thermally bad 100-step trajectory
-shows a `3.81 eV/A` worst force mismatch at atom 114 (`C`) on `step=100`.
-That points the next correctness work at displaced corrected-BO/topology or
-periodic corner handling rather than protocol overhead.
+oracle to about `3.7e-7 eV/A`.  The thermally bad 100-step trajectory still
+shows a long-frame force-only mismatch at atom 114 (`C`) on `step=100`, now
+`3.61 eV/A` after matching the legacy central-cell electron-sharing convention
+used by lone-pair/overcoordination.  Corrected BO, scalar energy terms, and the
+short-frame forces match; the remaining target is the legacy hand-derivative
+bookkeeping for the stretched weak C114-C116 topology.
 
 ## Force Kernel Status
 

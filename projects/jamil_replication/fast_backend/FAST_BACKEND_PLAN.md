@@ -67,8 +67,9 @@ removing the exact legacy oracle.
   force-stage request after startup.
 - Off-equilibrium oracle parity now labels selected fast trajectory frames.
   The near-equilibrium 10-step subset stays below `1e-5 eV/A`, but the
-  thermally bad 100-step trajectory reaches `3.81 eV/A` force error at atom 114
-  (`C`) on step 100.
+  thermally bad 100-step trajectory reaches `3.61 eV/A` force error at atom 114
+  (`C`) on step 100 after fixing the electron-sharing convention in
+  lone-pair/overcoordination.
 - Full dynamic ACKS2 matrix construction/solve remains fail-closed until it has
   oracle labels that exercise nonzero solver state.  The connected Jamil force
   path is still explicitly unvalidated and should remain behind the opt-in gate
@@ -77,8 +78,10 @@ removing the exact legacy oracle.
 
 ## Next Correctness Target
 
-Investigate the displaced corner-carbon mismatch before optimizing speed:
-compare corrected BO/topology and periodic neighbor choices for atom 114 on
-`step=50` and `step=100` frames, then rerun the off-equilibrium parity harness
-until the 100-step sampled frames are back near the `1e-5 eV/A` force-error
-scale.
+Investigate the remaining displaced corner-carbon force-only mismatch before
+optimizing speed.  Corrected BO labels and scalar energy terms now match the
+oracle on the sampled `step=100` frames, so the next check is the legacy
+hand-derivative bookkeeping for the stretched weak C114-C116 topology.  Rerun
+the off-equilibrium parity harness until the 100-step sampled frames are back
+near the `1e-5 eV/A` force-error scale or the derivative inconsistency is
+explicitly isolated from a finite-difference oracle-energy check.
