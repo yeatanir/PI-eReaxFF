@@ -65,8 +65,20 @@ removing the exact legacy oracle.
 - Worker timing shows request parsing/writing is negligible; the current
   bottleneck is the JAX force kernel itself at roughly `1.9-2.1 s` per P=16
   force-stage request after startup.
+- Off-equilibrium oracle parity now labels selected fast trajectory frames.
+  The near-equilibrium 10-step subset stays below `1e-5 eV/A`, but the
+  thermally bad 100-step trajectory reaches `3.81 eV/A` force error at atom 114
+  (`C`) on step 100.
 - Full dynamic ACKS2 matrix construction/solve remains fail-closed until it has
   oracle labels that exercise nonzero solver state.  The connected Jamil force
   path is still explicitly unvalidated and should remain behind the opt-in gate
   while off-equilibrium frame parity, drift diagnostics, and profiling are
   added.
+
+## Next Correctness Target
+
+Investigate the displaced corner-carbon mismatch before optimizing speed:
+compare corrected BO/topology and periodic neighbor choices for atom 114 on
+`step=50` and `step=100` frames, then rerun the off-equilibrium parity harness
+until the 100-step sampled frames are back near the `1e-5 eV/A` force-error
+scale.

@@ -169,6 +169,24 @@ thermally unacceptable because carbon temperature rises to about `2139 K` over
 5 fs; use that as the next off-equilibrium parity/profiling target before
 removing the unvalidated gate.
 
+Run selected off-equilibrium frame parity against the exact oracle with:
+
+```sh
+projects/jamil_replication/run_fast_offequilibrium_parity.sh
+```
+
+The regression target checks a small near-equilibrium subset:
+
+```sh
+make test_34_fast_offequilibrium_parity
+```
+
+As of 2026-09-10, the short-run subset (`step=0,10`, `bead=1`) matches the
+oracle to about `3.7e-7 eV/A`, while the thermally bad 100-step trajectory
+shows a `3.81 eV/A` worst force mismatch at atom 114 (`C`) on `step=100`.
+That points the next correctness work at displaced corrected-BO/topology or
+periodic corner handling rather than protocol overhead.
+
 ## Force Kernel Status
 
 `jax_force_kernel.py` currently provides these gated paths:

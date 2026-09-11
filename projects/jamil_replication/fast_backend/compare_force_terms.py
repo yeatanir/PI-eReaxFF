@@ -108,7 +108,6 @@ def _worst_component(error: jnp.ndarray) -> tuple[int, int, float]:
 
 
 def summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
-    batch = evaluate_force_batch(cases, kernel="reaxff_corrected_bond_nonbonded_valence")
     term_component_sums: dict[str, float] = defaultdict(float)
     term_component_max: dict[str, float] = defaultdict(float)
     leave_out_max: dict[str, float] = defaultdict(float)
@@ -116,8 +115,9 @@ def summarize(cases: list[dict[str, Any]]) -> dict[str, Any]:
     global_max = 0.0
 
     for case_index, case in enumerate(cases):
+        batch = evaluate_force_batch([case], kernel="reaxff_corrected_bond_nonbonded_valence")
         oracle = jnp.asarray(case["labels"]["forces_eV_per_A"], dtype=jnp.float64)
-        jax_total = jnp.asarray(batch["forces_eV_per_A"][case_index], dtype=jnp.float64)
+        jax_total = jnp.asarray(batch["forces_eV_per_A"][0], dtype=jnp.float64)
         error = jax_total - oracle
         atom, component, signed_error = _worst_component(error)
         max_abs_error = abs(signed_error)

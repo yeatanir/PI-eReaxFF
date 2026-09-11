@@ -388,3 +388,28 @@ Interpretation:
 - Worker timing shows the bottleneck clearly: the 10-step run spends about `80.5 s` of `83.5 s` in JAX force evaluation. Request parsing/writing is below `0.4 s` total, so protocol overhead is not the main limiter.
 - The 100-step `dt=0.05` trajectory is not acceptable production MD yet. Carbon temperature rises monotonically to about `2139 K` over 5 fs while electron temperature remains near target. This points to force/integrator energy drift or incomplete force parity over displaced carbon/electron configurations, not the original hot-electron initialization issue.
 - Next work should profile and validate the JAX force kernel on off-equilibrium frames from this 100-step run, then compare selected frames back to the exact oracle before optimizing for speed.
+
+## 2026-09-10 Fast Off-Equilibrium Oracle Parity
+
+Added `projects/jamil_replication/run_fast_offequilibrium_parity.sh` and `make test_34_fast_offequilibrium_parity`.  The script samples selected bead frames from a fast `.xyz` trajectory, builds adapter-call-like exact oracle inputs, labels those frames with `oracle_single_point_force_export`, converts them to JSONL, and runs the JAX force-term comparison.
+
+Regression subset from the P=16 10-step `dt=0.05` trajectory:
+
+- sampled frames: `step=0,10`, `bead=1`
+- cases: `2`
+- max force error: `3.73e-7 eV/A`
+- status: `PASS` with threshold `1e-5 eV/A`
+
+Broader diagnostic subset from the thermally bad P=16 100-step `dt=0.05` trajectory:
+
+- sampled frames: `step=0,50,100`, `beads=1,8,16`
+- cases: `9`
+- max force error: `3.81 eV/A`
+- worst frames: `step=100`, atom `114` (`C`), mostly `x/y` components
+- step 50 is still close: worst force error about `5.36e-3 eV/A`
+
+Interpretation:
+
+- The fast force kernel is accurate near the initial and short-trajectory manifold.
+- The 100-step carbon heating correlates with a real off-equilibrium force mismatch, not just thermostat noise.
+- The failure localizes to the first carbon/pair site at the periodic corner after displacement.  The largest JAX component terms at the worst point are corrected bond, overcoordination, and valence-penalty-like forces, so the next fix should inspect corrected BO/topology/periodic neighbor handling for displaced corner carbons before any speed-only optimization.
