@@ -54,3 +54,36 @@ Next convergence test should be a fixed-cost production diagnostic:
 - discard an initial equilibration segment;
 - compare block averages of bead spread, electron centroid distribution, electron-C radial/localization metrics, energy terms, and carbon temperature;
 - accept P=16 only if P16/P32 block-average differences are below predefined tolerances.
+
+## 100-Step P16/P32 Follow-Up
+
+Matched fast-backend runs with `dt_fs = 0.05`, 100 steps, corrected mixed integrator, and carbon Berendsen `tau_fs = 10.0`.
+
+Run roots:
+
+- P16: `build/jamil_replication/fast_stability_20260911_124426/fast_p16_steps100_dt0p05`
+- P32: `build/jamil_replication/fast_stability_20260911_153202/fast_p32_steps100_dt0p05`
+
+Speed:
+
+| P | wall_s | s/step | s/force stage | final electron T_K | final carbon T_K | final bead spread A | status |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 16 | 778.890 | 7.789 | 1.942 | 251.527 | 1016.449 | 0.148863 | PASS |
+| 32 | 981.945 | 9.819 | 2.449 | 283.283 | 1034.006 | 0.181736 | PASS |
+
+Last-half block averages, steps 50-100:
+
+| P | electron T_K mean | electron T_K sd | carbon T_K mean | carbon T_K sd | bead spread A mean | bead spread A sd | physical energy eV mean | max force eV/A mean |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 16 | 273.598 | 47.180 | 781.029 | 142.692 | 0.159614 | 0.005843 | -526.683 | 0.304647 |
+| 32 | 296.437 | 41.178 | 787.576 | 146.745 | 0.160096 | 0.009295 | -513.398 | 0.155825 |
+
+Interpretation:
+
+- P32 is only `1.26x` slower than P16 for the 100-step run because bead batching remains effective.
+- Bead spread is effectively converged between P16 and P32 on the last-half block average: difference is `0.00048 A`, much smaller than the block fluctuations.
+- Carbon temperature behavior is also effectively identical between P16 and P32 for this diagnostic.
+- Electron physical temperature differs by about `23 K` in the last-half block average, which is within one stochastic block standard deviation for these short trajectories.
+- Force/energy diagnostics are not directly converged between P16 and P32; the P32 max force is lower and the physical energy offset differs. Treat these as trajectory-dependent short-run diagnostics, not equilibrium free-energy convergence.
+
+Current conclusion: for this 100-step diagnostic, P16 is good enough for fast production/debug MD against P32 for temperature and bead-spread observables. A publishable convergence claim still needs longer block averages of electron localization/radial observables and energy terms.
