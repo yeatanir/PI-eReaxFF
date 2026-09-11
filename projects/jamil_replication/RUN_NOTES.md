@@ -381,13 +381,19 @@ Medium P=16 check:
 | P | steps | dt_fs | wall_s | s/step | s/force stage | worker force sum_s | electron_T_K | extended_T_K | carbon_T_K | bead spread_A | conserved span_eV | status |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 16 | 100 | 0.05 | 848.873 | 8.489 | 2.117 | 820.014 | 251.321 | 4021.139 | 2138.742 | 0.148771 | 1038.979 | THERMAL FAIL |
+| 16 | 100 | 0.01 | 816.429 | 8.164 | 2.036 | 789.258 | 205.324 | 3285.179 | 399.733 | 0.080271 | 303.617 | PASS |
 
 Interpretation:
 
 - The fast driver path is numerically robust enough for short P=16 MD: no NaN/Inf diagnostics, `.xyz` trajectories are written, and the worker exits cleanly.
 - Worker timing shows the bottleneck clearly: the 10-step run spends about `80.5 s` of `83.5 s` in JAX force evaluation. Request parsing/writing is below `0.4 s` total, so protocol overhead is not the main limiter.
-- The 100-step `dt=0.05` trajectory is not acceptable production MD yet. Carbon temperature rises monotonically to about `2139 K` over 5 fs while electron temperature remains near target. This points to force/integrator energy drift or incomplete force parity over displaced carbon/electron configurations, not the original hot-electron initialization issue.
-- Next work should profile and validate the JAX force kernel on off-equilibrium frames from this 100-step run, then compare selected frames back to the exact oracle before optimizing for speed.
+- The 100-step `dt=0.05` trajectory is not acceptable production MD yet. Carbon temperature rises monotonically to about `2139 K` over 5 fs while electron temperature remains near target. This originally pointed to force/integrator drift or incomplete off-equilibrium force parity, not the earlier hot-electron initialization issue.
+
+2026-09-11 corrected-force follow-up:
+
+- After fixing off-equilibrium force parity, the `dt=0.05 fs` 100-step run still fails the thermal guard: final carbon temperature is `2136.095 K`, final physical electron temperature is `251.373 K`, and conserved-like span is `1038.982 eV`.
+- The same corrected-force 100-step run at `dt=0.01 fs` passes: final carbon temperature is `399.733 K`, physical electron temperature is `205.324 K`, bead spread is `0.080271 A`, and conserved-like span is `303.617 eV`.
+- The carbon heating is therefore timestep/integrator stability, not the sampled fast-vs-oracle force parity issue.  Next check should map the stable window with intermediate timesteps such as `0.02 fs` and `0.025 fs`.
 
 ## 2026-09-10 Fast Off-Equilibrium Oracle Parity
 

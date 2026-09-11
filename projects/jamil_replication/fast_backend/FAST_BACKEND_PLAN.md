@@ -61,7 +61,9 @@ removing the exact legacy oracle.
   wall time from `P=4` to `P=16`.
 - Short P=16 fast MD checks pass finite/output/worker-shutdown guards for
   10 steps at `dt_fs=0.05` and `0.1`, but the 100-step `dt_fs=0.05` run is not
-  thermally acceptable: carbon temperature rises to about `2139 K` over 5 fs.
+  thermally acceptable even after force-parity fixes: carbon temperature rises
+  to about `2136 K` over 5 fs.  The matching 100-step `dt_fs=0.01` run passes
+  the thermal guard with final carbon temperature about `400 K`.
 - Worker timing shows request parsing/writing is negligible; the current
   bottleneck is the JAX force kernel itself at roughly `1.9-2.1 s` per P=16
   force-stage request after startup.
@@ -78,8 +80,9 @@ removing the exact legacy oracle.
 
 ## Next Correctness Target
 
-Rerun the 100-step fast stability trajectory with the corrected force kernel.
-If the carbon heating disappears, move to profiling and speed work.  If it
-persists, the next correctness target is integrator drift or a still-missing
-energy term outside the sampled off-equilibrium frames, not the previously
-suspected atom-114 force parity issue.
+Map the stable timestep window before optimizing speed.  The corrected force
+kernel passes broad off-equilibrium parity and the `dt_fs=0.01` stability check,
+but `dt_fs=0.05` still overheats carbon.  Run intermediate `dt_fs` values
+(`0.02`, then `0.025` or `0.03`) and inspect conserved-energy drift to choose a
+usable production timestep or identify the integrator/scaling term that makes
+`0.05 fs` unstable.

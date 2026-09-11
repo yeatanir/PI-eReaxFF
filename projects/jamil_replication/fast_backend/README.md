@@ -163,11 +163,12 @@ JAMIL_FAST_STABILITY_RUN_LONG=1 \
   projects/jamil_replication/run_fast_stability_check.sh
 ```
 
-As of 2026-09-10, 10-step P=16 fast runs pass finite/output/shutdown and
-thermal guards at `dt_fs=0.05` and `0.1`.  A 100-step `dt_fs=0.05` run remains
-thermally unacceptable because carbon temperature rises to about `2139 K` over
-5 fs; use that as the next off-equilibrium parity/profiling target before
-removing the unvalidated gate.
+As of 2026-09-11, 10-step P=16 fast runs pass finite/output/shutdown and
+thermal guards at `dt_fs=0.05` and `0.1`.  With the corrected force kernel, a
+100-step `dt_fs=0.05` run still heats carbon to about `2136 K`, while the same
+100-step check at `dt_fs=0.01` passes the thermal guard with final carbon
+temperature about `400 K`.  The current stability target is therefore
+timestep/integrator drift, not sampled force parity.
 
 Run selected off-equilibrium frame parity against the exact oracle with:
 
