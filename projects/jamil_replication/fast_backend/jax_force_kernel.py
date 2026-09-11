@@ -942,6 +942,13 @@ def _parameter_array(case: dict[str, Any], values_by_symbol: dict[str, float], n
     return jnp.asarray(values, dtype=jnp.float64)
 
 
+def _symbol_mask(case: dict[str, Any], symbol: str):
+    _enable_jax_x64()
+    import jax.numpy as jnp
+
+    return jnp.asarray([atom_symbol == symbol for atom_symbol in case["atom_types"]], dtype=bool)
+
+
 def _pair_parameter_matrix(case: dict[str, Any], values_by_pair: dict[str, float], name: str):
     _enable_jax_x64()
     import jax.numpy as jnp
@@ -1624,8 +1631,15 @@ def reaxff_lone_pair_overcoordination_terms(
         0.0,
     )
     legacy_ea = overcoordination + undercoordination
+    carbon_pair = bond_inputs["is_carbon"][:, None] & bond_inputs["is_carbon"][None, :]
+    vov4 = abo - bond_inputs["aval"]
+    c2_vov3 = total - vov4[:, None] - 0.040 * (vov4[:, None] ** 4)
+    c2_excess = c2_vov3 - 3.0
+    c2_correction = bond_inputs["general_parameters"][5] * c2_excess * c2_excess
+    c2_mask = active & carbon_pair & (c2_vov3 > 3.0)
+    lone_pair_total = lone_pair + jnp.sum(jnp.where(c2_mask, c2_correction, 0.0), axis=1)
     return {
-        "lone_pair": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, lone_pair, 0.0)),
+        "lone_pair": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, lone_pair_total, 0.0)),
         "overcoordination": KCAL_TO_EV * jnp.sum(jnp.where(core_mask, legacy_ea, 0.0)),
     }
 
@@ -2318,6 +2332,7 @@ def _bond_energy_inputs(case: dict[str, Any], parameters: dict[str, Any]):
     p3co = _pair_parameter_matrix(case, parameters["p3co_by_pair"], "vdW alpha pair")
     return {
         "amas": amas,
+        "is_carbon": _symbol_mask(case, "C"),
         "aval": aval,
         "stlp": stlp,
         "valf": valf,

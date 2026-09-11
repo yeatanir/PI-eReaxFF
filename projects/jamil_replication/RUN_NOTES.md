@@ -416,6 +416,6 @@ Interpretation:
 Follow-up correction:
 
 - `electron_corrected_valencies` now matches the Jamil legacy central-cell electron-sharing convention used by the electron/nonbonded buckets.  This removes the periodic-image overcoordination error for `step=100`, `bead=8` at atom `114`.
-- The broader diagnostic max force error is reduced to `3.61 eV/A`, with no NaNs in the force output.
-- Corrected BO labels and scalar energy terms match the oracle on the sampled `step=100` frames; the remaining mismatch is force-only and localized to the stretched weak C114-C116 topology, so the next correctness check should compare legacy hand derivatives against finite-difference oracle energies for that coordinate.
-- The residual localizes to the first carbon/pair site at the periodic corner after displacement.  The largest JAX component terms at the worst point are corrected bond, overcoordination, and valence-penalty-like forces, so speed-only optimization should wait until the C114-C116 derivative residual is understood.
+- After that fix, the broader diagnostic max force error was reduced to `3.61 eV/A`, with no NaNs in the force output.
+- `finite_difference_oracle_force.py` showed the smooth negative-side oracle-energy derivative matched the exported legacy force, while JAX was missing the remaining residual in the `lone_pair` bucket.  The missing source term was the legacy C-C C2 correction accumulated into `elp`.
+- After adding the C2 correction, the same broad 9-frame diagnostic reaches max force error `6.59e-7 eV/A`; the previous atom-114 `step=100` mismatch is gone.
