@@ -10,6 +10,9 @@ P="${JAMIL_FAST_STABILITY_P:-16}"
 MAX_CARBON_T_K="${JAMIL_FAST_STABILITY_MAX_CARBON_T_K:-1000.0}"
 MAX_BEAD_SPREAD_A="${JAMIL_FAST_STABILITY_MAX_BEAD_SPREAD_A:-2.0}"
 DT_CASES="${JAMIL_FAST_STABILITY_DT_CASES:-0.05 0.1}"
+C_THERMOSTAT="${JAMIL_FAST_STABILITY_C_THERMOSTAT:-}"
+C_TAU_FS="${JAMIL_FAST_STABILITY_C_TAU_FS:-}"
+C_GAMMA_FS_INV="${JAMIL_FAST_STABILITY_C_GAMMA_FS_INV:-}"
 if [[ "${JAMIL_FAST_STABILITY_RUN_LONG:-0}" == "1" ]]; then
   STEP_CASES="${JAMIL_FAST_STABILITY_STEP_CASES:-10 100}"
 else
@@ -38,7 +41,7 @@ write_config() {
   local out="$3"
   local cfg="$4"
 
-  python3 - "$BASE_CFG" "$cfg" "$P" "$steps" "$dt_fs" "$out" <<'PY'
+  python3 - "$BASE_CFG" "$cfg" "$P" "$steps" "$dt_fs" "$out" "$C_THERMOSTAT" "$C_TAU_FS" "$C_GAMMA_FS_INV" <<'PY'
 from __future__ import annotations
 
 import pathlib
@@ -51,6 +54,9 @@ p = sys.argv[3]
 steps = sys.argv[4]
 dt_fs = sys.argv[5]
 out = sys.argv[6]
+c_thermostat = sys.argv[7]
+c_tau_fs = sys.argv[8]
+c_gamma_fs_inv = sys.argv[9]
 
 
 def replace(pattern: str, value: str, text: str) -> str:
@@ -68,6 +74,28 @@ else:
     text = replace(r"^  restart_stride:.*$", "  restart_stride: 1\n  rescale_initial_pimd_velocities: true", text)
 text = replace(r"^  output_dir:.*$", f'  output_dir: "{out}"', text)
 text = replace(r"^    beads:.*$", f"    beads: {p}", text)
+if c_thermostat:
+    text = re.sub(
+        r"(  - name: graphene_carbons\n"
+        r"    selector: \"element == C\"\n"
+        r"    dynamics: classical\n"
+        r"    mobile: true\n)"
+        r"    thermostat: .*\n"
+        r"    temperature_K: .*\n"
+        r"(?:    tau_fs: .*\n|    gamma_fs_inv: .*\n)?",
+        lambda match: (
+            match.group(1)
+            + f"    thermostat: {c_thermostat}\n"
+            + "    temperature_K: 300.0\n"
+            + (
+                f"    tau_fs: {c_tau_fs or '100.0'}\n"
+                if c_thermostat == "berendsen"
+                else f"    gamma_fs_inv: {c_gamma_fs_inv or '0.001'}\n"
+            )
+        ),
+        text,
+        count=1,
+    )
 insertion = (
     "  repeatability_check: false\n"
     '  fast_backend_command: ".venv-fast/bin/python projects/jamil_replication/fast_backend/jax_live_worker.py"\n'

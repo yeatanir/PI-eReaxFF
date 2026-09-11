@@ -395,6 +395,13 @@ Interpretation:
 - The same corrected-force 100-step run at `dt=0.01 fs` passes: final carbon temperature is `399.733 K`, physical electron temperature is `205.324 K`, bead spread is `0.080271 A`, and conserved-like span is `303.617 eV`.
 - The carbon heating is therefore timestep/integrator stability, not the sampled fast-vs-oracle force parity issue.  Next check should map the stable window with intermediate timesteps such as `0.02 fs` and `0.025 fs`.
 
+2026-09-11 MD engine thermostat audit:
+
+- The graphene carbon group uses a classical Berendsen thermostat with `tau_fs = 100.0`; PIMD electrons use `pile_l`.
+- The mixed driver had an extra classical old-force half kick before the quantum update. Removing that duplicate kick reduced the P=16, `dt_fs=0.05`, 100-step final carbon temperature from about `2136 K` to `1156 K` with the same `tau_fs=100`.
+- Force-off thermostat regression passes for both Berendsen and Langevin classical C groups at `dt_fs=0.05`, so the C thermostat implementation itself is not the source of runaway heating.
+- A stronger Berendsen test with `tau_fs=10` gives final carbon temperature `1016 K` over the same 100-step run. This is close enough to the current guard for a short non-equilibrium diagnostic, but Berendsen remains a weak/non-canonical production thermostat.
+
 ## 2026-09-10 Fast Off-Equilibrium Oracle Parity
 
 Added `projects/jamil_replication/run_fast_offequilibrium_parity.sh` and `make test_34_fast_offequilibrium_parity`.  The script samples selected bead frames from a fast `.xyz` trajectory, builds adapter-call-like exact oracle inputs, labels those frames with `oracle_single_point_force_export`, converts them to JSONL, and runs the JAX force-term comparison.

@@ -891,13 +891,22 @@ contains
     integer :: i
 
     do i = 1, size(groups_in)
-      write(*,'(a,1x,a,1x,a,1x,a,1x,a,1x,es12.4,1x,a,1x,es12.4)') &
-          "group thermostat:", trim(groups_in(i)%name), &
-          "dynamics=" // trim(groups_in(i)%dynamics), &
-          "thermostat=" // trim(groups_in(i)%thermostat), &
-          "T_K=", groups_in(i)%temperature_K, &
-          "gamma_fs_inv=", merge(groups_in(i)%gamma_fs_inv, groups_in(i)%centroid_gamma_fs_inv, &
-          trim(groups_in(i)%dynamics) == dynamics_classical)
+      if (trim(groups_in(i)%thermostat) == "berendsen") then
+        write(*,'(a,1x,a,1x,a,1x,a,1x,a,1x,es12.4,1x,a,1x,es12.4)') &
+            "group thermostat:", trim(groups_in(i)%name), &
+            "dynamics=" // trim(groups_in(i)%dynamics), &
+            "thermostat=" // trim(groups_in(i)%thermostat), &
+            "T_K=", groups_in(i)%temperature_K, &
+            "tau_fs=", groups_in(i)%tau_fs
+      else
+        write(*,'(a,1x,a,1x,a,1x,a,1x,a,1x,es12.4,1x,a,1x,es12.4)') &
+            "group thermostat:", trim(groups_in(i)%name), &
+            "dynamics=" // trim(groups_in(i)%dynamics), &
+            "thermostat=" // trim(groups_in(i)%thermostat), &
+            "T_K=", groups_in(i)%temperature_K, &
+            "gamma_fs_inv=", merge(groups_in(i)%gamma_fs_inv, groups_in(i)%centroid_gamma_fs_inv, &
+            trim(groups_in(i)%dynamics) == dynamics_classical)
+      end if
     end do
   end subroutine print_group_thermostats
 
@@ -1022,12 +1031,8 @@ contains
     do i = 1, state_in%nparticles
       if (any(quantum_indices == i)) cycle
       if (.not. assignment%mobile(i)) cycle
-      force_particle = sum(summary%scaled_forces_eV_per_A(:, i, :), dim=2)
-      mass_amu = state_in%mass_amu(i)
       positions_A(:, i, 1) = positions_A(:, i, 1) + 0.5_dp * dt_fs * classical_velocities(:, i)
       call wrap_position_into_cell(state_in, positions_A(:, i, 1))
-      classical_velocities(:, i) = classical_velocities(:, i) + 0.5_dp * dt_fs * force_particle / &
-          (mass_amu * amu_angstrom2_per_fs2_to_eV)
       positions_A(:, i, :) = spread(positions_A(:, i, 1), dim=2, ncopies=size(positions_A, 3))
     end do
 
