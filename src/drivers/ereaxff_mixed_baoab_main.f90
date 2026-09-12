@@ -67,7 +67,7 @@ program ereaxff_mixed_baoab_main
   integer :: centroid_traj_unit, bead_traj_unit
   integer :: carbon_temp_unit, electron_temp_unit, electron_mode_temp_unit, electron_mode_partition_unit
   integer :: nparticles
-  integer :: pimd_count, output_stride, nquantum, q, primary_quantum, primary_beads
+  integer :: pimd_count, output_stride, nquantum, q, primary_quantum_slot, primary_quantum, primary_beads
   real(dp) :: temperature_K, dt_fs, pimd_mass_amu
   type(rng_state) :: rng
   logical :: config_mode, exists, force_off_mode, exact_oracle_mode, fast_backend_mode
@@ -294,7 +294,12 @@ program ereaxff_mixed_baoab_main
       quantum_masses_amu(q) = state%mass_amu(quantum_indices(q))
     end do
   end if
-  write(*,'(a,3(1x,es12.4))') "electron_start_A:", state%position_A(:, quantum_indices(1))
+  primary_quantum_slot = select_primary_quantum_slot(state, quantum_indices)
+  primary_quantum = quantum_indices(primary_quantum_slot)
+  primary_beads = quantum_bead_counts(primary_quantum_slot)
+  write(*,'(a,i0)') "diagnostic_quantum_slot = ", primary_quantum_slot
+  write(*,'(a,i0)') "diagnostic_quantum_id = ", state%id(primary_quantum)
+  write(*,'(a,3(1x,es12.4))') "diagnostic_electron_start_A:", state%position_A(:, primary_quantum)
 
   call init_charge_memory(charge_memory, nparticles, beads, policy_arg)
   if (config_mode .and. exact_oracle_mode) then
@@ -322,8 +327,6 @@ program ereaxff_mixed_baoab_main
         join_path(v1_root, trim(cfg%force_provider%ffield)), trim(geometry_path), &
         trim(cfg%force_provider%fast_backend_model), cfg%force_provider%fast_backend_allow_unvalidated)
   end if
-  primary_quantum = quantum_indices(1)
-  primary_beads = quantum_bead_counts(1)
   do q = 1, nquantum
     quantum_masses_amu(q) = state%mass_amu(quantum_indices(q))
     call init_quantum_thermostat(quantum_thermostats(q), groups(assignment%group_index(quantum_indices(q)))%thermostat, &
@@ -331,7 +334,7 @@ program ereaxff_mixed_baoab_main
         get_pimd_group_centroid_gamma(groups, assignment, quantum_indices(q)), dt_fs, rp(q)%omega_k)
     if (len_trim(restart_in) > 0 .and. trim(restart_in) /= "none") quantum_thermostats(q)%heat_eV = quantum_heat_eV(q)
   end do
-  pimd_mass_amu = quantum_masses_amu(1)
+  pimd_mass_amu = quantum_masses_amu(primary_quantum_slot)
   masses = [pimd_mass_amu, pimd_mass_amu, pimd_mass_amu]
 
   call evaluate_mixed_force_beads(start_step, "initial_force")
@@ -558,6 +561,22 @@ contains
     end do
   end function collect_particles_with_dynamics
 
+  integer function select_primary_quantum_slot(state_in, quantum_indices_in) result(slot)
+    type(system_state), intent(in) :: state_in
+    integer, intent(in) :: quantum_indices_in(:)
+    integer :: q, particle
+
+    if (size(quantum_indices_in) < 1) error stop "select_primary_quantum_slot: empty quantum index list"
+    slot = 1
+    do q = 1, size(quantum_indices_in)
+      particle = quantum_indices_in(q)
+      if (trim(state_in%element(particle)) == "El" .and. state_in%id(particle) == 113) then
+        slot = q
+        return
+      end if
+    end do
+  end function select_primary_quantum_slot
+
   real(dp) function select_mixed_temperature(cfg_in) result(temperature_out)
     type(input_config), intent(in) :: cfg_in
     integer :: i
@@ -679,15 +698,17 @@ contains
     integer :: coord
 
     do coord = 1, 3
-      call nm_to_bead(rp(1)%cmat, q_nm(coord, 1, 1:primary_beads), q_bead_local(coord, :))
+      call nm_to_bead(rp(primary_quantum_slot)%cmat, &
+          q_nm(coord, primary_quantum_slot, 1:primary_beads), q_bead_local(coord, :))
     end do
     centroid_A = sum(q_bead_local, dim=2) / real(primary_beads, dp)
     bead_spread_A = sqrt(sum((q_bead_local(1, :) - centroid_A(1))**2 + &
         (q_bead_local(2, :) - centroid_A(2))**2 + (q_bead_local(3, :) - centroid_A(3))**2) / real(primary_beads, dp))
 
-    free_ring_eV = compute_free_ring_energy_nm(q_nm(:, 1, 1:primary_beads), v_nm(:, 1, 1:primary_beads), &
-        masses, rp(1)%omega_k)
-    spring_eV = compute_spring_energy_nm(q_nm(:, 1, 1:primary_beads), masses, rp(1)%omega_k)
+    free_ring_eV = compute_free_ring_energy_nm(q_nm(:, primary_quantum_slot, 1:primary_beads), &
+        v_nm(:, primary_quantum_slot, 1:primary_beads), masses, rp(primary_quantum_slot)%omega_k)
+    spring_eV = compute_spring_energy_nm(q_nm(:, primary_quantum_slot, 1:primary_beads), masses, &
+        rp(primary_quantum_slot)%omega_k)
     kinetic_eV = free_ring_eV - spring_eV
     physical_potential_eV = summary%pimd_potential_eV
     max_force = maxval(abs(summary%scaled_forces_eV_per_A(:, primary_quantum, :)))
@@ -839,9 +860,9 @@ contains
 
     electron_ke_eV = 0.0_dp
     do mode = 1, primary_beads
-      electron_ke_eV = electron_ke_eV + kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
+      electron_ke_eV = electron_ke_eV + kinetic_energy_1d_eV(v_nm(:, primary_quantum_slot, mode), masses)
     end do
-    centroid_ke_eV = kinetic_energy_1d_eV(v_nm(:, 1, 1), masses)
+    centroid_ke_eV = kinetic_energy_1d_eV(v_nm(:, primary_quantum_slot, 1), masses)
     internal_ke_eV = electron_ke_eV - centroid_ke_eV
     extended_electron_temp_K = 2.0_dp * electron_ke_eV / &
         (3.0_dp * real(primary_beads, dp) * boltzmann_eV_per_K)
@@ -872,7 +893,7 @@ contains
         extended_electron_temp_K, electron_temp_K, expected_extended_temp_K, centroid_ke_eV, internal_ke_eV, &
         electron_ke_eV, centroid_ke_fraction
     do mode = 1, primary_beads
-      mode_ke_eV = kinetic_energy_1d_eV(v_nm(:, 1, mode), masses)
+      mode_ke_eV = kinetic_energy_1d_eV(v_nm(:, primary_quantum_slot, mode), masses)
       extended_mode_temp_K = 2.0_dp * mode_ke_eV / (3.0_dp * boltzmann_eV_per_K)
       mode_temp_K = extended_mode_temp_K / real(primary_beads, dp)
       expected_extended_mode_temp_K = expected_extended_temp_K
