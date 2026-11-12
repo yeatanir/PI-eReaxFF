@@ -75,6 +75,48 @@ The simulations agreed: started in a pit, the 1 amu ring left within about 0.8 p
 
 We added a narrow Gaussian barrier in the middle (3 kcal/mol high, 0.10 Å wide) and scanned 12 designs on the solver alone, before any simulation. This is the only design that satisfied all our criteria at 1 amu: the quantum ground state sits 2.5 kT below the barrier top, the quantum density at the barrier is about 12 times the classical value, and the classical barrier is about 4 to 5 kT.
 
+#### How the Schrödinger solver works (and why we trust it)
+
+The solver is the *reference answer* we compare the simulation against. It solves the quantum problem directly, with no random sampling, so any disagreement points at the simulation.
+
+**The question it answers.** Take the one quantum electron, mass *m*, and hold everything else still: the six silver atoms are fixed and the four classical electrons are frozen on their silver ions. The electron then moves in a fixed energy landscape *V(x, y, z)*, and quantum mechanics says its behaviour at temperature *T* follows from the time-independent Schrödinger equation:
+
+```
+[ -ħ²/(2m) ∇²  +  V(x, y, z) ] ψₙ = Eₙ ψₙ
+```
+
+Once we have the energy levels *Eₙ* and wavefunctions *ψₙ*, the thermal density along the axis is a weighted sum over states, with the usual Boltzmann weights:
+
+```
+ρ(z)  =  Σₙ exp(-(Eₙ - E₀)/kT) · ∫|ψₙ|² dx dy   /   Σₙ exp(-(Eₙ - E₀)/kT)         (T = 300 K)
+```
+
+A *classical* electron in the same landscape has the plain Boltzmann density exp(-V/kT), and we compute that too, from the same potential, for the dashed lines in the figures.
+
+**Where the landscape comes from.** The potential *V* is not a model we made up for the solver. We place the electron at every point of a 3-D grid and ask the actual simulation engine (LAMMPS with the Metal-Reax eReaxFF pair style) for the total energy there. So the solver and the path-integral simulation use *exactly the same force field*. That is the point: this comparison tests whether the **path-integral machinery** (i-PI, the bead bookkeeping, the thermostat, the engine) reproduces the quantum answer. It does not test whether the force field itself matches real silver.
+
+**How it is solved numerically** (`inputs/tunneling_ag/schrod3d.py`).
+1. A cell-centred grid with spacing *h* = 0.03 Å (0.04 Å for the 4 amu case), covering |x|, |y| ≤ 1.2 Å and |z| ≤ 3.0 Å.
+2. The landscape is mirror-symmetric in x, y and z, so only x, y ≥ 0 is solved, as four separate symmetry sectors (even or odd in x, even or odd in y). This cuts the size of the problem by four.
+3. The kinetic term is a second-order finite difference, so the Hamiltonian is a large sparse matrix. We find its lowest eigenvalues with a sparse eigensolver (`scipy.sparse.linalg.eigsh`).
+4. We keep asking for more states until we have reached **14 kT above the ground state**, so the thermal sum is complete to that cutoff.
+5. Barrier designs are added on top of the measured landscape as *V0 exp(−z²/2σ²)* (`schrod3d_barrier.py`), and each design reports the numbers listed next.
+
+**What it reports for each electron mass.** The ground-state energy; the *margin* (how far the ground state lies below the top of the barrier, counting the transverse zero-point energy at the barrier, in kT); the quantum and classical density at z = 0 and their ratio; the **tunnel splitting** (the energy gap between the lowest even-in-z and odd-in-z states, a direct measure of how strongly the two sides are coupled); and the classical barrier height as a free-energy difference.
+
+**How we got here.**
+- We first solved a **1-D** version on a scan of the energy along the axis (`schrod1d.py`). It showed the pit is strongly anharmonic (a harmonic pit would give 39 kcal/mol at the position where the real landscape gives 10.5).
+- We then moved to the full **3-D** problem, because the sideways zero-point energy of a light electron is as large as the barrier itself, so a 1-D axis scan gives the wrong picture.
+- The 3-D solver is checked in two ways. Refining the grid from 0.04 to 0.03 Å changed the density ratio by about 4 % and the ground-state energy by 0.3 % (for the chosen barrier design). And a first path-integral run with the other four electrons frozen (matching the solver's assumption) reproduced the solver's rms width of the density (0.2546 ± 0.010 Å against 0.2532 Å) on the force field's own barrier.
+
+**What it does not capture (limits, stated plainly).**
+- The other four electrons are frozen in the solver but free to move in the simulation. Small differences in the density tails (we see 9 to 25 % at 1 amu) are expected from this, but we have not proved that explanation.
+- Second-order finite differences and a finite box: the 0.1 amu result carries about 1 % box-size error, and the 4 amu pit is narrow enough that the 0.04 Å grid is marginal.
+- The thermal sum stops at 14 kT, which leaves out the 1 amu pit state (16.4 kT up). That is why one bar in Fig. 5b is an underestimate.
+- It treats one electron only. It gives equilibrium (thermal) quantities, not real-time dynamics.
+
+Code: [`inputs/tunneling_ag/schrod3d.py`](inputs/tunneling_ag/schrod3d.py), [`schrod3d_barrier.py`](inputs/tunneling_ag/schrod3d_barrier.py), [`schrod1d.py`](inputs/tunneling_ag/schrod1d.py). The landscape evaluation needs the LAMMPS engine, so the grids are not recomputed here; the stored results are in `validation/tunneling_ag/data/`.
+
 ### Chapter 4: does the simulation agree with the solver?
 
 Yes, for all four masses, once enough beads are used.
