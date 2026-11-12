@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="PI-eReaxFF logo: a pi-shaped ring polymer of beads and springs inside an electron-density blob, next to the text eReaxFF" width="560">
+</p>
+
 # PI-eReaxFF
 
 **What if an electron in a molecular-dynamics simulation could behave like a quantum particle, and still be cheap enough to simulate for nanoseconds?**
