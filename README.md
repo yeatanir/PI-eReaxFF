@@ -43,7 +43,7 @@ Simulate the necklace with ordinary dynamics and you get the quantum statistics 
 ```
 
 - **i-PI** is the well-known PIMD driver. We added one feature: some atoms (the silver ions) can stay classical while the electron is a necklace.
-- **Metal-Reax** is a fast ReaxFF engine written in C++. We added an eReaxFF mode, checked term by term against the original Fortran code.
+- **Metal-Reax** is a fast ReaxFF engine written in C++. We added an eReaxFF mode, checked term by term against the original Fortran code. The source is in [`pair_style/`](pair_style/) here, and the same code is on the [`ereaxff-lammps-merged`](https://github.com/yeatanir/Metal-Reax/tree/ereaxff-lammps-merged) branch of Metal-Reax.
 - **The glue**: scripts, quantum solvers for cross-checking, and a pile of validation reports.
 
 ## Why bother?
@@ -258,7 +258,7 @@ Exact commands, flags and the full reproduction recipe are in **[docs/TECHNICAL.
 
 | Folder | What's in it |
 |---|---|
-| `pair_style/` | The Metal-Reax engine with the eReaxFF mode |
+| `pair_style/` | The Metal-Reax engine with the eReaxFF mode (also on the `ereaxff-lammps-merged` branch of [Metal-Reax](https://github.com/yeatanir/Metal-Reax)). Build it as a LAMMPS plugin; see `pair_style/docs/USER_MANUAL.md` |
 | `ipi/` | The i-PI patch (classical atoms next to quantum ones) |
 | `drivers/`, `inputs/`, `tools/` | Glue code, run scripts, the Ag/El setup, solvers, one-command check runner |
 | `validation/` | Every validation report, in order, with the evidence |
