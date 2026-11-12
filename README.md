@@ -166,6 +166,20 @@ What happened, in plain words:
 - **The 1 amu electron is not equilibrated.** In 4 runs of 50 ps it crossed only 3 to 6 times each, spending 5 to 20 ps on one side at a time, and all four spent more time on the left, including the two started on the right. One run fell into the left pit and stayed near it for half the run, which is a kinetic trap (the solver puts the equilibrium weight of that state at about 1e-7). We therefore do **not** call 1 amu an equilibrium profile here. Excluding the pit frames, the other three runs are within 5 to 10 % of the solver, but that exclusion was made after the fact.
 - **Not run:** 0.1 amu at this barrier, and the checks above. The conserved quantity is also noisier than at the 3 kcal/mol design.
 
+To see it, here are the necklaces on the 8 kcal/mol barrier. Same conventions as the earlier movies (silver atoms drawn, imaginary-time necklace, not real-time motion), each window 4 ps long.
+
+![Animation: classical, 1 amu and 0.5 amu on the higher barrier](assets/movies/anim_B_compare_hb_ag.gif)
+
+*Movie 3. A classical point electron, a 1 amu necklace (72 beads) and a 0.5 amu necklace (100 beads) on the 8 kcal/mol barrier. The three panels come from different runs and different times, each stepped in real time from the start of its own window. The classical electron (window with its closest approach to the barrier) stays on one side. The 1 amu and 0.5 amu necklaces are windows in which the centroid crosses the barrier. Full quality: [`assets/movies/anim_B_compare_hb_ag.mp4`](assets/movies/anim_B_compare_hb_ag.mp4).*
+
+![Animation: 0.5 amu electron crossing the higher barrier](assets/movies/anim_A_0p5amu_hb_ag.gif)
+
+*Movie 4. The 0.5 amu electron (100 beads) in a window where it moves between the two sides. Top: the potential with the beads placed on it. Middle: the necklace between the donor and acceptor silver atoms. Bottom: the whole system. This run passes the equilibration check, but it is one of two. Full quality: [`assets/movies/anim_A_0p5amu_hb_ag.mp4`](assets/movies/anim_A_0p5amu_hb_ag.mp4).*
+
+![Animation: 1 amu electron on the higher barrier](assets/movies/anim_A_1amu_hb_ag.gif)
+
+*Movie 5. The 1 amu electron (72 beads) in a window around one of its few crossings. Note that this 1 amu set is not equilibrated (3 to 6 crossings per 50 ps run), so this shows a rare event we picked out, not a typical stretch. Full quality: [`assets/movies/anim_A_1amu_hb_ag.mp4`](assets/movies/anim_A_1amu_hb_ag.mp4).*
+
 The short version: at 12 kT the classical electron never crosses in our runs while the 0.5 amu quantum electron crosses about once per two picoseconds and matches the solver. The 1 amu runs need to be much longer. Full numbers: [`validation/tunneling_ag/HIGHER_BARRIER_PIMD.md`](validation/tunneling_ag/HIGHER_BARRIER_PIMD.md).
 
 ### Chapter 7: what is next
