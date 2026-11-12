@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="PI-eReaxFF logo: a pi-shaped ring polymer of beads and springs inside an electron-density blob, next to the text eReaxFF" width="560">
+  <img src="assets/logo.gif" alt="PI-eReaxFF logo: a pi-shaped ring polymer of beads and springs inside an electron-density blob, next to the text PI-eReaxFF" width="560">
 </p>
 
 # PI-eReaxFF
