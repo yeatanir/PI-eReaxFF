@@ -208,7 +208,11 @@ So one quantum run costs hours where a classical one costs minutes, and the full
 - *Smaller timesteps for the same reason.* The stiff springs are the fastest motion in the system, so the timestep has to shrink: 0.125 fs at 1 amu, 0.045 fs at 0.1 amu.
 - *Long runs.* The electron crosses the barrier rarely, so we need tens of picoseconds to see enough crossings. At the 8 kcal/mol barrier, even 50 ps was too short at 1 amu.
 
-**The surprise: the chemistry is not the expensive part.** One force call in the LAMMPS engine takes about 10 microseconds, yet each bead costs us roughly 0.2 to 0.3 milliseconds per step. So only a few percent of the time is the force field. The rest is the machinery around it: i-PI (written in Python) moving the beads and thermostatting them, and passing positions and forces back and forth through a socket for every single bead.
+**The surprise: the chemistry is not the expensive part.** Measured at P=72 (1 amu), one step takes about 20 ms, and it splits roughly as:
+
+- **about 80 % sockets and process hand-offs** (two socket round trips per bead, polling, a separate driver for the barrier),
+- **about 11 % i-PI's own Python** (moving the beads and the thermostat),
+- **about 9 % the force field** (about 24 microseconds per bead as called from Python; the bare force call is about 10 microseconds).
 
 **What we already did about it**
 - *A redundant step in our i-PI patch* cost about two extra force evaluations per step (about 2x at P=32). Removed.
@@ -217,7 +221,7 @@ So one quantum run costs hours where a classical one costs minutes, and the full
 - *A second machine* (a 10-core Mac Mini, same binaries, checked to give identical results) for the longer runs.
 
 **What could make it faster (ideas, not tested yet)**
-- *Send all beads of a step in one batch* to one LAMMPS process instead of one socket round trip per bead. Since the force is only about 4 % of the cost, this is the most promising one, and could plausibly give several times more speed.
+- *Send all beads of a step in one batch.* **Tested: about 5 times faster.** We replaced the socket clients with one i-PI direct force field holding a single LAMMPS instance that evaluates every bead in one call. Same setup, interleaved repeats on a loaded machine: 50 to 256 steps/s at P=72 (5.1x), 36 to 189 at P=100 (5.3x), 15 to 91 at P=220 (6.2x). Forces on 793 bead configurations agree with the socket version to 3e-12 kcal/mol/A, and a same-seed 400-step run agrees to about 3e-6 eV. Not yet done: a long statistical comparison, a restart test, and a proper option in the run script. Details: [`validation/phase3_engine/BATCHING_TEST.md`](validation/phase3_engine/BATCHING_TEST.md). With the bare force the ceiling at P=72 is about 6.8x, so going further needs i-PI's own Python sped up too.
 - *Move the bead propagation out of Python* (or run i-PI's work on fewer, vectorised calls).
 - *Fewer beads for the same accuracy*, using a higher-order path-integral factorisation or ring-polymer contraction. We have not tried these, and they must be re-validated against the solver.
 - *Longer timesteps* by multiple-time-stepping, which helps when the forces are expensive. Here they are cheap, so we expect little gain.
