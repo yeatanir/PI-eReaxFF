@@ -1,0 +1,10 @@
+Part 1: offline LAMMPS, data-file El mass varied (ffield mass untouched)
+  data-file El mass  1.00: max |dE| vs mass 1.0 = 0.000e+00 kcal/mol, max |dF| = 0.000e+00 kcal/mol/A; bitwise equal: True
+  data-file El mass  0.50: max |dE| vs mass 1.0 = 0.000e+00 kcal/mol, max |dF| = 0.000e+00 kcal/mol/A; bitwise equal: True
+  data-file El mass  0.10: max |dE| vs mass 1.0 = 0.000e+00 kcal/mol, max |dF| = 0.000e+00 kcal/mol/A; bitwise equal: True
+  data-file El mass 25.00: max |dE| vs mass 1.0 = 0.000e+00 kcal/mol, max |dF| = 0.000e+00 kcal/mol/A; bitwise equal: True
+Part 2: i-PI El mass reaches i-PI; step-0 client forces identical
+  i-PI El mass 1.0: restart mass vector (a.u.) El entries 1822.88850 (= 1.0000 amu), Ag entry 107.8682 amu
+  i-PI El mass 0.5: restart mass vector (a.u.) El entries 911.44425 (= 0.5000 amu), Ag entry 107.8682 amu
+  i-PI El mass 0.1: restart mass vector (a.u.) El entries 182.28885 (= 0.1000 amu), Ag entry 107.8682 amu
+  step-0 client forces/positions identical across masses: x: True  F: True

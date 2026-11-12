@@ -1,0 +1,30 @@
+From 071f6b95480d9396b0f9fbfe72ee5a775bf85126 Mon Sep 17 00:00:00 2001
+From: Anirban <noreply@users.noreply.github.com>
+Date: Wed, 11 Nov 2026 13:33:23 -0500
+Subject: [PATCH 9/9] classical_atoms: do not rewrite qnm when already zero
+ (removes 2 redundant force evaluations per step with thermostats)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ ipi/engine/motion/dynamics.py | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/ipi/engine/motion/dynamics.py b/ipi/engine/motion/dynamics.py
+index 63cac99..07206f8 100644
+--- a/ipi/engine/motion/dynamics.py
++++ b/ipi/engine/motion/dynamics.py
+@@ -502,7 +502,10 @@ class DummyIntegrator:
+                     "non-zero (max %.3g); the beads of a classical atom have been displaced "
+                     "by something other than the integrator." % np.max(np.abs(qint))
+                 )
+-        self.nm.qnm[1:, cd] = 0.0
++        # Write only if something is non-zero: assigning qnm (even zeros) invalidates the bead
++        # positions and makes i-PI recompute the forces (3 force calls per step with PILE).
++        if np.any(dstrip(self.nm.qnm)[1:, cd] != 0.0):
++            self.nm.qnm[1:, cd] = 0.0
+         if book_energy:
+             pnm = dstrip(self.nm.pnm)
+             dynm3 = dstrip(self.nm.dynm3)
+-- 
+2.50.1 (Apple Git-155)
+

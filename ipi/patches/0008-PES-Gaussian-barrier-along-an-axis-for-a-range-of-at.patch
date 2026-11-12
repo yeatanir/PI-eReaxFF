@@ -1,0 +1,148 @@
+From f3b9e82553dc04f5a4efe8db78a572e71f460266 Mon Sep 17 00:00:00 2001
+From: ereaxff-build <build@localhost>
+Date: Wed, 11 Nov 2026 04:05:45 -0500
+Subject: [PATCH 8/9] PES: Gaussian barrier along an axis for a range of atoms
+ (tunneling demo); unit tests
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ ipi/pes/gaussian_barrier.py                   | 61 +++++++++++++++++++
+ .../gaussian_barrier/test_gaussian_barrier.py | 58 ++++++++++++++++++
+ 2 files changed, 119 insertions(+)
+ create mode 100644 ipi/pes/gaussian_barrier.py
+ create mode 100644 ipi_tests/gaussian_barrier/test_gaussian_barrier.py
+
+diff --git a/ipi/pes/gaussian_barrier.py b/ipi/pes/gaussian_barrier.py
+new file mode 100644
+index 0000000..91d9dfa
+--- /dev/null
++++ b/ipi/pes/gaussian_barrier.py
+@@ -0,0 +1,61 @@
++"""Gaussian barrier along an axis, acting on a contiguous range of atoms.
++
++    V(r) = V0 * exp(-s^2 / (2 sigma^2)),   s = (r - r_mid) . n_hat
++
++applied to every atom with index first <= i <= last (0-based, inclusive) and to every bead separately
++(one structure = one bead). Not scaled by the number of beads: use it as a second <force> of weight 1 next to
++the physical force component. i-PI atomic units: energy in Hartree, length in bohr.
++
++Command line (scalars only, i-PI parses '-o' as comma-separated):
++    i-pi-py_driver -m gaussian_barrier -u -a <address> -o V0=0.0048,sigma=0.8,rx=0,ry=0,rz=0,nx=0,ny=0,nz=1,first=7,last=13
++
++Use `barrier_params(...)` to build that string from kcal/mol and Angstrom.
++"""
++
++import numpy as np
++
++from .dummy import Dummy_driver
++
++__DRIVER_NAME__ = "gaussian_barrier"
++__DRIVER_CLASS__ = "Gaussian_barrier_driver"
++
++KCAL_PER_HARTREE = 627.5094740631
++BOHR_A = 0.529177210903
++
++
++def barrier_params(v0_kcal, fwhm_A, r_mid_A, n_hat, first, last):
++    """Return the '-o' string for a barrier of height v0_kcal (kcal/mol) and full width at half maximum fwhm_A (A)."""
++    n = np.asarray(n_hat, float)
++    n = n / np.linalg.norm(n)
++    sigma_bohr = fwhm_A / (2.0 * np.sqrt(2.0 * np.log(2.0))) / BOHR_A
++    r = np.asarray(r_mid_A, float) / BOHR_A
++    return (
++        "V0=%.15g,sigma=%.15g,rx=%.15g,ry=%.15g,rz=%.15g,nx=%.15g,ny=%.15g,nz=%.15g,first=%d,last=%d"
++        % (v0_kcal / KCAL_PER_HARTREE, sigma_bohr, *r, *n, first, last)
++    )
++
++
++class Gaussian_barrier_driver(Dummy_driver):
++    def __init__(self, V0=0.0, sigma=1.0, rx=0.0, ry=0.0, rz=0.0, nx=0.0, ny=0.0, nz=1.0, first=0, last=-1, *args, **kwargs):
++        if sigma <= 0:
++            raise ValueError("gaussian_barrier: sigma must be positive")
++        self.V0, self.sigma = float(V0), float(sigma)
++        self.r_mid = np.array([rx, ry, rz], float)
++        n = np.array([nx, ny, nz], float)
++        if np.linalg.norm(n) == 0:
++            raise ValueError("gaussian_barrier: n_hat must be non-zero")
++        self.n_hat = n / np.linalg.norm(n)
++        self.first, self.last = int(first), int(last)
++        super().__init__(*args, **kwargs)
++
++    def compute_structure(self, cell, pos):
++        p = np.asarray(pos, float).reshape(-1, 3)
++        last = self.last if self.last >= 0 else p.shape[0] - 1
++        if last >= p.shape[0] or self.first > last:
++            raise ValueError("gaussian_barrier: atom range [%d,%d] invalid for %d atoms" % (self.first, last, p.shape[0]))
++        sel = slice(self.first, last + 1)
++        s = (p[sel] - self.r_mid) @ self.n_hat
++        g = self.V0 * np.exp(-0.5 * (s / self.sigma) ** 2)
++        force = np.zeros_like(p)
++        force[sel] = (g * s / self.sigma**2)[:, None] * self.n_hat[None, :]
++        return float(g.sum()), force.reshape(np.asarray(pos).shape), np.asarray(cell) * 0.0, "nada"
+diff --git a/ipi_tests/gaussian_barrier/test_gaussian_barrier.py b/ipi_tests/gaussian_barrier/test_gaussian_barrier.py
+new file mode 100644
+index 0000000..1486da9
+--- /dev/null
++++ b/ipi_tests/gaussian_barrier/test_gaussian_barrier.py
+@@ -0,0 +1,58 @@
++"""Unit tests of ipi/pes/gaussian_barrier.py: finite differences, V0 = 0, atom range, helper, batched call."""
++import numpy as np
++import pytest
++
++from ipi.pes.gaussian_barrier import Gaussian_barrier_driver, barrier_params, KCAL_PER_HARTREE, BOHR_A
++from ipi.utils.io.inputs import read_args_kwargs
++
++
++def make(**kw):
++    p = dict(V0=0.004, sigma=0.9, rx=0.3, ry=-0.2, rz=1.0, nx=1.0, ny=2.0, nz=-0.5, first=3, last=5)
++    p.update(kw)
++    return Gaussian_barrier_driver(**p)
++
++
++def test_forces_equal_finite_differences():
++    rng = np.random.default_rng(3)
++    d = make()
++    x = rng.normal(0, 1.5, 24)  # 8 atoms
++    e, f, _, _ = d.compute_structure(np.eye(3), x)
++    h = 1e-5
++    for i in range(24):
++        xp, xm = x.copy(), x.copy()
++        xp[i] += h; xm[i] -= h
++        fd = -(d.compute_structure(np.eye(3), xp)[0] - d.compute_structure(np.eye(3), xm)[0]) / (2 * h)
++        assert abs(fd - f[i]) <= 1e-8 * max(abs(f[i]), 1e-3) + 1e-11, (i, fd, f[i])
++
++
++def test_zero_height_gives_zero_everything():
++    d = make(V0=0.0)
++    e, f, v, _ = d.compute_structure(np.eye(3), np.random.default_rng(0).normal(size=24))
++    assert e == 0.0 and not f.any() and not v.any()
++
++
++def test_only_selected_atoms_feel_it():
++    d = make()
++    _, f, _, _ = d.compute_structure(np.eye(3), np.random.default_rng(1).normal(size=24))
++    f = f.reshape(-1, 3)
++    assert not f[:3].any() and not f[6:].any() and f[3:6].any()
++
++
++def test_peak_value_and_batched_call_and_parser():
++    d = make(V0=0.01, first=0, last=0, rx=0, ry=0, rz=0, nx=0, ny=0, nz=1)
++    e, f, _, _ = d.compute_structure(np.eye(3), np.zeros(3))
++    assert e == pytest.approx(0.01) and not f.any()
++    out = d.compute([np.eye(3)] * 2, [np.zeros(3), np.array([0, 0, 0.9])])
++    assert out[1][0] == pytest.approx(0.01 * np.exp(-0.5))
++    s = barrier_params(3.0, 0.4, [0, 0, 1.0], [0, 0, 2.0], 7, 13)
++    args, kw = read_args_kwargs(s)
++    dd = Gaussian_barrier_driver(*args, **kw)
++    assert dd.V0 == pytest.approx(3.0 / KCAL_PER_HARTREE) and dd.sigma == pytest.approx(0.4 / 2.35482 / BOHR_A, rel=1e-5)
++    assert dd.first == 7 and dd.last == 13 and dd.n_hat[2] == pytest.approx(1.0)
++
++
++def test_bad_arguments_refused():
++    with pytest.raises(ValueError):
++        make(sigma=0.0)
++    with pytest.raises(ValueError):
++        make(first=9, last=12).compute_structure(np.eye(3), np.zeros(24))
+-- 
+2.50.1 (Apple Git-155)
+

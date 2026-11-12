@@ -1,0 +1,10 @@
+P= 4 X2              mean 0.0775991 +- 0.00024  exact 0.077556  dev  +0.06 % (+0.2 SE)  PASS
+P= 4 centroid_to_X2  mean 0.298452 +- 0.00047  exact 0.298292  dev  +0.05 % (+0.3 SE)  PASS
+P= 4 Rg2             mean 0.036226 +- 2.2e-05  exact 0.0362434  dev  -0.05 % (-0.8 SE)  PASS
+P= 8 X2              mean 0.0773052 +- 0.00026  exact 0.077556  dev  -0.32 % (-1.0 SE)  PASS
+P= 8 centroid_to_X2  mean 0.297533 +- 0.00038  exact 0.298292  dev  -0.25 % (-2.0 SE)  PASS
+P= 8 Rg2             mean 0.038573 +- 1.5e-05  exact 0.0385766  dev  -0.01 % (-0.2 SE)  PASS
+P=16 X2              mean 0.0775837 +- 0.00012  exact 0.077556  dev  +0.04 % (+0.2 SE)  PASS
+P=16 centroid_to_X2  mean 0.297842 +- 0.0012  exact 0.298292  dev  -0.15 % (-0.4 SE)  PASS
+P=16 Rg2             mean 0.0391746 +- 1.4e-05  exact 0.0391703  dev  +0.01 % (+0.3 SE)  PASS
+test_36_production_path_coupled_harmonic: PASS

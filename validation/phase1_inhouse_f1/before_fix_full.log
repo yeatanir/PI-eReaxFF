@@ -1,0 +1,10 @@
+P= 4 X2              mean 0.113822 +- 0.00057  exact 0.077556  dev +46.76 % (+64.0 SE)  FAIL
+P= 4 centroid_to_X2  mean 1.05333 +- 0.0036  exact 0.298292  dev +253.12 % (+208.9 SE)  FAIL
+P= 4 Rg2             mean 0.0374502 +- 2.3e-05  exact 0.0362434  dev  +3.33 % (+52.9 SE)  FAIL
+P= 8 X2              mean 0.175156 +- 0.0005  exact 0.077556  dev +125.84 % (+194.1 SE)  FAIL
+P= 8 centroid_to_X2  mean 2.01978 +- 0.0084  exact 0.298292  dev +577.11 % (+203.8 SE)  FAIL
+P= 8 Rg2             mean 0.0396291 +- 1.6e-05  exact 0.0385766  dev  +2.73 % (+66.4 SE)  FAIL
+P=16 X2              mean 0.300558 +- 0.0012  exact 0.077556  dev +287.54 % (+179.8 SE)  FAIL
+P=16 centroid_to_X2  mean 3.89246 +- 0.018  exact 0.298292  dev +1204.92 % (+204.5 SE)  FAIL
+P=16 Rg2             mean 0.0401975 +- 1.4e-05  exact 0.0391703  dev  +2.62 % (+72.5 SE)  FAIL
+test_36_production_path_coupled_harmonic: FAIL

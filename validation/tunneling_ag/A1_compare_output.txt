@@ -1,0 +1,13 @@
+clients: 8  evaluations dumped: 2416  (clients that received at least one request: 8)
+client    step |  |F_client - F_lmp(unrounded)| |  |F_lmp - F_ereac| (rounded)  dE(lmp-ereac) | |F_client - F_ereac|   |F|max
+client0    732 |                      8.403e-12 |                    3.034e-09      7.546e-09 |            7.052e-03   76.552
+client1     72 |                      7.818e-12 |                    3.198e-09      8.773e-09 |            7.163e-03   73.832
+client2    159 |                      7.850e-12 |                    3.231e-09      8.829e-09 |            4.339e-03   75.120
+client3    210 |                      1.402e-11 |                    3.272e-09      8.882e-09 |            6.459e-03   71.827
+client4    159 |                      9.763e-12 |                    3.236e-09      8.828e-09 |            6.065e-03   70.772
+client5    720 |                      6.530e-12 |                    3.023e-09      7.536e-09 |            3.153e-03   80.751
+client6    783 |                      1.424e-11 |                    3.081e-09      7.597e-09 |            8.514e-03   63.189
+client7    522 |                      1.490e-11 |                    3.062e-09      7.968e-09 |            8.574e-03   79.678
+client0     30 |                      6.578e-12 |                    3.175e-09      8.738e-09 |            6.546e-03   77.846
+client1     81 |                      7.742e-12 |                    3.195e-09      8.776e-09 |            9.206e-03   67.595
+worst relative to max|F| (or |E|): client-vs-lmp-offline 2.25e-13 | lmp(rounded)-vs-ereac 4.88e-11 | dE/E 7.82e-12 | client(unrounded)-vs-ereac 1.36e-04

@@ -1,0 +1,85 @@
+From cb9b4db75a17bc1179b2b687a3d56b24bc78b360 Mon Sep 17 00:00:00 2001
+From: Anirban <noreply@users.noreply.github.com>
+Date: Wed, 11 Nov 2026 17:50:32 -0500
+Subject: [PATCH] regression tests CLASSICAL_ATOMS: commit ref_simulation.out
+ (ignored by *.out in .gitignore, so the references were never in the branch)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../ref_simulation.out                        | 28 +++++++++++++++++++
+ .../ref_simulation.out                        | 28 +++++++++++++++++++
+ 2 files changed, 56 insertions(+)
+ create mode 100644 ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_baoab/coupled_harmonic_python/ref_simulation.out
+ create mode 100644 ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_obabo/coupled_harmonic_python/ref_simulation.out
+
+diff --git a/ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_baoab/coupled_harmonic_python/ref_simulation.out b/ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_baoab/coupled_harmonic_python/ref_simulation.out
+new file mode 100644
+index 0000000..bfc361a
+--- /dev/null
++++ b/ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_baoab/coupled_harmonic_python/ref_simulation.out
+@@ -0,0 +1,28 @@
++# column   1     --> step : The current simulation time step.
++# column   2     --> conserved : The value of the conserved energy quantity per bead.
++# column   3     --> temperature{kelvin} : The current temperature, as obtained from the MD kinetic energy.
++# column   4     --> potential : The physical system potential energy.
++# column   5     --> kinetic_md : The kinetic energy of the (extended) classical system.
++# column   6     --> kinetic_cv : The centroid-virial quantum kinetic energy of the physical system.
++# column   7     --> spring : The total spring potential energy between the beads of all the ring polymers in the system.
++    0.00000000e+00     2.24975670e-02     2.44008753e+02     1.75000000e-02     4.99756700e-03     2.85013368e-03     0.00000000e+00   
++    1.00000000e+00     2.24975147e-02     2.55496981e+02     1.75610235e-02     5.43414015e-03     2.85105608e-03     3.50487044e-06   
++    2.00000000e+00     2.24977822e-02     2.03280657e+02     1.76154634e-02     3.44982677e-03     2.85320449e-03     1.10974815e-05   
++    3.00000000e+00     2.24978797e-02     1.98748240e+02     1.76253025e-02     3.27758685e-03     2.85646812e-03     2.32587044e-05   
++    4.00000000e+00     2.24977462e-02     2.29576812e+02     1.76155587e-02     4.44912755e-03     2.86112848e-03     4.12867343e-05   
++    5.00000000e+00     2.24976866e-02     2.29315550e+02     1.76327802e-02     4.43919911e-03     2.86737713e-03     6.41223254e-05   
++    6.00000000e+00     2.24977442e-02     2.09278202e+02     1.76644839e-02     3.67774417e-03     2.87489488e-03     9.10458255e-05   
++    7.00000000e+00     2.24975729e-02     2.42771275e+02     1.76845428e-02     4.95054065e-03     2.88225498e-03     1.17444441e-04   
++    8.00000000e+00     2.24978167e-02     2.03029064e+02     1.76742403e-02     3.44026578e-03     2.88765678e-03     1.35810974e-04   
++    9.00000000e+00     2.24976069e-02     2.38557769e+02     1.76489883e-02     4.79041990e-03     2.89144682e-03     1.46790407e-04   
++    1.00000000e+01     2.24976910e-02     2.19367864e+02     1.76244472e-02     4.06116932e-03     2.89891960e-03     1.70904449e-04   
++    1.10000000e+01     2.24973778e-02     2.76759123e+02     1.75705544e-02     6.24213945e-03     2.91490487e-03     2.24888469e-04   
++    1.20000000e+01     2.24975177e-02     2.50913619e+02     1.74903158e-02     5.25996424e-03     2.93733768e-03     2.98208851e-04   
++    1.30000000e+01     2.24975730e-02     2.58790108e+02     1.73891667e-02     5.55928483e-03     2.96275774e-03     3.79089393e-04   
++    1.40000000e+01     2.24974306e-02     2.80848997e+02     1.72712590e-02     6.39756195e-03     2.99506492e-03     4.82558533e-04   
++    1.50000000e+01     2.24974871e-02     2.67985265e+02     1.71564912e-02     5.90871719e-03     3.03055383e-03     5.94650161e-04   
++    1.60000000e+01     2.24975178e-02     2.55814651e+02     1.70549885e-02     5.44621218e-03     3.06789536e-03     7.12076702e-04   
++    1.70000000e+01     2.24974681e-02     2.77267248e+02     1.69533414e-02     6.26144910e-03     3.11149916e-03     8.46615373e-04   
++    1.80000000e+01     2.24975118e-02     2.76562323e+02     1.68330521e-02     6.23466068e-03     3.15901371e-03     9.99578640e-04   
++    1.90000000e+01     2.24968274e-02     3.81150859e+02     1.67287840e-02     1.02092115e-02     3.22219050e-03     1.22031565e-03   
++    2.00000000e+01     2.24966340e-02     4.20649738e+02     1.66443717e-02     1.17102393e-02     3.30602729e-03     1.50848290e-03   
+diff --git a/ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_obabo/coupled_harmonic_python/ref_simulation.out b/ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_obabo/coupled_harmonic_python/ref_simulation.out
+new file mode 100644
+index 0000000..20bbb39
+--- /dev/null
++++ b/ipi_tests/regression_tests/tests/CLASSICAL_ATOMS/nvt_pilel_obabo/coupled_harmonic_python/ref_simulation.out
+@@ -0,0 +1,28 @@
++# column   1     --> step : The current simulation time step.
++# column   2     --> conserved : The value of the conserved energy quantity per bead.
++# column   3     --> temperature{kelvin} : The current temperature, as obtained from the MD kinetic energy.
++# column   4     --> potential : The physical system potential energy.
++# column   5     --> kinetic_md : The kinetic energy of the (extended) classical system.
++# column   6     --> kinetic_cv : The centroid-virial quantum kinetic energy of the physical system.
++# column   7     --> spring : The total spring potential energy between the beads of all the ring polymers in the system.
++    0.00000000e+00     2.24975670e-02     2.44008753e+02     1.75000000e-02     4.99756700e-03     2.85013368e-03     0.00000000e+00   
++    1.00000000e+00     2.24975863e-02     2.07656374e+02     1.75653256e-02     3.61611181e-03     2.85107665e-03     3.48613818e-06   
++    2.00000000e+00     2.24975975e-02     2.31577565e+02     1.75727516e-02     4.52515972e-03     2.85314683e-03     1.14331694e-05   
++    3.00000000e+00     2.24976178e-02     2.19781023e+02     1.76204041e-02     4.07687009e-03     2.85714224e-03     2.55486229e-05   
++    4.00000000e+00     2.24976392e-02     2.05558098e+02     1.76569362e-02     3.53637357e-03     2.86186422e-03     4.25767648e-05   
++    5.00000000e+00     2.24976593e-02     2.20422702e+02     1.76785513e-02     4.10125503e-03     2.86665493e-03     5.96442506e-05   
++    6.00000000e+00     2.24976780e-02     2.43439356e+02     1.76592730e-02     4.97592893e-03     2.87896385e-03     1.04040959e-04   
++    7.00000000e+00     2.24976972e-02     2.73901180e+02     1.76104134e-02     6.13353254e-03     2.89495215e-03     1.58784658e-04   
++    8.00000000e+00     2.24977187e-02     2.60452903e+02     1.75655738e-02     5.62247404e-03     2.91554914e-03     2.27253301e-04   
++    9.00000000e+00     2.24977460e-02     2.86581435e+02     1.75177431e-02     6.61540481e-03     2.94332873e-03     3.16608311e-04   
++    1.00000000e+01     2.24977938e-02     4.03760260e+02     1.74862880e-02     1.10684090e-02     2.98937022e-03     4.80977442e-04   
++    1.10000000e+01     2.24978478e-02     3.87170207e+02     1.74474547e-02     1.04379574e-02     3.04626767e-03     6.77043802e-04   
++    1.20000000e+01     2.24978905e-02     3.32479347e+02     1.74042463e-02     8.35960729e-03     3.09555951e-03     8.26846173e-04   
++    1.30000000e+01     2.24979350e-02     3.47499044e+02     1.73574938e-02     8.93038255e-03     3.14790707e-03     9.83695349e-04   
++    1.40000000e+01     2.24979778e-02     3.27598926e+02     1.73154498e-02     8.17414258e-03     3.20071135e-03     1.13136098e-03   
++    1.50000000e+01     2.24980285e-02     2.81268194e+02     1.72869512e-02     6.41349217e-03     3.25411750e-03     1.29848916e-03   
++    1.60000000e+01     2.24980630e-02     3.13300508e+02     1.72347920e-02     7.63077721e-03     3.29945745e-03     1.42009628e-03   
++    1.70000000e+01     2.24981195e-02     3.35644541e+02     1.72024523e-02     8.47989031e-03     3.36507494e-03     1.61616888e-03   
++    1.80000000e+01     2.24981873e-02     3.39058149e+02     1.72115788e-02     8.60961347e-03     3.43859502e-03     1.83069205e-03   
++    1.90000000e+01     2.24982444e-02     3.48721658e+02     1.72008468e-02     8.97684405e-03     3.49649990e-03     1.99676972e-03   
++    2.00000000e+01     2.24983161e-02     3.83656828e+02     1.72275421e-02     1.03044428e-02     3.56295218e-03     2.20129306e-03   
+-- 
+2.50.1 (Apple Git-155)
+

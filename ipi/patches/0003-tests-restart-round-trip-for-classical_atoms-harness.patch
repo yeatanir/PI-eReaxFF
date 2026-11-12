@@ -1,0 +1,171 @@
+From 2db34b83b76b24c6fc9857fc5efdde4ddce1b13a Mon Sep 17 00:00:00 2001
+From: ereaxff-build <build@localhost>
+Date: Wed, 11 Nov 2026 02:50:25 -0500
+Subject: [PATCH 3/9] tests: restart round-trip for classical_atoms; harness
+ refactor (splitting, MTS, driver options, OMP_NUM_THREADS=1)
+
+<classical_atoms> is stored in the checkpoint and a restarted run matches an uninterrupted one to the
+checkpoint's float precision (5e-9 relative; unpatched i-PI shows the same). Classical beads stay identical.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../classical_atoms/test_classical_atoms.py   | 99 ++++++++++++++-----
+ 1 file changed, 74 insertions(+), 25 deletions(-)
+
+diff --git a/ipi_tests/classical_atoms/test_classical_atoms.py b/ipi_tests/classical_atoms/test_classical_atoms.py
+index 615228f..7546666 100644
+--- a/ipi_tests/classical_atoms/test_classical_atoms.py
++++ b/ipi_tests/classical_atoms/test_classical_atoms.py
+@@ -31,6 +31,7 @@ TEMPLATE = """<simulation verbosity='low'>
+     <trajectory filename='pos' stride='{stride}'> positions </trajectory>
+     <trajectory filename='cen' stride='{stride}'> x_centroid </trajectory>
+     <trajectory filename='vel' stride='{stride}' bead='0'> velocities </trajectory>
++    {out_extra}
+   </output>
+   <total_steps>{steps}</total_steps>
+   <prng><seed>{seed}</seed></prng>
+@@ -43,35 +44,67 @@ TEMPLATE = """<simulation verbosity='low'>
+       <file mode='xyz' units='atomic_unit'> init.xyz </file>
+       {velocities}
+     </initialize>
+-    <forces><force forcefield='drv'/></forces>
++    {forces}
+     <motion mode='dynamics'>
+       <fixcom> False </fixcom>
+-      <dynamics mode='{mode}'>
++      <dynamics mode='{mode}' splitting='{splitting}'>
+         <timestep units='atomic_unit'> {dt} </timestep>
+         <thermostat mode='{thermo}'>
+           <tau units='atomic_unit'> {tau} </tau>
+           {extra_thermo}
+         </thermostat>
+         {classical}
++        {dyn_extra}
+       </dynamics>
+     </motion>
+     <ensemble><temperature units='kelvin'> {temp} </temperature></ensemble>
++    {sys_extra}
+   </system>
+ </simulation>
+ """
+ 
+ 
++def launch(workdir, root, driver_root, input_name="input.xml", address=None, driver="coupled_harmonic",
++           driver_opts=None, timeout=1800):
++    """Starts i-PI on `input_name` plus a Python driver client, waits for i-PI to exit."""
++    workdir = Path(workdir)
++    if address is None:  # a restart file remembers the socket address of the run that wrote it
++        import re
++        m = re.search(r"<address>\s*([^<\s]+)\s*</address>", (workdir / input_name).read_text())
++        address = m.group(1) if m else "cl%d" % (os.getpid() % 100000)
++    driver_opts = driver_opts if driver_opts is not None else "%g,%g" % (K_TRAP, K_SPR)
++    env = dict(os.environ, PYTHONPATH=str(root), PYTHONUNBUFFERED="1", OMP_NUM_THREADS="1",
++               OPENBLAS_NUM_THREADS="1", VECLIB_MAXIMUM_THREADS="1")
++    log = workdir / ("ipi_%s.log" % Path(input_name).stem)
++    srv = subprocess.Popen([sys.executable, str(root / "bin" / "i-pi"), input_name], cwd=workdir,
++                           env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
++    time.sleep(3)
++    drv = subprocess.Popen(
++        [sys.executable, str(driver_root / "bin" / "i-pi-py_driver"), "-m", driver, "-u",
++         "-a", address, "-o", driver_opts],
++        cwd=workdir, env=dict(env, PYTHONPATH=str(driver_root)), stdout=open(workdir / "drv.log", "w"),
++        stderr=subprocess.STDOUT)
++    try:
++        srv.wait(timeout=timeout)
++    finally:
++        drv.terminate()
++        if srv.poll() is None:
++            srv.kill()
++    assert srv.returncode == 0, "i-PI failed:\n" + log.read_text()[-3000:]
++    return workdir
++
++
+ def run_ipi(workdir, root=None, driver_root=None, nbeads=8, steps=20000, dt=8.0, tau=400.0, thermo="pile_l",
+             classical="[0]", velocities=None, mode="nvt", stride=10, seed=12345, extra_thermo="",
+-            timeout=1800):
++            splitting="obabo", dyn_extra="", out_extra="", sys_extra="", forces=None, nm_extra="",
++            driver="coupled_harmonic", driver_opts=None, init_xyz=None, timeout=1800):
+     root = Path(root) if root else ROOT
+     driver_root = Path(driver_root) if driver_root else root
+     workdir = Path(workdir)
+     workdir.mkdir(parents=True, exist_ok=True)
+-    (workdir / "init.xyz").write_text(
++    (workdir / "init.xyz").write_text(init_xyz or (
+         "2\n# CELL(abcABC): 200 200 200 90 90 90 positions{atomic_unit} cell{atomic_unit}\n"
+-        "C 0.5 0.0 0.0\nH 1.0 0.5 0.0\n"
+-    )
++        "C 0.5 0.0 0.0\nH 1.0 0.5 0.0\n"))
+     address = "cl%d" % (os.getpid() % 100000)
+     cl = "<classical_atoms> %s </classical_atoms>" % classical if classical else ""
+     if velocities is None:
+@@ -81,28 +114,17 @@ def run_ipi(workdir, root=None, driver_root=None, nbeads=8, steps=20000, dt=8.0,
+             "2\n# CELL(abcABC): 200 200 200 90 90 90 velocity{atomic_unit} cell{atomic_unit}\n"
+             "C %.12g %.12g %.12g\nH %.12g %.12g %.12g\n" % tuple(velocities))
+         vel = "<velocities mode='xyz' units='atomic_unit'> vel.xyz </velocities>"
++    forces = forces or "<forces><force forcefield='drv'/></forces>"
+     (workdir / "input.xml").write_text(
+         TEMPLATE.format(stride=stride, steps=steps, seed=seed, address=address, nbeads=nbeads,
+                         temp=TEMP, mode=mode, dt=dt, thermo=thermo, tau=tau, classical=cl,
+-                        extra_thermo=extra_thermo, velocities=vel)
+-    )
+-    env = dict(os.environ, PYTHONPATH=str(root), PYTHONUNBUFFERED="1")
+-    srv = subprocess.Popen([sys.executable, str(root / "bin" / "i-pi"), "input.xml"], cwd=workdir,
+-                           env=env, stdout=open(workdir / "ipi.log", "w"), stderr=subprocess.STDOUT)
+-    time.sleep(3)
+-    drv = subprocess.Popen(
+-        [sys.executable, str(driver_root / "bin" / "i-pi-py_driver"), "-m", "coupled_harmonic", "-u",
+-         "-a", address, "-o", "%g,%g" % (K_TRAP, K_SPR)],
+-        cwd=workdir, env=dict(env, PYTHONPATH=str(driver_root)), stdout=open(workdir / "drv.log", "w"),
+-        stderr=subprocess.STDOUT)
+-    try:
+-        srv.wait(timeout=timeout)
+-    finally:
+-        drv.terminate()
+-        if srv.poll() is None:
+-            srv.kill()
+-    log = (workdir / "ipi.log").read_text()
+-    assert srv.returncode == 0, "i-PI failed:\n" + log[-3000:]
++                        extra_thermo=extra_thermo, velocities=vel, splitting=splitting,
++                        dyn_extra=dyn_extra, out_extra=out_extra, sys_extra=sys_extra, forces=forces)
++        .replace("<ffsocket name='drv' mode='unix' pbc='false'>", "<ffsocket name='drv' mode='unix' pbc='false'>"))
++    if nm_extra:
++        s = (workdir / "input.xml").read_text()
++        (workdir / "input.xml").write_text(s.replace("    <ensemble>", "    %s\n    <ensemble>" % nm_extra, 1))
++    launch(workdir, root, driver_root, "input.xml", address, driver, driver_opts, timeout)
+     return workdir
+ 
+ 
+@@ -261,3 +283,30 @@ def test_L_P2_all_atoms_classical_equals_P1(tmp_path):
+     # all beads of a classical atom coincide
+     p3 = read_xyz_frames(tmp_path / "p8" / "sim.pos_3.xyz", 2)
+     assert np.max(np.abs(p3 - b)) < 1e-12
++
++
++def test_restart_roundtrip(tmp_path):
++    """<classical_atoms> is written to the checkpoint, and a restarted run continues exactly
++    like an uninterrupted one (positions, energies, RNG state)."""
++    kw = dict(nbeads=4, dt=8.0, mode="nvt", stride=1, seed=5)
++    run_ipi(tmp_path / "full", steps=200, **kw)
++    half = tmp_path / "half"
++    run_ipi(half, steps=100, out_extra="<checkpoint filename='chk' stride='100' overwrite='True'/>", **kw)
++    chk = (half / "sim.chk").read_text()
++    assert "<classical_atoms shape='(1)'> [ 0 ] </classical_atoms>" in chk
++    (half / "restart.xml").write_text(chk.replace("<total_steps>100</total_steps>", "<total_steps>200</total_steps>"))
++    launch(half, ROOT, ROOT, "restart.xml")
++    # The checkpoint stores floats with limited precision, so a restart reproduces an uninterrupted
++    # run only to ~5e-9 relative (unpatched i-PI shows the same, measured as a control).
++    a, b = read_out(tmp_path / "full" / "sim.out"), read_out(half / "sim.out")
++    assert a.shape == b.shape
++    rel = np.abs(a - b)[:, 1:] / np.maximum(np.abs(a[:, 1:]), 1e-30)
++    assert rel.max() < 1e-7, rel.max()
++    for bead in (0, 3):
++        fa = read_xyz_frames(tmp_path / "full" / ("sim.pos_%d.xyz" % bead), 2)
++        fb = read_xyz_frames(half / ("sim.pos_%d.xyz" % bead), 2)
++        assert np.max(np.abs(fa - fb)) < 2.5e-6  # output resolution is 1e-6
++    # the classical atom's beads are still identical after the restart
++    f0 = read_xyz_frames(half / "sim.pos_0.xyz", 2)[:, 0]
++    f3 = read_xyz_frames(half / "sim.pos_3.xyz", 2)[:, 0]
++    assert np.max(np.abs(f0 - f3)) < 1e-9
+-- 
+2.50.1 (Apple Git-155)
+

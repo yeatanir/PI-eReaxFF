@@ -1,0 +1,112 @@
+519,521c519,521
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+572,574c572,574
+<       halfa=angle(1)*dgrrdn
+<       hbeta=angle(2)*dgrrdn
+<       hgamma=angle(3)*dgrrdn
+---
+>       halfa=angle(1)*1.7453292519943295d-2
+>       hbeta=angle(2)*1.7453292519943295d-2
+>       hgamma=angle(3)*1.7453292519943295d-2
+2354,2356c2354,2356
+<       halfa=angle(1)*dgrrdn
+<       hbeta=angle(2)*dgrrdn
+<       hgamma=angle(3)*dgrrdn
+---
+>       halfa=angle(1)*1.7453292519943295d-2
+>       hbeta=angle(2)*1.7453292519943295d-2
+>       hgamma=angle(3)*1.7453292519943295d-2
+2808,2810c2808,2810
+<       halfa=angle(1)*dgrrdn
+<       hbeta=angle(2)*dgrrdn
+<       hgamma=angle(3)*dgrrdn
+---
+>       halfa=angle(1)*1.7453292519943295d-2
+>       hbeta=angle(2)*1.7453292519943295d-2
+>       hgamma=angle(3)*1.7453292519943295d-2
+5462,5464c5462,5464
+<       halfa=angle(1)*dgrrdn
+<       hbeta=angle(2)*dgrrdn
+<       hgamma=angle(3)*dgrrdn
+---
+>       halfa=angle(1)*1.7453292519943295d-2
+>       hbeta=angle(2)*1.7453292519943295d-2
+>       hgamma=angle(3)*1.7453292519943295d-2
+8282,8284c8282,8284
+<       halfa=angle(1)*dgrrdn
+<       hbeta=angle(2)*dgrrdn
+<       hgamma=angle(3)*dgrrdn
+---
+>       halfa=angle(1)*1.7453292519943295d-2
+>       hbeta=angle(2)*1.7453292519943295d-2
+>       hgamma=angle(3)*1.7453292519943295d-2
+11097,11099c11097,11099
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11135,11137c11135,11137
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11168,11170c11168,11170
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11353,11355c11353,11355
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11395,11397c11395,11397
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11438,11440c11438,11440
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11482,11484c11482,11484
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2
+11512,11514c11512,11514
+<       halfa=angles(1)*dgrrdn
+<       hbeta=angles(2)*dgrrdn
+<       hgamma=angles(3)*dgrrdn
+---
+>       halfa=angles(1)*1.7453292519943295d-2
+>       hbeta=angles(2)*1.7453292519943295d-2
+>       hgamma=angles(3)*1.7453292519943295d-2

@@ -1,0 +1,18 @@
+BIOGRF 200
+DESCRP Ag3_El
+RUTYPE NORMAL RUN
+REMARK Ag cluster + explicit electrons (Evangelisti et al. 2020)
+FORMAT ATOM   (a6,1x,i5,1x,a5,1x,a3,1x,a1,1x,a5,3f10.5,1x,a5,i3,i2,1x,f8.5)
+HETATM     1 Av    Av    Av     40.00000  40.00000  41.73643        0 0  0.00000
+HETATM     2 Av    Av    Av     40.00000  41.41119  39.13178        0 0  0.00000
+HETATM     3 Av    Av    Av     40.00000  38.58881  39.13178        0 0  0.00000
+HETATM     4 El    El    El     40.00100  40.00000  41.73643        0 0  0.00000
+HETATM     5 El    El    El     40.00000  41.41219  39.13178        0 0  0.00000
+HETATM     6 El    El    El     40.00000  38.58881  39.13278        0 0  0.00000
+MOLCHARGE    1    1   1.00
+MOLCHARGE    2    2   1.00
+MOLCHARGE    3    3   1.00
+MOLCHARGE    4    4  -1.00
+MOLCHARGE    5    5  -1.00
+MOLCHARGE    6    6  -1.00
+END

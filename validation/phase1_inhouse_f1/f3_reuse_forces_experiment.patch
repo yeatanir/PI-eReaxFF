@@ -1,0 +1,19 @@
+--- forks/inhouse-engine/src/integrator/mixed_baoab_integrator.f90	2026-11-11 02:29:05
++++ scratch/inhouse_f1/f3exp/src/integrator/mixed_baoab_integrator.f90	2026-11-11 02:31:26
+@@ -71,15 +71,7 @@
+       force_off_value = .false.
+     end if
+ 
+-    if (force_off_value) then
+-      call evaluate_zero_oracle_beads(positions_A, charge_memory, solver_guess_by_bead, summary)
+-    else if (use_fast_backend) then
+-      call evaluate_fast_jax_beads(fast_adapter, positions_A, charge_memory, solver_guess_by_bead, charge_policy, summary)
+-    else
+-      call evaluate_oracle_beads(adapter, positions_A, charge_memory, solver_guess_by_bead, &
+-          charge_policy, summary, step_value, "quantum_pre_force")
+-    end if
+-
++    ! EXPERIMENT (F3): no re-evaluation here; reuse the forces of the group_pre_force stage (start of step)
+     do q = 1, size(quantum_indices)
+       call half_kick_from_summary(summary, quantum_indices(q), quantum_masses_amu(q), dt_fs, rp(q), &
+           quantum_bead_counts(q), v_nm(:, q, :))

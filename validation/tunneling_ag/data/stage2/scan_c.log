@@ -1,0 +1,16 @@
+V0=6.0 sigma=0.10 m=4.0: E0=2.065 W0=6.661 margin=7.71 kT | Bcl_PMF=8.81 kT (V0/kT 10.06) | rho_q0/rho_c0=28.61 rho_q0/qmax=0.005 | split=0.003 | f_V>E: gs 0.110 th 0.086 | 201 st 170 s
+V0=6.0 sigma=0.10 m=1.0: E0=3.381 W0=7.453 margin=6.83 kT | Bcl_PMF=8.81 kT (V0/kT 10.06) | rho_q0/rho_c0=303.80 rho_q0/qmax=0.071 | split=0.121 | f_V>E: gs 0.141 th 0.115 | 40 st 17 s
+V0=6.0 sigma=0.10 m=0.5: E0=4.336 W0=8.107 margin=6.33 kT | Bcl_PMF=8.81 kT (V0/kT 10.06) | rho_q0/rho_c0=733.92 rho_q0/qmax=0.211 | split=0.377 | f_V>E: gs 0.163 th 0.134 | 20 st 12 s
+V0=6.0 sigma=0.10 m=0.1: E0=7.894 W0=10.877 margin=5.00 kT | Bcl_PMF=8.81 kT (V0/kT 10.06) | rho_q0/rho_c0=2008.62 rho_q0/qmax=0.841 | split=2.006 | f_V>E: gs 0.134 th 0.132 | 5 st 16 s
+V0=6.0 sigma=0.15 m=4.0: E0=2.526 W0=6.727 margin=7.05 kT | Bcl_PMF=8.08 kT (V0/kT 10.06) | rho_q0/rho_c0=6.05 rho_q0/qmax=0.002 | split=0.001 | f_V>E: gs 0.112 th 0.086 | 209 st 184 s
+V0=6.0 sigma=0.15 m=1.0: E0=3.839 W0=7.518 margin=6.17 kT | Bcl_PMF=8.08 kT (V0/kT 10.06) | rho_q0/rho_c0=73.27 rho_q0/qmax=0.034 | split=0.053 | f_V>E: gs 0.133 th 0.114 | 40 st 19 s
+V0=6.0 sigma=0.15 m=0.5: E0=4.818 W0=8.173 margin=5.63 kT | Bcl_PMF=8.08 kT (V0/kT 10.06) | rho_q0/rho_c0=213.65 rho_q0/qmax=0.120 | split=0.221 | f_V>E: gs 0.159 th 0.130 | 20 st 13 s
+V0=6.0 sigma=0.15 m=0.1: E0=8.392 W0=10.942 margin=4.28 kT | Bcl_PMF=8.08 kT (V0/kT 10.06) | rho_q0/rho_c0=865.78 rho_q0/qmax=0.761 | split=1.662 | f_V>E: gs 0.131 th 0.128 | 5 st 16 s
+V0=6.0 sigma=0.20 m=4.0: E0=3.042 W0=6.750 margin=6.22 kT | Bcl_PMF=7.15 kT (V0/kT 10.06) | rho_q0/rho_c0=2.91 rho_q0/qmax=0.002 | split=0.000 | f_V>E: gs 0.115 th 0.087 | 240 st 177 s
+V0=6.0 sigma=0.20 m=1.0: E0=4.323 W0=7.542 margin=5.40 kT | Bcl_PMF=7.15 kT (V0/kT 10.06) | rho_q0/rho_c0=22.97 rho_q0/qmax=0.024 | split=0.029 | f_V>E: gs 0.129 th 0.113 | 40 st 20 s
+V0=6.0 sigma=0.20 m=0.5: E0=5.296 W0=8.196 margin=4.86 kT | Bcl_PMF=7.15 kT (V0/kT 10.06) | rho_q0/rho_c0=70.50 rho_q0/qmax=0.088 | split=0.150 | f_V>E: gs 0.151 th 0.126 | 20 st 13 s
+V0=6.0 sigma=0.20 m=0.1: E0=8.854 W0=10.965 margin=3.54 kT | Bcl_PMF=7.15 kT (V0/kT 10.06) | rho_q0/rho_c0=354.21 rho_q0/qmax=0.710 | split=1.431 | f_V>E: gs 0.129 th 0.125 | 5 st 16 s
+V0=15.0 sigma=0.80 m=4.0: E0=7.400 W0=15.775 margin=14.05 kT | Bcl_PMF=20.53 kT (V0/kT 25.16) | rho_q0/rho_c0=0.00 rho_q0/qmax=0.000 | split=-0.000 | f_V>E: gs 0.128 th 0.128 | 18 st 156 s
+V0=15.0 sigma=0.80 m=1.0: E0=12.541 W0=16.567 margin=6.75 kT | Bcl_PMF=20.53 kT (V0/kT 25.16) | rho_q0/rho_c0=68355.96 rho_q0/qmax=0.000 | split=0.000 | f_V>E: gs 0.189 th 0.170 | 47 st 41 s
+V0=15.0 sigma=0.80 m=0.5: E0=14.324 W0=17.222 margin=4.86 kT | Bcl_PMF=20.53 kT (V0/kT 25.16) | rho_q0/rho_c0=382815.47 rho_q0/qmax=0.007 | split=0.000 | f_V>E: gs 0.131 th 0.126 | 30 st 11 s
+V0=15.0 sigma=0.80 m=0.1: E0=18.067 W0=19.991 margin=3.23 kT | Bcl_PMF=20.53 kT (V0/kT 25.16) | rho_q0/rho_c0=4881972.33 rho_q0/qmax=0.099 | split=0.150 | f_V>E: gs 0.124 th 0.117 | 9 st 16 s

@@ -1,0 +1,27 @@
+      1 itrans
+      0 ielec
+      0 imetho
+      1 igeofo
+   80.00000 axis1
+   80.00000 axis2
+   80.00000 axis3
+      8 icharg
+      0 idebug
+   8000 nmdit
+     25 iout1
+      0 iout2
+      0 nmdeqi
+   0.25 tstep
+300.000 tset
+  100.0 tdamp1
+      1 nmethod
+      1 ixmolo
+      0 icpres
+      0 icheck
+      0 isurpr
+     25 irecon
+      0 inpt
+      0 iconne
+      3 imdmet
+  300.0 mdtemp
+      1 iravel

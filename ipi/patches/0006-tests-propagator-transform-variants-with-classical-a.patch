@@ -1,0 +1,146 @@
+From 1c1346652ffe55be952b92d6518bdf117cac44e2 Mon Sep 17 00:00:00 2001
+From: ereaxff-build <build@localhost>
+Date: Wed, 11 Nov 2026 03:01:17 -0500
+Subject: [PATCH 6/9] tests: propagator/transform variants with classical
+ atoms; quartic coupling PES and transfer-matrix reference
+
+exact, cayley and bab propagators with fft and matrix transforms conserve the extended energy and keep
+classical beads identical. coupled_harmonic gains an optional quartic term g. The exact finite-P reference
+(transfer matrix) reproduces the harmonic analytic result to 1e-4.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ ipi/pes/coupled_harmonic.py                   | 13 ++--
+ .../classical_atoms/test_classical_atoms.py   | 77 +++++++++++++++++++
+ 2 files changed, 85 insertions(+), 5 deletions(-)
+
+diff --git a/ipi/pes/coupled_harmonic.py b/ipi/pes/coupled_harmonic.py
+index 68d7755..d146e61 100644
+--- a/ipi/pes/coupled_harmonic.py
++++ b/ipi/pes/coupled_harmonic.py
+@@ -3,7 +3,7 @@
+ Test potential for simulations that mix a classical atom (atom 0) with a
+ ring-polymer atom (atom 1):
+ 
+-    V = 1/2 K |X|^2 + 1/2 k |x - X|^2
++    V = 1/2 K |X|^2 + sum_c [ 1/2 k d_c^2 + g d_c^4 ],   d = x - X
+ 
+ Because V depends on x only through x - X, the ring-polymer part factorises
+ from X, which gives exact references for a path-integral simulation at
+@@ -29,11 +29,13 @@ class Coupled_harmonic_driver(Dummy_driver):
+     Init parameters:
+         :param K: float, trap constant acting on atom 0 (a.u.)
+         :param k: float, spring constant between atoms 0 and 1 (a.u.)
++        :param g: float, optional quartic coupling per Cartesian component (a.u.), default 0
+     """
+ 
+-    def __init__(self, K, k, *args, **kwargs):
++    def __init__(self, K, k, g=0.0, *args, **kwargs):
+         self.K = float(K)
+         self.k = float(k)
++        self.g = float(g)
+         super().__init__(*args, **kwargs)
+ 
+     def compute_structure(self, cell, pos):
+@@ -41,9 +43,10 @@ class Coupled_harmonic_driver(Dummy_driver):
+         if p.shape[0] != 2:
+             raise ValueError("coupled_harmonic needs exactly two atoms")
+         d = p[1] - p[0]
+-        pot = 0.5 * self.K * np.dot(p[0], p[0]) + 0.5 * self.k * np.dot(d, d)
++        pot = 0.5 * self.K * np.dot(p[0], p[0]) + 0.5 * self.k * np.dot(d, d) + self.g * np.sum(d**4)
++        fd = self.k * d + 4.0 * self.g * d**3  # force on atom 1 is -fd, on atom 0 is +fd
+         force = np.zeros_like(p)
+-        force[0] = -self.K * p[0] + self.k * d
+-        force[1] = -self.k * d
++        force[0] = -self.K * p[0] + fd
++        force[1] = -fd
+         vir = cell * 0.0
+         return pot, force.reshape(pos.shape), vir, "nada"
+diff --git a/ipi_tests/classical_atoms/test_classical_atoms.py b/ipi_tests/classical_atoms/test_classical_atoms.py
+index 35d4ada..9e08d63 100644
+--- a/ipi_tests/classical_atoms/test_classical_atoms.py
++++ b/ipi_tests/classical_atoms/test_classical_atoms.py
+@@ -362,3 +362,80 @@ def test_mts_nvt_conservation(tmp_path, splitting):
+     span, drift = _conserved_drift(read_out(tmp_path / "sim.out"))
+     print("MTS [1,4] %s NVT conserved span / kT = %.3g, linear drift / kT = %.3g" % (splitting, span, drift))
+     assert span < 5e-2 and abs(drift) < 1e-2
++
++
++@pytest.mark.parametrize("transform", ["fft", "matrix"])
++@pytest.mark.parametrize("propagator", ["exact", "cayley", "bab"])
++def test_propagator_variants_nvt(tmp_path, propagator, transform):
++    """Free ring-polymer propagators (exact, Cayley, Cartesian 'bab') and both normal-mode transforms:
++    the extended energy stays conserved and the classical atom's beads stay identical."""
++    run_ipi(tmp_path, nbeads=8, steps=4000, dt=8.0, mode="nvt", thermo="pile_l", tau=200.0, stride=1,
++            sys_extra="<normal_modes propagator='%s' transform='%s'/>" % (propagator, transform))
++    span, drift = _conserved_drift(read_out(tmp_path / "sim.out"))
++    print("%s/%s NVT conserved span / kT = %.3g, drift / kT = %.3g" % (propagator, transform, span, drift))
++    assert span < 5e-2 and abs(drift) < 1e-2
++    f0 = read_xyz_frames(tmp_path / "sim.pos_0.xyz", 2)[:, 0]
++    f5 = read_xyz_frames(tmp_path / "sim.pos_5.xyz", 2)[:, 0]
++    assert np.max(np.abs(f0 - f5)) < 1e-9
++
++
++def exact_ring_moments(P, m, k, g, temp=TEMP, L=1.6, n=1400):
++    """Exact finite-P primitive path-integral moments of one Cartesian component of x - X in
++    V(d) = k d^2/2 + g d^4 (a.u., hbar = 1), by discretising the transfer matrix
++        K(x,x') = exp(-(m P / 2 beta)(x-x')^2 - (beta/2P)(V(x)+V(x'))).
++    Returns (bead-averaged <d^2>, centroid <d_c^2>). Exact up to the grid error (checked by the g = 0 case)."""
++    beta = 1.0 / (KB * temp)
++    x = np.linspace(-L, L, n)
++    h = x[1] - x[0]
++    V = 0.5 * k * x**2 + g * x**4
++    K = np.exp(-(m * P / (2 * beta)) * (x[:, None] - x[None, :]) ** 2 - (beta / (2 * P)) * (V[:, None] + V[None, :]))
++    K = K * h  # quadrature weight, so that matrix powers approximate the integral kernels
++    powers = [np.eye(n)]
++    for _ in range(P):
++        powers.append(powers[-1] @ K)
++    diag_P = np.diag(powers[P])
++    Z = diag_P.sum()
++    bead = (diag_P * x**2).sum() / Z
++    # <x_0 x_j> = Tr[x K^j x K^(P-j)] / Z ; centroid <x_c^2> = (1/P) sum_j <x_0 x_j>
++    corr = [np.einsum("i,ij,j,ji->", x, powers[j], x, powers[P - j]) / Z for j in range(P)]
++    return bead, float(np.mean(corr))
++
++
++def test_exact_ring_moments_reference_harmonic():
++    """The transfer-matrix reference reproduces the analytic harmonic finite-P results (g = 0)."""
++    bead, cen = exact_ring_moments(8, M, K_SPR, 0.0)
++    assert abs(bead - finite_p_bead_variance(8, M, K_SPR)) < 1e-4 * bead
++    assert abs(cen - KB * TEMP / K_SPR) < 1e-4 * cen
++
++
++G_QUARTIC = 0.1
++
++
++@pytest.fixture(scope="module")
++def quartic_runs(tmp_path_factory):
++    steps = int(os.environ.get("IPI_CA_STEPS", 25000))
++    runs = []
++    for seed in SEEDS[:3]:
++        wd = tmp_path_factory.mktemp("quartic%d" % seed)
++        run_ipi(wd, nbeads=8, steps=steps, seed=seed, dt=6.0, driver_opts="%g,%g,%g" % (K_TRAP, K_SPR, G_QUARTIC))
++        runs.append(wd)
++    return runs
++
++
++def test_anharmonic_quartic_coupling(quartic_runs):
++    """Quartic classical-quantum coupling against the exact transfer-matrix finite-P moments.
++    Also checks that the harmonic result would be clearly wrong (the quartic term matters)."""
++    P = 8
++    bead_ref, cen_ref = exact_ring_moments(P, M, K_SPR, G_QUARTIC)
++    harm_ref = finite_p_bead_variance(P, M, K_SPR)
++    print("exact quartic <d^2> bead %.5g centroid %.5g   (harmonic would be %.5g)" % (bead_ref, cen_ref, harm_ref))
++    assert abs(bead_ref - harm_ref) > 0.1 * harm_ref  # the test is sensitive to the anharmonicity
++    cases = {
++        "<X^2>/component": (lambda p: (p[0, :, 0, :] ** 2).mean(), KB * TEMP / K_TRAP),
++        "<(x_j-X)^2>/component": (lambda p: ((p[:, :, 1, :] - p[:, :, 0, :]) ** 2).mean(), bead_ref),
++        "<(x_c-X)^2>/component": (lambda p: ((p[:, :, 1, :].mean(axis=0) - p[0, :, 0, :]) ** 2).mean(), cen_ref),
++    }
++    for name, (fn, ref) in cases.items():
++        mval, e = _per_run_means(quartic_runs, fn, P)
++        print("%s = %.5g +- %.2g   exact %.5g   (%.1f sigma)" % (name, mval, e, ref, (mval - ref) / e))
++        assert abs(mval - ref) < max(3 * e, 0.03 * ref), name
+-- 
+2.50.1 (Apple Git-155)
+

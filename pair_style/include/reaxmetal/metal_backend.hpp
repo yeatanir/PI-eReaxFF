@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-FileCopyrightText: 2026 Anirban Phukan
+#pragma once
+// Metal backend, milestone M3 (Apple platforms). The implementation is Objective-C++ against the system Metal framework
+// (src/metal/metal_backend.mm); on every other platform a stub reports "not available". Plain C++ interface, no Apple types.
+//
+// STATUS (docs/ARCHITECTURE_DECISIONS.md ADR-016 taxonomy): written; NOT compiled and NOT executed anywhere yet. The kernels
+// are additionally exercised by CPU emulation (tests/test_metal_emulation.cpp), which is not evidence about Metal.
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "reaxmetal/neighbor.hpp"
+#include "reaxmetal/bonded_device.hpp"
+#include "reaxmetal/nonbonded_device.hpp"
+#include "reaxmetal/qeq_device.hpp"
+
+namespace reaxmetal::mtl {   // not `metal`: that name is Metal Shading Language's own namespace
+
+class MetalError : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
+// True only in a build that contains the Objective-C++ implementation (REAXMETAL_ENABLE_METAL=ON on an Apple platform).
+bool compiled_with_metal() noexcept;
+// The complete MSL source handed to the runtime compiler: reaxmetal_m3_types.h + "\n" + reaxmetal_m3.metal. Available everywhere.
+std::string shader_source();
+// Kernel entry points the runtime library must contain.
+std::vector<std::string> kernel_names();
+
+struct DeviceInfo {
+  std::string name;
+  std::string os_version;
+  bool unified_memory = false;
+  std::uint64_t recommended_max_working_set = 0;
+  std::uint64_t max_buffer_length = 0;
+  std::uint32_t max_threads_per_threadgroup = 0;
+  std::string families;          // e.g. "Apple7 Apple8 Apple9 Metal3"
+};
+
+struct KernelInfo {
+  std::string name;
+  std::uint32_t max_threads_per_threadgroup = 0;
+  std::uint32_t thread_execution_width = 0;
+  std::uint32_t static_threadgroup_memory = 0;
+};
+
+struct MathProbe {
+  bool nan_detected = false;     // false => the compiler assumed no NaNs (fast-math took effect)
+  float mul_add = 0.0f;          // 0 => product rounded before the add; 2^-26 => fused multiply-add
+};
+
+class Context {
+ public:
+  Context();                     // opens the default device, compiles shader_source() at run time; throws MetalError
+  ~Context();
+  Context(const Context&) = delete;
+  Context& operator=(const Context&) = delete;
+
+  DeviceInfo device_info() const;
+  const std::vector<KernelInfo>& kernels() const;
+  const std::string& compile_log() const;        // compiler messages (warnings) of the successful compilation
+  double compile_seconds() const;
+  double last_gpu_seconds() const;               // GPU start->end of the last command buffer
+
+  // MET-1
+  std::vector<float> saxpy(float a, std::span<const float> x, std::span<const float> y);
+  MathProbe math_probe();
+  // NBR-1: rows over owned+ghost atoms; grows the row capacity and retries when a row overflows
+  FarRowsF32 far_rows(const DeviceListInput& in, std::uint32_t initial_cap = 128, unsigned* launches = nullptr);
+  // M5 nonbonded (frozen charges): rm_nb_pairs + rm_nb_gather in one command buffer; `in` was built by make_nonbonded_device_input
+  NonbondedDeviceOutput nonbonded(const NonbondedDeviceInput& in);
+  // M6 bonded terms (all 10 bonded energy terms + gradient): rm_b_* kernels, grow-and-retry on bond / H-bond capacity
+  BondedDeviceOutput bonded(const BondedDeviceInput& in);
+  // fix qeq/reaxff/metal: qeq_setup uploads the rows and assembles H (rm_qeq_h); qeq_matvec then computes y = (diag(eta) + H) x for the nlocal
+  // owned atoms (doubles in and out, FP32 on the device, fixed summation order)
+  void qeq_setup(const QeqDeviceInput& in);
+  void qeq_matvec(const double* x, std::size_t nx, double* y);
+  // Resident preconditioned CG of both EEM systems on the device (after qeq_setup of an input WITH owner map). b, x0, x_out hold 2 * n entries (system s,
+  // then system t); hinv n entries (1 / eta). Iteration limit and convergence as the stock loop (iters = performed + 1). status: 1 converged, 2 breakdown, 3 limit.
+  struct CgOutcome { int iters[2]; double rel[2]; int status[2]; };
+  CgOutcome qeq_solve(const double* b, const double* x0, const double* hinv, std::size_t n, int maxiter, double tol, double* x_out);   // x: nx = nall entries (owned then ghost); y: nlocal entries
+  // FORCE-2
+  std::vector<float> partial_sums(std::span<const float> v, std::uint32_t chunk);
+  float sum(std::span<const float> v, std::uint32_t chunk);   // partial_sums + rm_sum_partials in one command buffer
+
+ struct Impl;   // opaque; public only so that the backend adapters in metal_backend.mm can name it
+
+ private:
+  std::unique_ptr<Impl> impl_;
+};
+
+}  // namespace reaxmetal::mtl

@@ -1,0 +1,5 @@
+nbrhood_cutoff 5.2
+hbond_cutoff 7.5
+thb_cutoff 0.000000001
+thb_cutoff_sq 0.000000000000000001
+bond_graph_cutoff 0.3

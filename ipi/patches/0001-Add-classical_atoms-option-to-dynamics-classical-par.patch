@@ -1,0 +1,514 @@
+From 1b8f05e61fc217ba131223768556e9a59a560fa2 Mon Sep 17 00:00:00 2001
+From: ereaxff-build <build@localhost>
+Date: Wed, 11 Nov 2026 02:02:00 -0500
+Subject: [PATCH 1/9] Add classical_atoms option to <dynamics>: classical
+ particles inside path-integral runs
+
+A classical atom keeps the internal normal modes of its ring polymer at zero
+(q_k = p_k = 0, k >= 1). In i-PI's convention this gives the physical mass,
+the bead-averaged force and temperature T. Thermostat noise that is removed
+is booked in ensemble.eens; momentum removed after a force kick is not.
+
+Also: temperature property corrected for projected modes; kinetic_td refuses
+classical atoms; coupled_harmonic test PES; statistical and conservation tests.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ ipi/engine/motion/dynamics.py                 |  98 +++++++++
+ ipi/engine/properties.py                      |  16 ++
+ ipi/inputs/motion/dynamics.py                 |  12 ++
+ ipi/pes/coupled_harmonic.py                   |  49 +++++
+ .../classical_atoms/test_classical_atoms.py   | 199 ++++++++++++++++++
+ 5 files changed, 374 insertions(+)
+ create mode 100644 ipi/pes/coupled_harmonic.py
+ create mode 100644 ipi_tests/classical_atoms/test_classical_atoms.py
+
+diff --git a/ipi/engine/motion/dynamics.py b/ipi/engine/motion/dynamics.py
+index 0d81fb2..2f401d4 100644
+--- a/ipi/engine/motion/dynamics.py
++++ b/ipi/engine/motion/dynamics.py
+@@ -56,6 +56,7 @@ class Dynamics(Motion):
+         nmts=None,
+         efield=None,
+         bec=None,
++        classical_atoms=None,
+     ):
+         """Initialises a "dynamics" motion object.
+ 
+@@ -63,10 +64,23 @@ class Dynamics(Motion):
+             dt: The timestep of the simulation algorithms.
+             fixcom: An optional boolean which decides whether the centre of mass
+                 motion will be constrained or not. Defaults to False.
++            classical_atoms: Optional list of atom indices that are treated as
++                classical particles inside a path-integral simulation: all the
++                internal normal modes of their ring polymer are held at zero, so
++                that every bead of the atom sits at the same position. These atoms
++                feel the bead-averaged force, have the physical mass and are
++                thermostatted at the physical temperature. See
++                `DummyIntegrator.project_classical` for the algorithm.
+         """
+ 
+         super(Dynamics, self).__init__(fixcom=fixcom, fixatoms_dof=fixatoms_dof)
+ 
++        if classical_atoms is None:
++            classical_atoms = []
++        self.classical_atoms = np.unique(np.asarray(classical_atoms, dtype=int))
++        # degrees of freedom (3 per atom); filled in bind()
++        self.classical_dof = np.zeros(0, int)
++
+         # initialize time step. this is the main time step that covers a full time step
+         self._dt = depend_value(name="dt", value=timestep)
+ 
+@@ -188,6 +202,8 @@ class Dynamics(Motion):
+             nmts=len(self.nmts),
+         )
+ 
++        self._setup_classical_atoms()
++
+         self.integrator.bind(self)
+ 
+         self.ensemble.add_econs(self.thermostat._ethermo)
+@@ -199,6 +215,7 @@ class Dynamics(Motion):
+         self.ensemble.add_xlkin(self.barostat._kin)
+ 
+         # applies constraints immediately after initialization.
++        self.integrator.project_classical(book_energy=False)
+         self.integrator.pconstraints()
+ 
+         # TODO THOROUGH CLEAN-UP AND CHECK
+@@ -232,6 +249,52 @@ class Dynamics(Motion):
+                     "You need to provide a positive value for temperature inside ensemble to run a PIMD simulation, even when choosing NVE propagation."
+                 )
+ 
++    # thermostats that remain correct when internal modes of some atoms are projected out
++    _classical_atoms_thermostats = (
++        "Thermostat",
++        "ThermoLangevin",
++        "ThermoPILE_L",
++        "ThermoPILE_G",
++        "ThermoSVR",
++    )
++
++    def _setup_classical_atoms(self):
++        """Validates the `classical_atoms` option and builds `classical_dof`."""
++
++        self.classical_dof = np.zeros(0, int)
++        if len(self.classical_atoms) == 0:
++            return
++        natoms = self.beads.natoms
++        if self.classical_atoms[0] < 0 or self.classical_atoms[-1] >= natoms:
++            raise ValueError("classical_atoms contains indices out of bounds.")
++        if self.enstype not in ("nve", "nvt"):
++            raise ValueError(
++                "classical_atoms is only supported for the 'nve' and 'nvt' ensembles, not '%s'."
++                % self.enstype
++            )
++        name = self.thermostat.__class__.__name__
++        if name not in self._classical_atoms_thermostats:
++            raise ValueError(
++                "classical_atoms is not supported with the %s thermostat." % name
++            )
++        if self.nm.mode != "rpmd":
++            raise ValueError("classical_atoms requires normal modes with mode='rpmd'.")
++        if len(self.nm.bosons) > 0 or len(self.nm.open_paths) > 0:
++            raise ValueError("classical_atoms cannot be combined with bosons or open paths.")
++        fixed = np.unique(self.fixatoms_dof // 3)
++        if len(np.intersect1d(fixed, self.classical_atoms)) > 0:
++            raise ValueError("An atom cannot be both fixed and classical.")
++        if any(
++            getattr(f, "nbeads", self.beads.nbeads) != self.beads.nbeads
++            for f in self.forces.mforces
++        ):
++            raise ValueError(
++                "classical_atoms is not supported together with ring-polymer contraction."
++            )
++        self.classical_dof = np.sort(
++            (self.classical_atoms[:, np.newaxis] * 3 + np.array([0, 1, 2])).flatten()
++        )
++
+     def get_ntemp(self):
+         """Returns the PI simulation temperature (P times the physical T)."""
+ 
+@@ -286,6 +349,7 @@ class DummyIntegrator:
+         self.barostat = motion.barostat
+         self.fixcom = motion.fixcom
+         self.fixatoms_dof = motion.fixatoms_dof
++        self.classical_dof = getattr(motion, "classical_dof", np.zeros(0, int))
+         self.enstype = motion.enstype
+ 
+         # no need to dpipe these are really just references
+@@ -400,6 +464,38 @@ class DummyIntegrator:
+             )
+             self.nm.pnm[:, self.fixatoms_dof] = 0.0
+ 
++        # classical atoms: the momenta of the internal ring-polymer modes are removed.
++        # No energy is booked here: the momentum that is removed has just been added
++        # by a force kick that the constrained dynamics never applies. The thermostat
++        # noise that has to be removed is booked in `project_classical`.
++        if len(self.classical_dof) > 0:
++            self.nm.pnm[1:, self.classical_dof] = 0.0
++
++    def project_classical(self, book_energy=False):
++        """Holds the internal normal modes of the classical atoms at zero.
++
++        A classical atom is a ring polymer whose internal modes are removed:
++        q_k = p_k = 0 for k >= 1. In the i-PI convention (T_P = P*T, unscaled
++        bead potential) this is exactly a classical particle with the physical mass,
++        at temperature T, moving under the bead-averaged force, because the centroid
++        mode obeys  dP/dt = (1/P) sum_j f_j  once p~_0 = sqrt(P) P_phys is used.
++
++        Args:
++            book_energy: if True, the kinetic energy of the removed momenta is
++                added to ensemble.eens, which keeps the conserved quantity
++                correct when the removed energy came from a thermostat.
++        """
++
++        if len(self.classical_dof) == 0:
++            return
++        cd = self.classical_dof
++        self.nm.qnm[1:, cd] = 0.0
++        if book_energy:
++            pnm = dstrip(self.nm.pnm)
++            dynm3 = dstrip(self.nm.dynm3)
++            self.ensemble.eens += 0.5 * np.sum(pnm[1:, cd] ** 2 / dynm3[1:, cd])
++        self.nm.pnm[1:, cd] = 0.0
++
+ 
+ dproperties(
+     DummyIntegrator,
+@@ -538,6 +634,8 @@ class NVTIntegrator(NVEIntegrator):
+         """Velocity Verlet thermostat step"""
+ 
+         self.thermostat.step()
++        # removes the noise that the thermostat has added to the classical atoms' internal modes
++        self.project_classical(book_energy=True)
+ 
+     def step(self, step=None):
+         """Does one simulation time step."""
+diff --git a/ipi/engine/properties.py b/ipi/engine/properties.py
+index 9b857b0..2745d1f 100644
+--- a/ipi/engine/properties.py
++++ b/ipi/engine/properties.py
+@@ -1156,6 +1156,16 @@ class Properties:
+                     # non-centroid mode, no need to add KE for fixcom and constrained centroid
+                     eff_number_fixed_dof = 0
+ 
++            classical = getattr(self.motion, "classical_atoms", np.zeros(0, int))
++            if len(classical) > 0:
++                # the (P-1) internal modes of a classical atom carry no kinetic energy:
++                # each of them would contribute 3/2 k_B T_P to the sum (3/2 k_B T after bead averaging)
++                n_cl = len(np.intersect1d(atom_ids, classical))
++                if nm == "":
++                    eff_number_fixed_dof += 3 * (self.beads.nbeads - 1) * n_cl
++                elif int(nm) > 0:
++                    eff_number_fixed_dof += 3 * n_cl
++
+             if len(self.motion.fixatoms_dof) > 0:
+                 # Note that fixatom should NOT be compatitable with fixcom!
+                 flags = np.zeros(self.beads.natoms * 3)
+@@ -1426,6 +1436,12 @@ class Properties:
+             iatom = -1
+             latom = atom
+ 
++        if len(getattr(self.motion, "classical_atoms", [])) > 0:
++            raise ValueError(
++                "The primitive kinetic energy estimator is not defined when classical_atoms are used; "
++                "use kinetic_cv."
++            )
++
+         bosons_included = self._atom_property_distinguishability_well_defined(
+             iatom, latom
+         )
+diff --git a/ipi/inputs/motion/dynamics.py b/ipi/inputs/motion/dynamics.py
+index 1507adc..d5b59ed 100644
+--- a/ipi/inputs/motion/dynamics.py
++++ b/ipi/inputs/motion/dynamics.py
+@@ -108,6 +108,17 @@ class InputDynamics(InputDictionary):
+                 "help": "Number of iterations for each MTS level (including the outer loop, that should in most cases have just one iteration).",
+             },
+         ),
++        "classical_atoms": (
++            InputArray,
++            {
++                "dtype": int,
++                "default": np.zeros(0, int),
++                "help": """Indices of the atoms that are treated as classical particles in a path-integral
++                simulation. Their ring polymers keep all the beads at the same position (internal normal modes are
++                held at zero), so they have the physical mass, feel the bead-averaged force and are thermostatted
++                at the physical temperature. Only for nve/nvt with the PILE, Langevin or SVR thermostats.""",
++            },
++        ),
+     }
+ 
+     dynamic = {}
+@@ -131,6 +142,7 @@ class InputDynamics(InputDictionary):
+         self.barostat.store(dyn.barostat)
+         self.nmts.store(dyn.nmts)
+         self.splitting.store(dyn.splitting)
++        self.classical_atoms.store(dyn.classical_atoms)
+ 
+     def fetch(self):
+         """Creates an ensemble object.
+diff --git a/ipi/pes/coupled_harmonic.py b/ipi/pes/coupled_harmonic.py
+new file mode 100644
+index 0000000..68d7755
+--- /dev/null
++++ b/ipi/pes/coupled_harmonic.py
+@@ -0,0 +1,49 @@
++"""Harmonic trap on atom 0, harmonic spring between atom 0 and atom 1.
++
++Test potential for simulations that mix a classical atom (atom 0) with a
++ring-polymer atom (atom 1):
++
++    V = 1/2 K |X|^2 + 1/2 k |x - X|^2
++
++Because V depends on x only through x - X, the ring-polymer part factorises
++from X, which gives exact references for a path-integral simulation at
++temperature T with P beads (a.u., hbar = 1, omega_P = P k_B T):
++
++    <X^2>              = k_B T / K                       per Cartesian component
++    <(x_j - X)^2>      = k_B T sum_{l=0}^{P-1} 1/(m w_l^2 + k)   (bead average)
++    <(x_c - X)^2>      = k_B T / k                       (centroid of the ring)
++"""
++
++from .dummy import Dummy_driver
++import numpy as np
++
++__DRIVER_NAME__ = "coupled_harmonic"
++__DRIVER_CLASS__ = "Coupled_harmonic_driver"
++
++
++class Coupled_harmonic_driver(Dummy_driver):
++    """
++    Command-line:
++        i-pi-py_driver -m coupled_harmonic -u -o 0.01,0.02
++
++    Init parameters:
++        :param K: float, trap constant acting on atom 0 (a.u.)
++        :param k: float, spring constant between atoms 0 and 1 (a.u.)
++    """
++
++    def __init__(self, K, k, *args, **kwargs):
++        self.K = float(K)
++        self.k = float(k)
++        super().__init__(*args, **kwargs)
++
++    def compute_structure(self, cell, pos):
++        p = pos.reshape(-1, 3)
++        if p.shape[0] != 2:
++            raise ValueError("coupled_harmonic needs exactly two atoms")
++        d = p[1] - p[0]
++        pot = 0.5 * self.K * np.dot(p[0], p[0]) + 0.5 * self.k * np.dot(d, d)
++        force = np.zeros_like(p)
++        force[0] = -self.K * p[0] + self.k * d
++        force[1] = -self.k * d
++        vir = cell * 0.0
++        return pot, force.reshape(pos.shape), vir, "nada"
+diff --git a/ipi_tests/classical_atoms/test_classical_atoms.py b/ipi_tests/classical_atoms/test_classical_atoms.py
+new file mode 100644
+index 0000000..ab66e86
+--- /dev/null
++++ b/ipi_tests/classical_atoms/test_classical_atoms.py
+@@ -0,0 +1,199 @@
++"""Statistical tests for the `classical_atoms` option of <dynamics>.
++
++Runs i-PI (server) and the Python driver (client) as subprocesses on the
++coupled harmonic potential of ipi/pes/coupled_harmonic.py. Atom 0 is classical,
++atom 1 is a P-bead ring polymer. Atomic units, hbar = 1.
++
++Run with:  python -m pytest ipi_tests/classical_atoms -x -q -s
++"""
++
++import os
++import shutil
++import subprocess
++import sys
++import tempfile
++import time
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++KB = 3.166811563e-6  # Hartree / K
++M = 1837.36223469  # 1 amu in a.u.
++TEMP = 300.0
++K_TRAP = 0.0100  # trap on the classical atom
++K_SPR = 0.0200  # spring classical-quantum
++
++TEMPLATE = """<simulation verbosity='low'>
++  <output prefix='sim'>
++    <properties stride='{stride}' filename='out'> [ step, conserved, temperature{{kelvin}}, potential, kinetic_cv ] </properties>
++    <trajectory filename='pos' stride='{stride}'> positions </trajectory>
++    <trajectory filename='cen' stride='{stride}'> x_centroid </trajectory>
++    <trajectory filename='vel' stride='{stride}' bead='0'> velocities </trajectory>
++  </output>
++  <total_steps>{steps}</total_steps>
++  <prng><seed>{seed}</seed></prng>
++  <ffsocket name='drv' mode='unix' pbc='false'>
++    <address>{address}</address>
++  </ffsocket>
++  <system>
++    <initialize nbeads='{nbeads}'>
++      <cell mode='abc'> [200, 200, 200] </cell>
++      <file mode='xyz' units='atomic_unit'> init.xyz </file>
++      <velocities mode='thermal' units='kelvin'> {temp} </velocities>
++    </initialize>
++    <forces><force forcefield='drv'/></forces>
++    <motion mode='dynamics'>
++      <fixcom> False </fixcom>
++      <dynamics mode='{mode}'>
++        <timestep units='atomic_unit'> {dt} </timestep>
++        <thermostat mode='{thermo}'>
++          <tau units='atomic_unit'> {tau} </tau>
++          {extra_thermo}
++        </thermostat>
++        {classical}
++      </dynamics>
++    </motion>
++    <ensemble><temperature units='kelvin'> {temp} </temperature></ensemble>
++  </system>
++</simulation>
++"""
++
++
++def run_ipi(workdir, nbeads=8, steps=20000, dt=8.0, tau=400.0, thermo="pile_l",
++            classical="[0]", mode="nvt", stride=10, seed=12345, extra_thermo="",
++            timeout=1800):
++    workdir = Path(workdir)
++    workdir.mkdir(parents=True, exist_ok=True)
++    (workdir / "init.xyz").write_text(
++        "2\n# CELL(abcABC): 200 200 200 90 90 90 positions{atomic_unit} cell{atomic_unit}\n"
++        "C 0.5 0.0 0.0\nH 1.0 0.5 0.0\n"
++    )
++    address = "cl%d" % (os.getpid() % 100000)
++    cl = "<classical_atoms> %s </classical_atoms>" % classical if classical else ""
++    (workdir / "input.xml").write_text(
++        TEMPLATE.format(stride=stride, steps=steps, seed=seed, address=address, nbeads=nbeads,
++                        temp=TEMP, mode=mode, dt=dt, thermo=thermo, tau=tau, classical=cl,
++                        extra_thermo=extra_thermo)
++    )
++    env = dict(os.environ, PYTHONPATH=str(ROOT), PYTHONUNBUFFERED="1")
++    srv = subprocess.Popen([sys.executable, str(ROOT / "bin" / "i-pi"), "input.xml"], cwd=workdir,
++                           env=env, stdout=open(workdir / "ipi.log", "w"), stderr=subprocess.STDOUT)
++    time.sleep(3)
++    drv = subprocess.Popen(
++        [sys.executable, str(ROOT / "bin" / "i-pi-py_driver"), "-m", "coupled_harmonic", "-u",
++         "-a", address, "-o", "%g,%g" % (K_TRAP, K_SPR)],
++        cwd=workdir, env=env, stdout=open(workdir / "drv.log", "w"), stderr=subprocess.STDOUT)
++    try:
++        srv.wait(timeout=timeout)
++    finally:
++        drv.terminate()
++        if srv.poll() is None:
++            srv.kill()
++    log = (workdir / "ipi.log").read_text()
++    assert srv.returncode == 0, "i-PI failed:\n" + log[-3000:]
++    return workdir
++
++
++def read_xyz_frames(path, natoms):
++    lines = Path(path).read_text().splitlines()
++    n = natoms + 2
++    out = []
++    for i in range(0, len(lines) - n + 1, n):
++        out.append([[float(v) for v in lines[i + 2 + a].split()[1:4]] for a in range(natoms)])
++    return np.array(out)  # (frames, natoms, 3)
++
++
++def read_out(path):
++    cols, data = None, []
++    for line in Path(path).read_text().splitlines():
++        if line.startswith("#"):
++            if "column" in line:
++                cols = line
++            continue
++        data.append([float(v) for v in line.split()])
++    return np.array(data)
++
++
++def block_error(x, nblocks=20):
++    x = np.asarray(x, float)
++    n = len(x) // nblocks
++    b = x[: n * nblocks].reshape(nblocks, n).mean(axis=1)
++    return b.mean(), b.std(ddof=1) / np.sqrt(nblocks)
++
++
++def finite_p_bead_variance(P, m, k, temp=TEMP):
++    kT = KB * temp
++    wp = P * kT  # hbar = 1
++    w = 2 * wp * np.sin(np.pi * np.arange(P) / P)
++    return kT * np.sum(1.0 / (m * w**2 + k))
++
++
++@pytest.fixture(scope="module")
++def mixed_run(tmp_path_factory):
++    wd = tmp_path_factory.mktemp("mixed")
++    run_ipi(wd, nbeads=8, steps=int(os.environ.get("IPI_CA_STEPS", 60000)))
++    return wd
++
++
++def test_L_P3_coupled_harmonic(mixed_run):
++    P = 8
++    pos = np.array([read_xyz_frames(mixed_run / ("sim.pos_%d.xyz" % b), 2) for b in range(P)])
++    pos = pos[:, len(pos[0]) // 5:]  # drop first 20 %
++    # classical atom: all beads must coincide
++    assert np.max(np.abs(pos[:, :, 0, :] - pos[0:1, :, 0, :])) < 1e-9
++    X = pos[:, :, 0, :]  # (P, frames, 3)
++    x = pos[:, :, 1, :]
++    kT = KB * TEMP
++    X2 = (X[0] ** 2).sum(axis=1)  # per frame, 3 components
++    m, e = block_error(X2 / 3)
++    print("<X^2>/component = %.5g +- %.2g   exact %.5g" % (m, e, kT / K_TRAP))
++    assert abs(m - kT / K_TRAP) < max(3 * e, 0.03 * kT / K_TRAP)
++    d2 = ((x - X) ** 2).sum(axis=2).mean(axis=0)  # bead-averaged, per frame, 3 components
++    m, e = block_error(d2 / 3)
++    ref = finite_p_bead_variance(P, M, K_SPR)
++    print("<(x_j-X)^2>/component = %.5g +- %.2g   exact %.5g" % (m, e, ref))
++    assert abs(m - ref) < max(3 * e, 0.03 * ref)
++    xc = x.mean(axis=0)
++    c2 = ((xc - X[0]) ** 2).sum(axis=1)
++    m, e = block_error(c2 / 3)
++    print("<(x_c-X)^2>/component = %.5g +- %.2g   exact %.5g" % (m, e, kT / K_SPR))
++    assert abs(m - kT / K_SPR) < max(3 * e, 0.03 * kT / K_SPR)
++
++
++def test_L_P5_temperatures_and_conservation(mixed_run):
++    out = read_out(mixed_run / "sim.out")
++    # columns: step, conserved, temperature, potential, kinetic_cv
++    T = out[len(out) // 5:, 2]
++    m, e = block_error(T)
++    print("temperature = %.4g +- %.2g (target %.1f)" % (m, e, TEMP))
++    assert abs(m - TEMP) < max(3 * e, 0.03 * TEMP)
++
++
++def _conserved_drift(out):
++    c = out[:, 1]
++    kT = KB * TEMP
++    return (c.max() - c.min()) / kT, np.polyfit(np.arange(len(c)), c, 1)[0] * len(c) / kT
++
++
++def test_L_P4_nve_conservation(tmp_path):
++    """Constrained NVE dynamics must conserve the extended Hamiltonian."""
++    run_ipi(tmp_path, nbeads=8, steps=8000, dt=4.0, mode="nve", thermo="pile_l", stride=1)
++    out = read_out(tmp_path / "sim.out")
++    span, drift = _conserved_drift(out)
++    print("NVE conserved span / kT = %.3g, linear drift / kT = %.3g" % (span, drift))
++    assert span < 5e-2 and abs(drift) < 1e-2
++
++
++@pytest.mark.parametrize("thermo", ["pile_l", "pile_g"])
++def test_L_P4_nvt_conservation(tmp_path, thermo):
++    """With a thermostat the conserved quantity includes the heat ledger and the
++    energy removed from the classical atom's internal modes (booked in eens)."""
++    extra = "<pile_lambda> 0.5 </pile_lambda>" if thermo == "pile_g" else ""
++    run_ipi(tmp_path, nbeads=8, steps=8000, dt=4.0, mode="nvt", thermo=thermo, stride=1,
++            tau=200.0, extra_thermo=extra)
++    out = read_out(tmp_path / "sim.out")
++    span, drift = _conserved_drift(out)
++    print("NVT(%s) conserved span / kT = %.3g, linear drift / kT = %.3g" % (thermo, span, drift))
++    assert span < 5e-2 and abs(drift) < 1e-2
+-- 
+2.50.1 (Apple Git-155)
+

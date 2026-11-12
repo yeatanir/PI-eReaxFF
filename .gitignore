@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.o
+*.so
+*.dylib
+build*/
+scratch/
+.DS_Store

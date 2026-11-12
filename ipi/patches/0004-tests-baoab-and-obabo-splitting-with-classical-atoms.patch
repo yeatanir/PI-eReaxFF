@@ -1,0 +1,186 @@
+From 36898d29b2e3ca0903987d10f833791b19631b56 Mon Sep 17 00:00:00 2001
+From: ereaxff-build <build@localhost>
+Date: Wed, 11 Nov 2026 02:54:15 -0500
+Subject: [PATCH 4/9] tests: baoab and obabo splitting with classical atoms;
+ multi-driver harness; MTS conservation test
+
+BAOAB: NVT conservation (PILE-L/PILE-G) and coupled-harmonic statistics within 0.4 sigma.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../classical_atoms/test_classical_atoms.py   | 83 ++++++++++++++-----
+ 1 file changed, 63 insertions(+), 20 deletions(-)
+
+diff --git a/ipi_tests/classical_atoms/test_classical_atoms.py b/ipi_tests/classical_atoms/test_classical_atoms.py
+index 7546666..ff8025e 100644
+--- a/ipi_tests/classical_atoms/test_classical_atoms.py
++++ b/ipi_tests/classical_atoms/test_classical_atoms.py
+@@ -35,9 +35,7 @@ TEMPLATE = """<simulation verbosity='low'>
+   </output>
+   <total_steps>{steps}</total_steps>
+   <prng><seed>{seed}</seed></prng>
+-  <ffsocket name='drv' mode='unix' pbc='false'>
+-    <address>{address}</address>
+-  </ffsocket>
++  {ffs}
+   <system>
+     <initialize nbeads='{nbeads}'>
+       <cell mode='abc'> [200, 200, 200] </cell>
+@@ -65,8 +63,9 @@ TEMPLATE = """<simulation verbosity='low'>
+ 
+ 
+ def launch(workdir, root, driver_root, input_name="input.xml", address=None, driver="coupled_harmonic",
+-           driver_opts=None, timeout=1800):
+-    """Starts i-PI on `input_name` plus a Python driver client, waits for i-PI to exit."""
++           driver_opts=None, timeout=1800, extra_drivers=()):
++    """Starts i-PI on `input_name` plus Python driver clients, waits for i-PI to exit.
++    `extra_drivers` is a list of (address, driver_name, options) for additional force components."""
+     workdir = Path(workdir)
+     if address is None:  # a restart file remembers the socket address of the run that wrote it
+         import re
+@@ -79,15 +78,17 @@ def launch(workdir, root, driver_root, input_name="input.xml", address=None, dri
+     srv = subprocess.Popen([sys.executable, str(root / "bin" / "i-pi"), input_name], cwd=workdir,
+                            env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
+     time.sleep(3)
+-    drv = subprocess.Popen(
+-        [sys.executable, str(driver_root / "bin" / "i-pi-py_driver"), "-m", driver, "-u",
+-         "-a", address, "-o", driver_opts],
+-        cwd=workdir, env=dict(env, PYTHONPATH=str(driver_root)), stdout=open(workdir / "drv.log", "w"),
+-        stderr=subprocess.STDOUT)
++    drivers = []
++    for k, (addr, name, opts) in enumerate([(address, driver, driver_opts)] + list(extra_drivers)):
++        drivers.append(subprocess.Popen(
++            [sys.executable, str(driver_root / "bin" / "i-pi-py_driver"), "-m", name, "-u", "-a", addr, "-o", opts],
++            cwd=workdir, env=dict(env, PYTHONPATH=str(driver_root)), stdout=open(workdir / ("drv%d.log" % k), "w"),
++            stderr=subprocess.STDOUT))
+     try:
+         srv.wait(timeout=timeout)
+     finally:
+-        drv.terminate()
++        for drv in drivers:
++            drv.terminate()
+         if srv.poll() is None:
+             srv.kill()
+     assert srv.returncode == 0, "i-PI failed:\n" + log.read_text()[-3000:]
+@@ -97,7 +98,7 @@ def launch(workdir, root, driver_root, input_name="input.xml", address=None, dri
+ def run_ipi(workdir, root=None, driver_root=None, nbeads=8, steps=20000, dt=8.0, tau=400.0, thermo="pile_l",
+             classical="[0]", velocities=None, mode="nvt", stride=10, seed=12345, extra_thermo="",
+             splitting="obabo", dyn_extra="", out_extra="", sys_extra="", forces=None, nm_extra="",
+-            driver="coupled_harmonic", driver_opts=None, init_xyz=None, timeout=1800):
++            driver="coupled_harmonic", driver_opts=None, init_xyz=None, timeout=1800, ffs=None, extra_drivers=()):
+     root = Path(root) if root else ROOT
+     driver_root = Path(driver_root) if driver_root else root
+     workdir = Path(workdir)
+@@ -115,16 +116,17 @@ def run_ipi(workdir, root=None, driver_root=None, nbeads=8, steps=20000, dt=8.0,
+             "C %.12g %.12g %.12g\nH %.12g %.12g %.12g\n" % tuple(velocities))
+         vel = "<velocities mode='xyz' units='atomic_unit'> vel.xyz </velocities>"
+     forces = forces or "<forces><force forcefield='drv'/></forces>"
++    ffs = ffs or "<ffsocket name='drv' mode='unix' pbc='false'><address>%s</address></ffsocket>" % address
+     (workdir / "input.xml").write_text(
+         TEMPLATE.format(stride=stride, steps=steps, seed=seed, address=address, nbeads=nbeads,
+                         temp=TEMP, mode=mode, dt=dt, thermo=thermo, tau=tau, classical=cl,
+                         extra_thermo=extra_thermo, velocities=vel, splitting=splitting,
+-                        dyn_extra=dyn_extra, out_extra=out_extra, sys_extra=sys_extra, forces=forces)
++                        dyn_extra=dyn_extra, out_extra=out_extra, sys_extra=sys_extra, forces=forces, ffs=ffs)
+         .replace("<ffsocket name='drv' mode='unix' pbc='false'>", "<ffsocket name='drv' mode='unix' pbc='false'>"))
+     if nm_extra:
+         s = (workdir / "input.xml").read_text()
+         (workdir / "input.xml").write_text(s.replace("    <ensemble>", "    %s\n    <ensemble>" % nm_extra, 1))
+-    launch(workdir, root, driver_root, "input.xml", address, driver, driver_opts, timeout)
++    launch(workdir, root, driver_root, "input.xml", address, driver, driver_opts, timeout, extra_drivers)
+     return workdir
+ 
+ 
+@@ -187,9 +189,8 @@ def _per_run_means(runs, fn, P=8):
+     return vals.mean(), vals.std(ddof=1) / np.sqrt(len(vals))
+ 
+ 
+-def test_L_P3_coupled_harmonic(mixed_runs):
++def _check_coupled_harmonic(runs, P=8):
+     """Averages over independent seeds; the error is the standard error over seeds."""
+-    P = 8
+     kT = KB * TEMP
+     cases = {
+         "<X^2>/component": (lambda p: (p[0, :, 0, :] ** 2).mean(), kT / K_TRAP),
+@@ -199,11 +200,31 @@ def test_L_P3_coupled_harmonic(mixed_runs):
+             lambda p: ((p[:, :, 1, :].mean(axis=0) - p[0, :, 0, :]) ** 2).mean(), kT / K_SPR),
+     }
+     for name, (fn, ref) in cases.items():
+-        m, e = _per_run_means(mixed_runs, fn, P)
++        m, e = _per_run_means(runs, fn, P)
+         print("%s = %.5g +- %.2g   exact %.5g   (%.1f sigma)" % (name, m, e, ref, (m - ref) / e))
+         assert abs(m - ref) < max(3 * e, 0.03 * ref), name
+ 
+ 
++def test_L_P3_coupled_harmonic(mixed_runs):
++    _check_coupled_harmonic(mixed_runs)
++
++
++@pytest.fixture(scope="module")
++def mixed_runs_baoab(tmp_path_factory):
++    steps = int(os.environ.get("IPI_CA_STEPS", 25000))
++    runs = []
++    for seed in SEEDS[:3]:
++        wd = tmp_path_factory.mktemp("baoab%d" % seed)
++        run_ipi(wd, nbeads=8, steps=steps, seed=seed, dt=8.0, splitting="baoab")
++        runs.append(wd)
++    return runs
++
++
++def test_baoab_coupled_harmonic(mixed_runs_baoab):
++    """Same analytic checks with the BAOAB splitting (thermostat once per step, in the middle)."""
++    _check_coupled_harmonic(mixed_runs_baoab)
++
++
+ def test_L_P5_temperatures_and_conservation(mixed_runs):
+     Ts = [read_out(wd / "sim.out")[:, 2] for wd in mixed_runs]
+     T = np.concatenate([x[len(x) // 5:] for x in Ts])
+@@ -227,16 +248,17 @@ def test_L_P4_nve_conservation(tmp_path):
+     assert span < 5e-2 and abs(drift) < 1e-2
+ 
+ 
++@pytest.mark.parametrize("splitting", ["obabo", "baoab"])
+ @pytest.mark.parametrize("thermo", ["pile_l", "pile_g"])
+-def test_L_P4_nvt_conservation(tmp_path, thermo):
++def test_L_P4_nvt_conservation(tmp_path, thermo, splitting):
+     """With a thermostat the conserved quantity includes the heat ledger and the
+     energy removed from the classical atom's internal modes (booked in eens)."""
+     extra = "<pile_lambda> 0.5 </pile_lambda>" if thermo == "pile_g" else ""
+     run_ipi(tmp_path, nbeads=8, steps=8000, dt=4.0, mode="nvt", thermo=thermo, stride=1,
+-            tau=200.0, extra_thermo=extra)
++            tau=200.0, extra_thermo=extra, splitting=splitting)
+     out = read_out(tmp_path / "sim.out")
+     span, drift = _conserved_drift(out)
+-    print("NVT(%s) conserved span / kT = %.3g, linear drift / kT = %.3g" % (thermo, span, drift))
++    print("NVT(%s,%s) conserved span / kT = %.3g, linear drift / kT = %.3g" % (thermo, splitting, span, drift))
+     assert span < 5e-2 and abs(drift) < 1e-2
+ 
+ 
+@@ -310,3 +332,24 @@ def test_restart_roundtrip(tmp_path):
+     f0 = read_xyz_frames(half / "sim.pos_0.xyz", 2)[:, 0]
+     f3 = read_xyz_frames(half / "sim.pos_3.xyz", 2)[:, 0]
+     assert np.max(np.abs(f0 - f3)) < 1e-9
++
++
++def _mts_run(tmp_path, nmts, splitting="obabo", mode="nve", steps=4000, dt=8.0, **kw):
++    """Two force components: the trap on the classical atom (slow) and the classical-quantum spring (fast)."""
++    a1, a2 = "mts1_%d" % os.getpid(), "mts2_%d" % os.getpid()
++    ffs = ("<ffsocket name='slow' mode='unix' pbc='false'><address>%s</address></ffsocket>"
++           "<ffsocket name='fast' mode='unix' pbc='false'><address>%s</address></ffsocket>" % (a1, a2))
++    forces = ("<forces><force forcefield='slow'><mts_weights> [1, 0] </mts_weights></force>"
++              "<force forcefield='fast'><mts_weights> [0, 1] </mts_weights></force></forces>")
++    return run_ipi(tmp_path, nbeads=8, steps=steps, dt=dt, mode=mode, stride=1, splitting=splitting, ffs=ffs,
++                   forces=forces, dyn_extra="<nmts> %s </nmts>" % nmts, driver_opts="%g,0" % K_TRAP,
++                   address=a1, extra_drivers=[(a2, "coupled_harmonic", "0,%g" % K_SPR)], **kw)
++
++
++@pytest.mark.parametrize("splitting", ["obabo", "baoab"])
++def test_mts_nve_conservation(tmp_path, splitting):
++    """nmts = [1, 4]: slow trap force once per step, fast spring force four times."""
++    _mts_run(tmp_path, "[1, 4]", splitting=splitting)
++    span, drift = _conserved_drift(read_out(tmp_path / "sim.out"))
++    print("MTS [1,4] %s NVE conserved span / kT = %.3g, linear drift / kT = %.3g" % (splitting, span, drift))
++    assert span < 5e-2 and abs(drift) < 1e-2
+-- 
+2.50.1 (Apple Git-155)
+

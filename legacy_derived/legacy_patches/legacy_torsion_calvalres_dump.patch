@@ -1,0 +1,23 @@
+3006a3007,3015
+> c     TORSION DUMP (observation only)
+>       if (mdstep.eq.0) then
+>       open (198,file='tors_dump.out',status='unknown',
+>      $access='append')
+>       write (198,'(a,5i6,2i5,21es24.15)') 'TORS',j(1),j(2),j(3),j(4),
+>      $ity,la,lb,rla,rlb,rlc,r4,arg,sinhd,sinhe,boa,bob,boc,bo2t,
+>      $bocor2,eth,ecoh,exbo1,exbo2,bopi(lb),ht1,ht2,arg1,arg2
+>       close (198)
+>       end if
+5307a5317,5328
+> c     DEBUG DUMP (observation only)
+>       if (mdstep.eq.0.and.ja1.eq.12.and.ja2.eq.7.and.ja3.eq.8) then
+>       open (199,file='calval_dump.out',status='unknown',
+>      $access='append')
+>       write (199,'(a,9es24.15,i4)') 'CV',rla,rlb,dx1,dy1,dz1,dx2,dy2,
+>      $dz2,tel,iortho
+>       write (199,'(a,3es24.15)') 'CV2',poem,arg,aaxh
+>       write (199,'(a,6es24.15)') 'CC',c(ja1,1),c(ja1,2),c(ja1,3),
+>      $c(ja2,1),c(ja2,2),c(ja2,3)
+>       write (199,'(a,3es24.15)') 'C8',c(ja3,1),c(ja3,2),c(ja3,3)
+>       close (199)
+>       end if

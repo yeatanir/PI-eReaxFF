@@ -1,0 +1,13 @@
+diff --git a/src/cpu/bonded.cpp b/src/cpu/bonded.cpp
+index 32c74a4..3b08b27 100644
+--- a/src/cpu/bonded.cpp
++++ b/src/cpu/bonded.cpp
+@@ -725,6 +725,8 @@ BondedResult RM_BONDED_NAME(const ForceField& ff, const ControlParams& ctl, cons
+             const Real fn12 = exp_cot2_ij * exp_cot2_jk * exp_cot2_kl;
+             const Real e_con_t = fbp->p_cot1 * fn12 * (Real(1.0) + ((cos_omega * cos_omega) - Real(1.0)) * sin_ijk * sin_jkl);
+             e_con += e_con_t;
++            if (std::getenv("REAXMETAL_TORS_DUMP"))   // TEMPORARY debug dump (not committed)
++              std::fprintf(stderr, "TORS %lld %lld %lld %lld %.15e %.15e %.15e %.15e %.15e %.15e %.15e %.15e %.15e %.15e\n", static_cast<long long>(atoms.tag[i]), static_cast<long long>(atoms.tag[j]), static_cast<long long>(atoms.tag[k]), static_cast<long long>(atoms.tag[l]), cos_omega, sin_ijk, sin_jkl, BOA_ij, BOA_jk, BOA_kl, e_tor_t, e_con_t, Delta_j, Delta_k);
+             const Real Cconj = -Real(2.0) * fn12 * fbp->p_cot1 * p_cot2 * (Real(1.0) + ((cos_omega * cos_omega) - Real(1.0)) * sin_ijk * sin_jkl);
+             const Real CEconj1 = Cconj * (BOA_ij - Real(1.5e0)), CEconj2 = Cconj * (BOA_jk - Real(1.5e0)), CEconj3 = Cconj * (BOA_kl - Real(1.5e0));
+             const Real CEconj4 = -fbp->p_cot1 * fn12 * ((cos_omega * cos_omega) - Real(1.0)) * sin_jkl * tan_ijk_i;

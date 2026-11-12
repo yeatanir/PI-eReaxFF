@@ -1,0 +1,51 @@
+5345a5346
+>       call dumpgr('electron')
+5346a5348
+>       call dumpgr('lonpar')
+5347a5350
+>       call dumpgr('covbon')
+5348a5352
+>       call dumpgr('ovcor')
+5358a5363
+>       call dumpgr('valang')
+5362a5368
+>       call dumpgr('torang')
+5363a5370
+>       call dumpgr('hbond')
+5373a5381
+>       call dumpgr('nonbon')
+5385a5394,5411
+> c     EXPORT PATCH (observation only): full-precision terms and gradient
+> c     written at mdstep 0 and then every 50th step; positions included
+>       if (mod(mdstep,50).ne.0) goto 7777
+>       open (197,file='ereac_export.out',status='unknown',
+>      $access='append')
+>       write (197,'(a,i8)') 'STEP', mdstep
+>       write (197,'(a,14es24.15)') 'TERMS',eb,ea,elp,emol,ev+epen,ecoa,
+>      $ehb,et,eco,ew,ep,ech,efi,eelect
+>       write (197,'(a,es24.15)') 'ESTRC', estrc
+>       do i1=1,na
+>       write (197,'(a,i6,3es24.15)') 'GRAD',i1,d(1,i1),d(2,i1),d(3,i1)
+>       end do
+>       do i1=1,na
+>       write (197,'(a,i6,3es24.15)') 'POS',i1,c(i1,1),c(i1,2),c(i1,3)
+>       end do
+>       close (197)
+>  7777 continue
+> 
+13089a13116,13130
+> 
+>       subroutine dumpgr(qlab)
+> c     EXPORT PATCH (observation only): cumulative gradient after a routine
+>       include 'cbka.blk'
+>       character*(*) qlab
+>       if (mdstep.ne.0) return
+>       open (197,file='ereac_export.out',status='unknown',
+>      $access='append')
+>       write (197,'(a,1x,a)') 'STAGE', qlab
+>       do i1=1,na
+>       write (197,'(a,i6,3es24.15)') 'SGRAD',i1,d(1,i1),d(2,i1),d(3,i1)
+>       end do
+>       close (197)
+>       return
+>       end

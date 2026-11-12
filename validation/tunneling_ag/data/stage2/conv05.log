@@ -1,0 +1,2 @@
+V0=3.0 sigma=0.10 m=0.5: E0=3.867 W0=5.199 margin=2.23 kT | Bcl_PMF=4.10 kT (V0/kT 5.03) | rho_q0/rho_c0=19.22 rho_q0/qmax=0.618 | split=0.753 | f_V>E: gs 0.141 th 0.124 | 19 st 39 s
+V0=3.0 sigma=0.10 m=0.1: E0=7.347 W0=7.968 margin=1.04 kT | Bcl_PMF=4.10 kT (V0/kT 5.03) | rho_q0/rho_c0=25.21 rho_q0/qmax=0.987 | split=2.521 | f_V>E: gs 0.115 th 0.115 | 5 st 46 s

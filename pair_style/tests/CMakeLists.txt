@@ -1,0 +1,196 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-FileCopyrightText: 2026 Anirban Phukan
+function(reaxmetal_add_test name)
+  add_executable(test_${name} test_${name}.cpp)
+  target_link_libraries(test_${name} PRIVATE reaxmetal_core)
+  target_compile_definitions(test_${name} PRIVATE REAXMETAL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+  reaxmetal_apply_warnings(test_${name})
+  add_test(NAME ${name} COMMAND test_${name})
+endfunction()
+
+reaxmetal_add_test(pins)
+reaxmetal_add_test(capabilities)
+reaxmetal_add_test(energy_terms)
+reaxmetal_add_test(docs_sync)
+reaxmetal_add_test(license_headers)
+reaxmetal_add_test(compat_flags)
+reaxmetal_add_test(ffield_parser)
+reaxmetal_add_test(ereaxff_ffield)
+reaxmetal_add_test(electron)
+reaxmetal_add_test(ereaxff_terms)
+reaxmetal_add_test(ereaxff_bonded)
+reaxmetal_add_test(pair_settings)
+reaxmetal_add_test(neighbor)
+reaxmetal_add_test(terms)
+
+# The Metal kernels executed as C++ (EMULATION: evidence about kernel logic, not about Metal; see the file header)
+add_executable(test_metal_emulation test_metal_emulation.cpp)
+target_link_libraries(test_metal_emulation PRIVATE reaxmetal_metal)
+target_include_directories(test_metal_emulation PRIVATE ${PROJECT_SOURCE_DIR}/src/metal/shaders ${CMAKE_CURRENT_SOURCE_DIR}/metal_shim ${PROJECT_SOURCE_DIR}/tools)
+target_compile_definitions(test_metal_emulation PRIVATE REAXMETAL_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+if(REAXMETAL_FFIELD_DIR AND EXISTS "${REAXMETAL_FFIELD_DIR}/ffield.reax.cho")
+  target_compile_definitions(test_metal_emulation PRIVATE REAXMETAL_FFIELD_DIR="${REAXMETAL_FFIELD_DIR}")
+endif()
+reaxmetal_apply_warnings(test_metal_emulation)
+target_compile_options(test_metal_emulation PRIVATE -Wno-unused-parameter)   # the M6 kernels share one 18-buffer signature; each uses a subset
+reaxmetal_apply_strict_fp(test_metal_emulation)
+add_test(NAME metal_emulation COMMAND test_metal_emulation)
+if(REAXMETAL_ENABLE_METAL)
+  add_executable(test_metal_leak test_metal_leak.cpp)
+  target_link_libraries(test_metal_leak PRIVATE reaxmetal_metal)
+  add_test(NAME metal_no_leak COMMAND test_metal_leak)
+  set_tests_properties(metal_no_leak PROPERTIES FAIL_REGULAR_EXPRESSION "FAIL")
+endif()
+# The Apple-machine check tool, run end to end against a FAKE backend that executes the kernels on the CPU: tests the tool itself
+add_executable(metal_check_emulated metal_check_emulated.cpp ${PROJECT_SOURCE_DIR}/tools/metal_check.cpp ${PROJECT_SOURCE_DIR}/src/metal/metal_source.cpp)
+target_link_libraries(metal_check_emulated PRIVATE reaxmetal_core)
+target_include_directories(metal_check_emulated PRIVATE ${PROJECT_SOURCE_DIR}/src/metal/shaders ${CMAKE_CURRENT_SOURCE_DIR}/metal_shim ${PROJECT_SOURCE_DIR}/tools ${CMAKE_BINARY_DIR}/generated)
+reaxmetal_apply_warnings(metal_check_emulated)
+reaxmetal_apply_strict_fp(metal_check_emulated)
+foreach(_s 1 2 3)
+  add_test(NAME metal_check_emulated_step${_s} COMMAND metal_check_emulated --step ${_s} --quick)
+  set_tests_properties(metal_check_emulated_step${_s} PROPERTIES PASS_REGULAR_EXPRESSION "STEP ${_s} RESULT: PASS" FAIL_REGULAR_EXPRESSION "FAIL")
+endforeach()
+
+# Syntax/type check of the Objective-C++ backend against hand-written stub headers (no Apple SDK needed). Weak evidence, see the script.
+find_program(RM_CLANGXX NAMES clang++ clang++-18 clang++-17 clang++-16 clang++-15)
+if(RM_CLANGXX AND NOT APPLE)
+  add_test(NAME objcxx_syntax COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/check_objcxx_syntax.sh ${RM_CLANGXX})
+  set_tests_properties(objcxx_syntax PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# ---- M1: frozen artefacts and the reference-harness self-tests (no LAMMPS needed) --------------------------------------
+add_test(NAME tolerances_frozen
+  COMMAND ${CMAKE_COMMAND} -DMANIFEST=${PROJECT_SOURCE_DIR}/tolerances/TOLERANCES.sha256 -DBASE=${PROJECT_SOURCE_DIR}/tolerances
+          -DEXPECT_MIN=1 -P ${CMAKE_CURRENT_SOURCE_DIR}/check_hash_file.cmake)
+add_test(NAME fixtures_frozen
+  COMMAND ${CMAKE_COMMAND} -DMANIFEST=${PROJECT_SOURCE_DIR}/tests/fixtures/FIXTURES.sha256 -DBASE=${PROJECT_SOURCE_DIR}/tests/fixtures
+          -DEXPECT_MIN=100 -P ${CMAKE_CURRENT_SOURCE_DIR}/check_hash_file.cmake)
+add_test(NAME patch_frozen
+  COMMAND ${CMAKE_COMMAND} -DMANIFEST=${PROJECT_SOURCE_DIR}/third_party/lammps/patches/PATCHES.sha256 -DBASE=${PROJECT_SOURCE_DIR}/third_party/lammps/patches
+          -DEXPECT_MIN=1 -P ${CMAKE_CURRENT_SOURCE_DIR}/check_hash_file.cmake)
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+  execute_process(COMMAND ${Python3_EXECUTABLE} -c "import numpy" RESULT_VARIABLE _np_rc OUTPUT_QUIET ERROR_QUIET)
+  if(_np_rc EQUAL 0)
+    add_test(NAME reaxref_selftest COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_reaxref.py)
+  else()
+    message(STATUS "numpy not found: reaxref_selftest not registered")
+  endif()
+endif()
+
+# PARSE-1 against the 11 bundled force fields: needs the files from the pinned LAMMPS tree (not committed, ADR-017)
+if(NOT REAXMETAL_FFIELD_DIR AND REAXMETAL_LAMMPS_SOURCE_DIR AND EXISTS "${REAXMETAL_LAMMPS_SOURCE_DIR}/../potentials/ffield.reax.cho")
+  set(REAXMETAL_FFIELD_DIR "${REAXMETAL_LAMMPS_SOURCE_DIR}/../potentials")
+endif()
+if(REAXMETAL_FFIELD_DIR AND EXISTS "${REAXMETAL_FFIELD_DIR}/ffield.reax.cho")
+  add_executable(test_ffield_tables test_ffield_tables.cpp)
+  target_link_libraries(test_ffield_tables PRIVATE reaxmetal_core)
+  reaxmetal_apply_warnings(test_ffield_tables)
+  add_test(NAME ffield_tables COMMAND test_ffield_tables ${REAXMETAL_FFIELD_DIR} ${PROJECT_SOURCE_DIR}/tests/fixtures/ffield_tables.sha256)
+  # NBR-3: engine pair enumeration vs the interaction tallies LAMMPS recorded in M1 (needs the ffields for nonb_cut) and
+  # NBR-2: engine ghost set vs LAMMPS' ghost set (needs the stock LAMMPS shared library)
+  if(Python3_FOUND)
+    add_test(NAME neighbor_fixtures COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_neighbor_fixtures.py
+             --tool $<TARGET_FILE:reaxmetal_neighbor_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR})
+    set_tests_properties(neighbor_fixtures PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    # BOND-1 (M4 phase A): CPU-64 bond/lone-pair/over/under energies vs the pinned-LAMMPS values of M1 + finite-difference check of their gradient
+    add_test(NAME bonded_fixtures COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_bonded_fixtures.py
+             --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR} --fd)
+    set_tests_properties(bonded_fixtures PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    add_test(NAME nonbonded_fixtures COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_nonbonded_fixtures.py
+             --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR} --fd)
+    set_tests_properties(nonbonded_fixtures PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    # FULL-1: all 13 terms, total energy and total forces (frozen charges) vs the pinned-LAMMPS values, frozen C1 thresholds
+    add_test(NAME full_fixtures COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_full_fixtures.py
+             --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR})
+    set_tests_properties(full_fixtures PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    # CENSUS-1/2: decision-mismatch census (random displacements) and threshold scans: single-precision flips of the discrete decisions
+    add_test(NAME decision_census COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_decision_census.py
+             --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR} --samples 2 ${RM_METAL_ARG})
+    set_tests_properties(decision_census PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    add_test(NAME threshold_scan COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_threshold_scan.py
+             --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR} ${RM_METAL_ARG})
+    set_tests_properties(threshold_scan PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    # FP32-1: the CPU-32 twin's error envelope vs CPU-64 (must satisfy C3 itself), and Metal against 3x that envelope when Metal is built
+    add_test(NAME fp32_envelope COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_fp32_envelope.py
+             --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR} ${RM_METAL_ARG})
+    set_tests_properties(fp32_envelope PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    if(REAXMETAL_ENABLE_METAL)
+      # GPU-1 (nonbonded subset) on the real Metal device: Metal-32 vs CPU-64 and vs LAMMPS under the owner-set C3 criteria; FORCE-2 repeat launches
+      add_test(NAME nonbonded_metal COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_nonbonded_fixtures.py
+               --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR} --backend metal)
+      set_tests_properties(nonbonded_metal PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+      # GPU-1 (all terms): bonded + nonbonded kernels on the Metal device vs LAMMPS and CPU-64 under the owner-set C3 criteria; FORCE-2
+      add_test(NAME gpu_fixtures COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_gpu_fixtures.py
+               --tool $<TARGET_FILE:reaxmetal_energy_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR})
+      set_tests_properties(gpu_fixtures PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL")
+    endif()
+    if(RM_LIBLAMMPS)
+      add_test(NAME lammps_ghosts COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/lammps/run_ghosts.py
+               --lib ${RM_LIBLAMMPS} --tool $<TARGET_FILE:reaxmetal_neighbor_tool> --ffield-dir ${REAXMETAL_FFIELD_DIR})
+      set_tests_properties(lammps_ghosts PROPERTIES FAIL_REGULAR_EXPRESSION "RESULT: FAIL"
+        ENVIRONMENT "LD_LIBRARY_PATH=${REAXMETAL_LAMMPS_PREFIX}/lib;DYLD_LIBRARY_PATH=${REAXMETAL_LAMMPS_PREFIX}/lib")
+    endif()
+  endif()
+else()
+  message(STATUS "REAXMETAL_FFIELD_DIR not set: ffield_tables (PARSE-1), neighbor_fixtures and lammps_ghosts not registered")
+endif()
+
+# eReaxFF parser check on a real eReaxFF force field (not stored in this repository): -DREAXMETAL_EREAXFF_FFIELD=/path/to/ffield
+set(REAXMETAL_EREAXFF_FFIELD "" CACHE FILEPATH "a real eReaxFF ffield (Jamil-target layout) for the ereaxff_ffield_real test")
+if(REAXMETAL_EREAXFF_FFIELD)
+  add_test(NAME ereaxff_ffield_real COMMAND test_ereaxff_ffield ${REAXMETAL_EREAXFF_FFIELD})
+endif()
+
+# electron term against the exact reference (files not stored here): -DREAXMETAL_EREAXFF_GEO=/path/geo (uses REAXMETAL_EREAXFF_FFIELD)
+set(REAXMETAL_EREAXFF_GEO "" CACHE FILEPATH "geometry of the electron reference case")
+set(REAXMETAL_EREAXFF_REF_ELECTRON "" CACHE STRING "expected electron energy (kcal/mol), full precision")
+set(REAXMETAL_EREAXFF_REF_TAPER "10.0" CACHE STRING "electron taper (A) of the reference run")
+if(REAXMETAL_EREAXFF_FFIELD AND REAXMETAL_EREAXFF_GEO AND REAXMETAL_EREAXFF_REF_ELECTRON)
+  add_executable(test_electron_reference test_electron_reference.cpp)
+  target_link_libraries(test_electron_reference PRIVATE reaxmetal_core)
+  reaxmetal_apply_warnings(test_electron_reference)
+  add_test(NAME electron_reference COMMAND test_electron_reference ${REAXMETAL_EREAXFF_FFIELD} ${REAXMETAL_EREAXFF_GEO}
+           ${REAXMETAL_EREAXFF_REF_TAPER} ${REAXMETAL_EREAXFF_REF_ELECTRON})
+endif()
+
+# full eReaxFF reference (all terms + total gradient) against the rebuilt legacy executable. Point REAXMETAL_EREAXFF_REFDIR at the directory holding
+# phase0_jamil_225atom/{np_export,np_stage,periodic_export} and phase0_p60c60el/{np_export,periodic_export} (files not stored in this repository).
+set(REAXMETAL_EREAXFF_REFDIR "" CACHE PATH "directory with the eReaxFF reference cases (see tests/test_ereaxff_reference.cpp)")
+if(REAXMETAL_EREAXFF_REFDIR)
+  add_executable(test_ereaxff_reference test_ereaxff_reference.cpp)
+  target_link_libraries(test_ereaxff_reference PRIVATE reaxmetal_core)
+  reaxmetal_apply_warnings(test_ereaxff_reference)
+  set(_R ${REAXMETAL_EREAXFF_REFDIR})
+  # name, case directory, mode, tolerance (relative, per term), stage file
+  add_test(NAME ereaxff_ref_jamil225_np COMMAND test_ereaxff_reference ${_R}/phase0_jamil_225atom/np_export/ffield ${_R}/phase0_jamil_225atom/np_export/geo 10.0
+           ${_R}/phase0_jamil_225atom/np_export/ereac_export.out 1e-8 ${_R}/phase0_jamil_225atom/np_stage/ereac_export.out np)
+  add_test(NAME ereaxff_ref_p60_np COMMAND test_ereaxff_reference ${_R}/phase0_p60c60el/np_export/ffield ${_R}/phase0_p60c60el/np_export/geo 10.0
+           ${_R}/phase0_p60c60el/np_export/ereac_export.out 1e-8 - np)
+  # periodic: vdW, Coulomb and electron match to round-off; the bonded terms carry a stock-vs-legacy residual (torsion up to 6e-7 relative, see phase3 notes)
+  add_test(NAME ereaxff_ref_jamil225_periodic COMMAND test_ereaxff_reference ${_R}/phase0_jamil_225atom/periodic_export/ffield ${_R}/phase0_jamil_225atom/periodic_export/geo 10.0
+           ${_R}/phase0_jamil_225atom/periodic_export/ereac_export.out 2e-6 - periodic)
+  add_test(NAME ereaxff_ref_p60_periodic COMMAND test_ereaxff_reference ${_R}/phase0_p60c60el/periodic_export/ffield ${_R}/phase0_p60c60el/periodic_export/geo 10.0
+           ${_R}/phase0_p60c60el/periodic_export/ereac_export.out 2e-6 - periodic)
+  # purpose-made sharing cases (electrons 0.05-0.7 A from carbons; vincr 6 and 181; pxel2 0 and 0.8; lone-pair strength 0 and 10), non-periodic.
+  # torsion and torsion_conj differ from the legacy values by ~3e-6 relative in these small clusters (stock-vs-legacy, independent of the electron terms): skipped.
+  foreach(_c A B C D E F G H I J)
+    add_test(NAME ereaxff_ref_sharing_${_c} COMMAND test_ereaxff_reference ${_R}/phase0_sharing/${_c}/ffield ${_R}/phase0_sharing/${_c}/geo 10.0
+             ${_R}/phase0_sharing/${_c}/ereac_export.out 1e-8 - np torsion,torsion_conj)
+  endforeach()
+endif()
+
+# parsed ffield values == values the legacy fixed-column reader takes from the same file (tests/python/legacy_ffield_slice.py is the independent slicer)
+if(REAXMETAL_EREAXFF_REFDIR)
+  add_executable(test_ffield_legacy_columns test_ffield_legacy_columns.cpp)
+  target_link_libraries(test_ffield_legacy_columns PRIVATE reaxmetal_core)
+  reaxmetal_apply_warnings(test_ffield_legacy_columns)
+  foreach(_f phase0_jamil_225atom/np_export phase0_jamil_225atom/jamil_vpar38_0 phase0_p60c60el/np_export phase0_p60c60el/periodic_export phase4_frames
+             phase0_sharing/A phase0_sharing/E phase0_sharing/J)
+    string(REPLACE "/" "_" _n ${_f})
+    add_test(NAME ffield_legacy_columns_${_n} COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/python/test_ffield_legacy_columns.py
+             --tool $<TARGET_FILE:test_ffield_legacy_columns> --ffield ${REAXMETAL_EREAXFF_REFDIR}/${_f}/ffield)
+  endforeach()
+endif()
