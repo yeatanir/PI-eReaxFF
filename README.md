@@ -188,6 +188,41 @@ The short version: at 12 kT the classical electron never crosses in our runs whi
 - **Longer 1 amu runs at the higher barrier,** plus bead and timestep checks, and a 0.1 amu set.
 - **Silicon.** The point of all this: the same machinery, with a force field for silicon, to study electron leakage.
 
+## How long does a simulation take, and where does the time go?
+
+**Wall-clock times we measured** (one run, single core, up to five runs sharing the machine at once, so an isolated run is somewhat faster):
+
+| Run | Beads (P) | Timestep | Length | Steps | Wall time |
+|---|---|---|---|---|---|
+| Classical electron | 1 | 0.125 fs | 200 ps | 1.6 M | about 25 min (≈1,060 steps/s) |
+| 1 amu quantum electron | 72 | 0.125 fs | 50 ps | 400 k | about 2.2 h (≈50 steps/s) |
+| 0.5 amu quantum electron | 100 | 0.09 fs | 50 ps | 556 k | about 3.7 h (≈42 steps/s) |
+| 0.5 amu on the 8 kcal/mol barrier (Mac Mini) | 100 | 0.09 fs | 40 ps | 444 k | about 2.9 h |
+| 0.1 amu quantum electron (planned, not yet run) | 220 | 0.045 fs | 50 ps | 1.1 M | **an estimate of about 15 to 20 h per run** |
+
+So one quantum run costs hours where a classical one costs minutes, and the full set of runs behind the figures here is dozens of run-hours.
+
+**What takes the time: the number of beads times the number of steps.** Each step needs a force evaluation for every bead, so cost is roughly P times the steps. Both factors are pushed up by the physics:
+
+- *More beads for a lighter electron.* The springs between beads get stiffer as P grows, and the number of beads needed grows roughly like 1 over the square root of the mass. That is why 0.5 amu needs 100 beads (50 failed our check) and 0.1 amu needs 220.
+- *Smaller timesteps for the same reason.* The stiff springs are the fastest motion in the system, so the timestep has to shrink: 0.125 fs at 1 amu, 0.045 fs at 0.1 amu.
+- *Long runs.* The electron crosses the barrier rarely, so we need tens of picoseconds to see enough crossings. At the 8 kcal/mol barrier, even 50 ps was too short at 1 amu.
+
+**The surprise: the chemistry is not the expensive part.** One force call in the LAMMPS engine takes about 10 microseconds, yet each bead costs us roughly 0.2 to 0.3 milliseconds per step. So only a few percent of the time is the force field. The rest is the machinery around it: i-PI (written in Python) moving the beads and thermostatting them, and passing positions and forces back and forth through a socket for every single bead.
+
+**What we already did about it**
+- *A redundant step in our i-PI patch* cost about two extra force evaluations per step (about 2x at P=32). Removed.
+- *Socket polling delay.* Lowering one number gave +58 % steps per second with bit-for-bit identical results.
+- *Running 4 to 12 clients per run* is slightly faster per run but worse per core, so we run several independent runs side by side instead.
+- *A second machine* (a 10-core Mac Mini, same binaries, checked to give identical results) for the longer runs.
+
+**What could make it faster (ideas, not tested yet)**
+- *Send all beads of a step in one batch* to one LAMMPS process instead of one socket round trip per bead. Since the force is only about 4 % of the cost, this is the most promising one, and could plausibly give several times more speed.
+- *Move the bead propagation out of Python* (or run i-PI's work on fewer, vectorised calls).
+- *Fewer beads for the same accuracy*, using a higher-order path-integral factorisation or ring-polymer contraction. We have not tried these, and they must be re-validated against the solver.
+- *Longer timesteps* by multiple-time-stepping, which helps when the forces are expensive. Here they are cheap, so we expect little gain.
+- *Write less output*, since the bead trajectory files dominate disk use (the 0.1 amu plan writes every 600 steps, in 10 ps segments).
+
 ## Along the way, things we found and fixed
 
 - **A hidden jump in the original code**: a tiny energy jump whenever two silver atoms drift across a 5 Å cutoff, built into the original code. It made long runs with moving atoms drift. We found it, measured it, and added a "smooth" setting that removes it.
