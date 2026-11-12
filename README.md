@@ -151,10 +151,27 @@ These movies show the electron as the necklace the method actually simulates. Th
 
 **Please read this caveat.** The necklace is an imaginary-time picture of how spread out a quantum particle is. It is *not* the electron's real-time motion, and the necklace "crossing" the barrier is thermal sampling, not a time-dependent tunneling event. What the movies show is delocalisation: how much of the electron's probability sits on both sides at once.
 
-### Chapter 6: what is next
+### Chapter 6: a higher barrier, so a classical electron cannot escape
 
-- **A higher barrier.** At 5 kT, a classical electron can still climb over. We are using the solver to find a barrier of 12 kT or more, where a classical electron stays on one side but a light quantum electron still has density in the middle, and then testing it with simulations. Results will be added here.
-- **Production statistics.** Many more independent runs, run-to-run error bars, bead and timestep checks at every mass. The error bars above are optimistic until these exist.
+At 5 kT, a classical electron can still climb over the barrier. So we asked the solver for a taller one: **8 kcal/mol (about 12 kT)**, same width. A classical electron should now stay on the side it started on for nanoseconds, while a light quantum electron should still have probability in the middle. We then ran the simulations on a second machine.
+
+![Fig. 8: the higher barrier](assets/figures/fig08_higher_barrier.png)
+
+*Fig. 8. Barrier of 8 kcal/mol. (a, b) Electron density along the axis, simulation per run (green and orange; solid for left start, dashed for right start) against the solver (black). (c, d, e) The centroid of the necklace against time for a classical electron, a 1 amu electron and a 0.5 amu electron. The grey band is the barrier region.*
+
+What happened, in plain words:
+
+- **The classical electron stays put.** Two runs of 200 ps each, one started on each side: zero crossings. The closest either came to the middle was about 0.1 Å. (A 200 ps run cannot prove trapping for a barrier whose classical crossing time we estimate at 8 ns or more, only fail to contradict it.)
+- **The 0.5 amu quantum electron crosses back and forth,** about 20 times in 40 ps, from either start, and its density agrees with the solver to within 5 to 8 %. This is the clean result. It rests on two runs, so the run-to-run error bar is weak, and we did not run the bead-doubling or half-timestep checks for this barrier.
+- **The 1 amu electron is not equilibrated.** In 4 runs of 50 ps it crossed only 3 to 6 times each, spending 5 to 20 ps on one side at a time, and all four spent more time on the left, including the two started on the right. One run fell into the left pit and stayed near it for half the run, which is a kinetic trap (the solver puts the equilibrium weight of that state at about 1e-7). We therefore do **not** call 1 amu an equilibrium profile here. Excluding the pit frames, the other three runs are within 5 to 10 % of the solver, but that exclusion was made after the fact.
+- **Not run:** 0.1 amu at this barrier, and the checks above. The conserved quantity is also noisier than at the 3 kcal/mol design.
+
+The short version: at 12 kT the classical electron never crosses in our runs while the 0.5 amu quantum electron crosses about once per two picoseconds and matches the solver. The 1 amu runs need to be much longer. Full numbers: [`validation/tunneling_ag/HIGHER_BARRIER_PIMD.md`](validation/tunneling_ag/HIGHER_BARRIER_PIMD.md).
+
+### Chapter 7: what is next
+
+- **Production statistics at the 3 kcal/mol design.** Six 1 amu runs of 50 ps agree with the earlier results on width and tails; the barrier-centre density is 3 to 5 % low and not yet explained, so more runs and the 0.5 and 4 amu sets are in progress. See [`STAGE3_PRODUCTION.md`](validation/tunneling_ag/STAGE3_PRODUCTION.md).
+- **Longer 1 amu runs at the higher barrier,** plus bead and timestep checks, and a 0.1 amu set.
 - **Silicon.** The point of all this: the same machinery, with a force field for silicon, to study electron leakage.
 
 ## Along the way, things we found and fixed
