@@ -51,25 +51,69 @@ Simulate the necklace with ordinary dynamics and you get the quantum statistics 
 
 The motivating problem is **electron leakage across thin barriers** (think silicon devices). Classical simulations say the electron stays put. Reality says it leaks. A force field with a PIMD electron should capture that. Before trusting it on silicon, we needed a clean test where the right answer is known. That is the demonstration below.
 
-## What we have shown so far
+## The story so far: can a simulated electron tunnel?
 
-**The test:** one electron between two silver clusters, 4 Å apart, with a narrow barrier in the middle. We computed its distribution two ways:
+### Chapter 1: the stage
 
-1. a **3-D Schrödinger solver** (the quantum answer, no sampling), and
-2. **our PIMD**, running the real eReaxFF force field through i-PI and LAMMPS.
+We built the smallest system that has the physics we care about: **two silver triangles facing each other across a 4.0 Å gap**, with **one quantum electron** that can sit on either side. Six silver atoms are held fixed, four more electrons sit on the outer atoms as ordinary classical particles, and the fifth electron is a ring polymer (a necklace of beads, see above).
 
-**The result:** they agree, for four different electron masses.
+![Fig. 1: the system and the potential the electron feels](assets/figures/fig01_landscape.png)
 
-| Electron mass | How much more likely to be found *at the barrier* than a classical electron would be | Agreement with the solver |
-|---|---|---|
-| 4 amu (heavy) | about 3× (PIMD 2.8, solver 2.6) | within error |
-| 1 amu | about 6× (PIMD 6.5, solver 5.9) | within error |
-| 0.5 amu | about 9× (PIMD 8.9, solver 8.4) | needed 100 beads, 50 was not enough |
-| 0.1 amu (very light) | about 11× (PIMD 11.0, solver 10.4) | within error; this is mostly zero-point smearing, not tunneling |
+*Fig. 1. (a) The six fixed Ag atoms (grey), four classical electrons (blue rings) on the outer atoms, and the one quantum electron (orange), which starts at the left inner silver atom and is free to move along the axis. (b) The energy the electron feels along the axis: a narrow pit at each inner silver atom (z = ±1.975 Å), a 10.5 kcal/mol barrier on each side of the pit, and a broad shallow well in the middle. (c) Zoom on the middle, showing the Gaussian barrier we later add at z = 0.*
 
-The lighter the electron, the more it spreads over the barrier, which is the expected quantum trend. A classical simulation sits at 1×.
+### Chapter 2: our first idea did not work (and that was informative)
 
-Two honest notes from the experiment: the first barrier we tried (the force field's own) turned out to be so low that the electron simply isn't trapped, so we designed a better one with the solver first. And in these runs the other four electrons were allowed to move while the solver froze them, so a few percent of difference in the tails is expected.
+The force field already has a built-in 10.5 kcal/mol barrier between each pit and the middle, so we hoped the electron would sit in one pit and tunnel to the other. Before running anything expensive, we asked the quantum solver where the electron actually wants to be.
+
+![Fig. 5: the equilibrium density for the force field's own barrier](assets/figures/fig05_intrinsic_setup.png)
+
+*Fig. 5. (a) Equilibrium density along the axis from the 3-D Schrödinger solver, for four electron masses, against a classical electron (dashed). The quantum electron sits in the broad middle region at every mass, and so would a classical electron at equilibrium (only 0.7 % of its weight is in the pits). A classical simulation started in a pit never leaves it, though, because it is a kinetic trap. (b) Probability of being found at the pits. At 4 amu this is a genuine pit state (hatched bar: its Boltzmann weight). At 0.1 amu it is only the tail of the middle wavefunction, which is why two very different electrons give similar bars. The 1 amu solver bar is an underestimate because the solver stops at 14 kT above the ground state.*
+
+The simulations agreed: started in a pit, the 1 amu ring left within about 0.8 ps and the 0.5 amu ring within about 0.02 ps, and none came back. So the pit is not where a quantum electron lives, and there was no barrier penetration to measure. We recorded this and moved on, rather than tuning until something looked good.
+
+### Chapter 3: design a barrier with the solver first
+
+We added a narrow Gaussian barrier in the middle (3 kcal/mol high, 0.10 Å wide) and scanned 12 designs on the solver alone, before any simulation. This is the only design that satisfied all our criteria at 1 amu: the quantum ground state sits 2.5 kT below the barrier top, the quantum density at the barrier is about 12 times the classical value, and the classical barrier is about 4 to 5 kT.
+
+### Chapter 4: does the simulation agree with the solver?
+
+Yes, for all four masses, once enough beads are used.
+
+![Fig. 2: density from PIMD against the solver](assets/figures/fig02_density_vs_solver.png)
+
+*Fig. 2. Electron density along the axis from path-integral MD (circles) against the Schrödinger solver (line) and a classical electron (dashed), at 4, 1, 0.5 and 0.1 amu. Panel (e) shows the ratio of PIMD to solver for four observables. Error bars are block errors and are optimistic.*
+
+![Fig. 3: the mass trend](assets/figures/fig03_mass_trend.png)
+
+*Fig. 3. The lighter the electron, the more it spreads over the barrier. (a) How much more likely the electron is to be found at the barrier than a classical electron: PIMD 2.8, 6.5, 8.9 and 11.0 at 4, 1, 0.5 and 0.1 amu, against solver 2.6, 5.9, 8.4 and 10.4. (b) The width of the distribution. (c) How far the ground state sits below the barrier top. At 0.1 amu the margin is only 1 kT, so we call that zero-point delocalisation over the barrier rather than tunneling.*
+
+![Fig. 4: convergence checks](assets/figures/fig04_convergence.png)
+
+*Fig. 4. Checks that the answer does not depend on the numerical settings. At 0.5 amu, 50 beads was not enough (the width and tails were off by about 3σ) and 100 beads fixed it. At 1 amu, doubling the beads and halving the timestep changed the barrier-region density by +0.6 % and −4 %, within the statistical error.*
+
+### Chapter 5: watch it happen
+
+These movies show the electron as the necklace the method actually simulates. The silver atoms are drawn, and the four classical electrons sit on the outer ones.
+
+![Animation: a 1 amu electron near the barrier](assets/movies/anim_A_1amu_ag.gif)
+
+*Movie 1. A 1 amu electron (36 beads) in the barrier region. Top: the potential along the axis with the beads placed on it. Middle: the necklace between the two inner silver atoms (donor and acceptor); the star is the centroid and the grey line is its path. Bottom: the whole system. Full quality: [`assets/movies/anim_A_1amu_ag.mp4`](assets/movies/anim_A_1amu_ag.mp4).*
+
+![Animation: four electrons compared](assets/movies/anim_B_compare_ag.gif)
+
+*Movie 2. The same barrier seen by a heavy (4 amu), a medium (1 amu) and a very light (0.1 amu) electron, and by a classical point electron. The heavy electron is a tight clump, the light one is a large floppy necklace that spreads over the barrier. Over the runs these were taken from, the fraction of time a necklace straddles the barrier is 2.7 %, 22.5 % and 94 % (4, 1, 0.1 amu). Full quality: [`assets/movies/anim_B_compare_ag.mp4`](assets/movies/anim_B_compare_ag.mp4).*
+
+![Snapshots of the ring approaching and crossing the barrier](assets/figures/fig07_ring_snapshots_ag.png)
+
+*Fig. 7. Six snapshots of the 1 amu necklace approaching, straddling and crossing the barrier.*
+
+**Please read this caveat.** The necklace is an imaginary-time picture of how spread out a quantum particle is. It is *not* the electron's real-time motion, and the necklace "crossing" the barrier is thermal sampling, not a time-dependent tunneling event. What the movies show is delocalisation: how much of the electron's probability sits on both sides at once.
+
+### Chapter 6: what is next
+
+- **A higher barrier.** At 5 kT, a classical electron can still climb over. We are using the solver to find a barrier of 12 kT or more, where a classical electron stays on one side but a light quantum electron still has density in the middle, and then testing it with simulations. Results will be added here.
+- **Production statistics.** Many more independent runs, run-to-run error bars, bead and timestep checks at every mass. The error bars above are optimistic until these exist.
+- **Silicon.** The point of all this: the same machinery, with a force field for silicon, to study electron leakage.
 
 ## Along the way, things we found and fixed
 
